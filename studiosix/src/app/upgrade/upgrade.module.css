@@ -1,0 +1,59 @@
+.pricing-card {
+  @apply box-border flex flex-col items-start p-5 gap-5 w-full bg-white border border-[#CDD0D5] rounded-[20px];
+  position: relative;
+  transform: scale(1);
+  transition: transform 0.3s ease;
+}
+
+/* Pro Plan specific styles */
+.pricing-card:nth-child(2) {
+  transform: scale(1.05);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  z-index: 2;
+}
+
+/* Hover effects for all cards */
+.pricing-card:hover {
+  transform: translateY(-4px);
+}
+
+/* Maintain larger scale for Pro Plan even on hover */
+.pricing-card:nth-child(2):hover {
+  transform: scale(1.05) translateY(-4px);
+}
+
+.plan-icon {
+  @apply flex flex-col items-start gap-2.5;
+}
+
+.feature-item {
+  @apply flex flex-row items-center py-2.5 px-3 gap-1 w-full rounded-lg;
+}
+
+.plan-features {
+  @apply flex flex-col items-start w-full;
+}
+
+/* Special gradient text */
+.gradient-text {
+  @apply bg-gradient-to-b from-[#2A0856] to-[#3E0B80] bg-clip-text text-transparent;
+}
+
+/* Gradient buttons */
+.gradient-button {
+  @apply bg-gradient-to-r from-[#854BDC] to-[#AB4FF0];
+}
+
+/* FAQ section styles */
+.faq-item {
+  @apply py-4 border-b border-[#6B6B6B] cursor-pointer transition-all hover:bg-gray-50;
+}
+
+/* Special offers section */
+.special-offers {
+  @apply bg-[#E9F1FD] py-12;
+}
+
+.offer-card {
+  @apply bg-white rounded-2xl p-5 space-y-4;
+} 

@@ -1,0 +1,128 @@
+import Image from "next/image";
+
+export default function Home() {
+  return (
+    <main className="min-h-screen bg-white relative">
+      {/* Navigation */}
+      <nav className="fixed w-[1379px] h-[105.3px] left-[calc(50%-1379px/2+3.5px)] top-[111px] z-50">
+        <div className="relative w-full h-full">
+          {/* Logo */}
+          <div className="absolute left-[10.3%] right-[81.48%] top-[1.85%] bottom-[96.39%]">
+            <Image
+              src="/studio-six-logo.svg"
+              alt="Studio Six Logo"
+              width={120}
+              height={40}
+              className="h-10 w-auto"
+            />
+          </div>
+
+          {/* Menu */}
+          <div className="flex flex-row items-center gap-[51px] absolute w-[530px] left-[calc(50%-530px/2+41px)] top-[2.38%]">
+            <a href="#" className="font-poppins text-[18px] font-medium leading-[27px] text-black">Pricing</a>
+            <a href="#" className="font-poppins text-[18px] font-medium leading-[27px] text-black">Plugins</a>
+            <a href="#" className="font-poppins text-[18px] font-medium leading-[27px] text-black">Help</a>
+            <a href="#" className="font-poppins text-[18px] font-medium leading-[27px] text-black">About Us</a>
+            <a href="#" className="font-poppins text-[18px] font-medium leading-[27px] text-black">For Teams</a>
+          </div>
+
+          {/* Buttons */}
+          <div className="flex flex-row items-start gap-[10px] absolute left-[75.58%] right-[9.9%] top-[2.25%]">
+            <button className="flex justify-center items-center px-6 py-3 gap-5 w-[95px] h-[43px] bg-[#F4F4F4] rounded-[5px]">
+              <span className="font-inter text-base font-medium leading-[19px] text-black">Log in</span>
+            </button>
+            <button className="flex justify-center items-center px-6 py-3 gap-5 w-[100px] h-[43px] border-2 border-[#7144D3] rounded-[5px]">
+              <span className="font-inter text-base font-medium leading-[19px] text-black">Create</span>
+            </button>
+          </div>
+        </div>
+      </nav>
+
+      {/* Hero Section */}
+      <div className="relative h-screen pt-[216px]">
+        {/* Content */}
+        <div className="relative z-20 flex flex-col items-center justify-center h-full px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col md:flex-row items-center gap-12 max-w-7xl mx-auto">
+            <div className="flex-1 z-20">
+              <h1 className="text-5xl md:text-7xl font-bold tracking-tight mb-4 text-blue-600">
+                StudioSix
+              </h1>
+              <p className="text-xl md:text-2xl max-w-2xl mb-8 text-blue-800">
+                Transform your architectural sketches and 3D models into stunning photorealistic renders with AI
+              </p>
+              <button className="bg-blue-600 text-white px-8 py-3 rounded-lg text-lg font-semibold hover:bg-blue-700 transition-all">
+                Start Creating
+              </button>
+            </div>
+            <div className="relative w-[600px] h-[400px]">
+              <div className="absolute right-4 top-0 w-[300px] h-[225px]">
+                <div className="relative w-full h-full rounded-lg overflow-hidden shadow-xl z-20">
+                  <Image
+                    src="/sketch-example.jpg"
+                    alt="Architectural sketch"
+                    width={300}
+                    height={225}
+                    className="object-cover"
+                    priority
+                  />
+                </div>
+              </div>
+              <div className="absolute right-0 top-20 w-[300px] h-[225px]">
+                <div className="relative w-full h-full rounded-lg overflow-hidden shadow-xl">
+                  <Image
+                    src="/render-example.jpg"
+                    alt="Rendered visualization"
+                    width={300}
+                    height={225}
+                    className="object-cover"
+                    priority
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Features Section */}
+      <section className="py-24 px-4 sm:px-6 lg:px-8 bg-gray-50">
+        <div className="max-w-7xl mx-auto">
+          <h2 className="text-4xl font-bold text-center mb-16">How It Works</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
+            <div className="text-center">
+              <div className="bg-white rounded-lg p-6 shadow-lg mb-4">
+                <h3 className="text-xl font-semibold mb-4">Upload</h3>
+                <p className="text-gray-600">Upload your 3D models, sketches, or reference images</p>
+              </div>
+            </div>
+            <div className="text-center">
+              <div className="bg-white rounded-lg p-6 shadow-lg mb-4">
+                <h3 className="text-xl font-semibold mb-4">Generate</h3>
+                <p className="text-gray-600">Our AI transforms your input into photorealistic renders</p>
+              </div>
+            </div>
+            <div className="text-center">
+              <div className="bg-white rounded-lg p-6 shadow-lg mb-4">
+                <h3 className="text-xl font-semibold mb-4">Download</h3>
+                <p className="text-gray-600">Get your high-resolution renders in minutes</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* CTA Section */}
+      <section className="py-24 px-4 sm:px-6 lg:px-8 bg-black text-white">
+        <div className="max-w-7xl mx-auto text-center">
+          <h2 className="text-4xl font-bold mb-8">Ready to Transform Your Designs?</h2>
+          <p className="text-xl mb-12 max-w-2xl mx-auto">
+            Join architects and designers who are already using StudioSix to create stunning visualizations
+          </p>
+          <button className="bg-white text-black px-8 py-3 rounded-lg text-lg font-semibold hover:bg-opacity-90 transition-all">
+            Get Started Now
+          </button>
+        </div>
+      </section>
+    </main>
+  );
+}

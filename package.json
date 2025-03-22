@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "@paystack/inline-js": "^2.22.2",
+    "sonner": "^2.0.1"
+  }
+}
