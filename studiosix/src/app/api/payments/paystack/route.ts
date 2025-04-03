@@ -75,7 +75,7 @@ export async function POST(request: Request) {
         amount: formatAmountForPaystack(amount),
         currency,
         reference,
-        callback_url: `${env.NEXT_PUBLIC_APP_URL}/api/payments/paystack/verify`,
+        callback_url: `http://44.200.48.147/api/payments/paystack/verify`,
         metadata: {
           userId: session.user.id,
           type,

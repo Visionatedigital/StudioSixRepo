@@ -7,7 +7,7 @@ export async function GET(request: Request) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
-      return NextResponse.redirect(new URL('/auth/signin', request.url));
+      return NextResponse.redirect(`http://44.200.48.147/auth/signin`);
     }
 
     const { searchParams } = new URL(request.url);
@@ -15,7 +15,7 @@ export async function GET(request: Request) {
     const trxref = searchParams.get('trxref');
 
     if (!reference || !trxref) {
-      return NextResponse.redirect(new URL('/dashboard?error=missing_reference', request.url));
+      return NextResponse.redirect(`http://44.200.48.147/dashboard?error=missing_reference`);
     }
 
     // Verify the transaction with Paystack
@@ -29,7 +29,7 @@ export async function GET(request: Request) {
     const result = await paystackResponse.json();
     
     if (!result.status || result.data.status !== 'success') {
-      return NextResponse.redirect(new URL('/dashboard?error=verification_failed', request.url));
+      return NextResponse.redirect(`http://44.200.48.147/dashboard?error=verification_failed`);
     }
 
     // Get the transaction to access metadata
@@ -38,7 +38,7 @@ export async function GET(request: Request) {
     });
 
     if (!transaction) {
-      return NextResponse.redirect(new URL('/dashboard?error=transaction_not_found', request.url));
+      return NextResponse.redirect(`http://44.200.48.147/dashboard?error=transaction_not_found`);
     }
 
     const metadata = transaction.metadata as { type: string; packageId: string };
@@ -77,19 +77,20 @@ export async function GET(request: Request) {
     });
 
     // Create the redirect response
-    const redirectResponse = NextResponse.redirect(new URL('/dashboard?success=payment_completed', request.url));
+    const response = NextResponse.redirect(`http://44.200.48.147/dashboard?success=payment_completed&session_refresh=true`);
 
     // Force a session update by setting a cookie
-    redirectResponse.cookies.set('next-auth.session-token', 'updated', {
+    response.cookies.set('next-auth.session-token', '', {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       path: '/',
+      maxAge: 0 // This will delete the cookie
     });
 
-    return redirectResponse;
+    return response;
   } catch (error) {
     console.error('Payment verification error:', error);
-    return NextResponse.redirect(new URL('/dashboard?error=verification_error', request.url));
+    return NextResponse.redirect(`http://44.200.48.147/dashboard?error=verification_error`);
   }
 } 

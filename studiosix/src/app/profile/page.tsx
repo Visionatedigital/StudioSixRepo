@@ -59,27 +59,25 @@ export default function ProfilePage() {
         throw new Error(data.error || 'Failed to upload image');
       }
 
+      // Update local state immediately
       if (type === 'avatar') {
         setAvatarImage(data.imageUrl);
-        // Update session with new avatar URL
-        await updateSession({
-          ...session,
-          user: {
-            ...session?.user,
-            image: data.imageUrl,
-          },
-        });
       } else {
         setBannerImage(data.imageUrl);
-        // Update session with new banner URL
-        await updateSession({
-          ...session,
-          user: {
-            ...session?.user,
-            bannerImage: data.imageUrl,
-          },
-        });
       }
+
+      // Update session
+      await updateSession({
+        ...session,
+        user: {
+          ...session?.user,
+          ...(type === 'avatar' ? { image: data.imageUrl } : { bannerImage: data.imageUrl }),
+        },
+      });
+
+      // Force a page reload to ensure all components get the updated session
+      window.location.reload();
+
     } catch (error) {
       console.error('Upload error:', error);
       setUploadError(error instanceof Error ? error.message : 'Failed to upload image');
@@ -89,17 +87,14 @@ export default function ProfilePage() {
   };
 
   const handleImageUpload = async (file: File, type: 'avatar' | 'banner') => {
-    // Reset any previous errors
     setUploadError(null);
 
-    // Validate file type
     if (!file.type.startsWith('image/')) {
       setUploadError('Please upload an image file');
       return;
     }
 
-    // Validate file size
-    const maxSize = type === 'banner' ? 10 * 1024 * 1024 : 5 * 1024 * 1024; // 10MB for banner, 5MB for avatar
+    const maxSize = type === 'banner' ? 10 * 1024 * 1024 : 5 * 1024 * 1024;
     if (file.size > maxSize) {
       setUploadError(`${type === 'banner' ? 'Banner' : 'Profile'} image must be less than ${maxSize / (1024 * 1024)}MB`);
       return;

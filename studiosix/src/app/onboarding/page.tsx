@@ -22,7 +22,7 @@ declare module "next-auth" {
 const pricingPlans = [
   {
     name: 'Starter Plan',
-    priceUSD: 1,
+    priceUSD: 0.1,
     description: 'Perfect for individuals starting their creative journey with AI.',
     features: [
       '1,500 Monthly Credits',

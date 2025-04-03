@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '../../auth/[...nextauth]/route';
+import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
@@ -60,6 +60,7 @@ export async function POST(request: Request) {
       },
     });
 
+    // Return the response with the image URL
     return NextResponse.json({
       message: 'Image uploaded successfully',
       imageUrl,

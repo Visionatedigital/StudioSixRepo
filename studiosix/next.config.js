@@ -2,8 +2,8 @@
 const nextConfig = {
   reactStrictMode: true,
   images: {
-    loader: 'custom',
-    loaderFile: './image-loader.js',
+    domains: ['localhost'],
+    unoptimized: true,
   },
   serverExternalPackages: ['@prisma/client', 'bcrypt'],
   webpack: (config, { isServer }) => {
@@ -22,11 +22,7 @@ const nextConfig = {
     });
     config.externals = [...config.externals, 'bcrypt'];
     return config;
-  },
-  // Increase header size limit
-  serverOptions: {
-    maxHeaderSize: 32768, // 32KB
-  },
+  }
 }
 
 module.exports = nextConfig 

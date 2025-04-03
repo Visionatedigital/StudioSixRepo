@@ -5,6 +5,9 @@ import FAQ from './components/FAQ';
 import Testimonials from './components/Testimonials';
 
 export default function HomePage() {
+  console.log('=== HomePage Debug ===');
+  console.log('Rendering HomePage component');
+
   return (
     <main className="relative max-w-[1728px] min-h-screen bg-white mx-auto overflow-x-hidden">
       {/* Navigation Bar */}

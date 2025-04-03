@@ -1,16 +1,17 @@
 import { NextAuthOptions } from "next-auth";
-import { PrismaAdapter } from "@auth/prisma-adapter";
+import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "./prisma";
+import { JWT } from 'next-auth/jwt';
 
 export const authOptions: NextAuthOptions = {
   debug: process.env.NODE_ENV === 'development',
   session: {
     strategy: "jwt"
   },
-  adapter: PrismaAdapter(prisma) as any, // Type cast to avoid adapter type mismatch
+  adapter: PrismaAdapter(prisma),
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
@@ -24,71 +25,70 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
-          throw new Error("Missing credentials");
+          throw new Error("Invalid credentials");
         }
 
         const user = await prisma.user.findUnique({
-          where: { email: credentials.email },
-          select: {
-            id: true,
-            email: true,
-            name: true,
-            image: true,
-            password: true,
-            verified: true,
-            subscriptionStatus: true
+          where: {
+            email: credentials.email
           }
         });
 
-        if (!user || !user.password) {
+        if (!user || !user?.hashedPassword) {
           throw new Error("Invalid credentials");
         }
 
-        const isValid = await bcrypt.compare(credentials.password, user.password);
+        const isCorrectPassword = await bcrypt.compare(
+          credentials.password,
+          user.hashedPassword
+        );
 
-        if (!isValid) {
+        if (!isCorrectPassword) {
           throw new Error("Invalid credentials");
         }
 
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          image: user.image,
-          verified: user.verified,
-          subscriptionStatus: user.subscriptionStatus
-        };
+        return user;
       }
     })
   ],
   callbacks: {
-    async jwt({ token, user, trigger, session }) {
-      if (trigger === "update" && session) {
-        // Handle session update
-        return { ...token, ...session.user };
+    async jwt({ token, user }) {
+      const dbUser = await prisma.user.findFirst({
+        where: {
+          email: token.email,
+        },
+      });
+
+      if (!dbUser) {
+        if (user) {
+          token.id = user?.id;
+        }
+        return token;
       }
 
-      if (user) {
-        // Initial sign in
-        return {
-          ...token,
-          id: user.id,
-          verified: user.verified,
-          subscriptionStatus: user.subscriptionStatus
-        };
-      }
-      return token;
+      return {
+        ...token,
+        id: dbUser.id,
+        name: dbUser.name || null,
+        email: dbUser.email || null,
+        picture: dbUser.image || null,
+        bannerImage: dbUser.bannerImage || null,
+        verified: dbUser.verified,
+        subscriptionStatus: dbUser.subscriptionStatus,
+      };
     },
     async session({ session, token }) {
-      return {
-        ...session,
-        user: {
-          ...session.user,
-          id: token.id as string,
-          verified: token.verified as boolean,
-          subscriptionStatus: token.subscriptionStatus as string
-        }
-      };
+      if (token) {
+        session.user.id = token.id;
+        session.user.name = token.name;
+        session.user.email = token.email;
+        session.user.image = token.picture || null;
+        session.user.bannerImage = token.bannerImage || null;
+        session.user.verified = token.verified;
+        session.user.subscriptionStatus = token.subscriptionStatus;
+      }
+
+      return session;
     },
     async redirect({ url, baseUrl }) {
       // Allows relative callback URLs
@@ -101,5 +101,29 @@ export const authOptions: NextAuthOptions = {
   pages: {
     signIn: "/sign-in",
     error: "/sign-in"
+  },
+  secret: process.env.NEXTAUTH_SECRET,
+};
+
+export async function updateSession(token: JWT): Promise<JWT> {
+  const dbUser = await prisma.user.findFirst({
+    where: {
+      email: token.email,
+    },
+  });
+
+  if (!dbUser) {
+    return token;
   }
-}; 
+
+  return {
+    ...token,
+    id: dbUser.id,
+    name: dbUser.name || null,
+    email: dbUser.email || null,
+    picture: dbUser.image || null,
+    bannerImage: dbUser.bannerImage || null,
+    verified: dbUser.verified,
+    subscriptionStatus: dbUser.subscriptionStatus,
+  };
+} 
