@@ -13,11 +13,13 @@ interface NotificationItemProps {
 }
 
 interface MessageItemProps {
-  sender: string;
-  avatar: string;
-  message: string;
-  time: string;
-  isRead?: boolean;
+  userId: string;
+  userName: string;
+  userImage: string;
+  lastMessage: string;
+  time: Date;
+  unreadCount: number;
+  onSelect: () => void;
 }
 
 const NotificationItem: React.FC<NotificationItemProps> = ({ title, description, time, isRead = false }) => (
@@ -30,22 +32,41 @@ const NotificationItem: React.FC<NotificationItemProps> = ({ title, description,
   </div>
 );
 
-const MessageItem: React.FC<MessageItemProps> = ({ sender, avatar, message, time, isRead = false }) => (
-  <div className={`p-4 hover:bg-gray-50 cursor-pointer ${!isRead ? 'bg-purple-50/50' : ''}`}>
+const MessageItem: React.FC<MessageItemProps> = ({ userName, userImage, lastMessage, time, unreadCount, onSelect }) => (
+  <div className={`p-4 hover:bg-gray-50 cursor-pointer ${unreadCount > 0 ? 'bg-purple-50/50' : ''}`} onClick={onSelect}>
     <div className="flex gap-3">
-      <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0">
-        <Image src={avatar} alt={sender} width={40} height={40} className="w-full h-full object-cover" />
+      <div className="relative w-10 h-10">
+        <Image 
+          src={userImage} 
+          alt={userName} 
+          fill
+          className="rounded-full object-cover" 
+        />
       </div>
       <div className="flex-grow min-w-0">
         <div className="flex justify-between items-start mb-1">
-          <h3 className="text-sm font-medium text-[#202126]">{sender}</h3>
-          <span className="text-xs text-gray-500">{time}</span>
+          <h3 className="text-sm font-medium text-[#202126]">{userName}</h3>
+          <span className="text-xs text-gray-500">{formatTime(time)}</span>
         </div>
-        <p className="text-sm text-gray-600 truncate">{message}</p>
+        <p className="text-sm text-gray-600 truncate">{lastMessage}</p>
       </div>
     </div>
   </div>
 );
+
+// Helper function to format time
+function formatTime(date: Date) {
+  const now = new Date();
+  const diff = now.getTime() - new Date(date).getTime();
+  const minutes = Math.floor(diff / 60000);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+
+  if (minutes < 60) return `${minutes}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  if (days === 1) return 'Yesterday';
+  return new Date(date).toLocaleDateString();
+}
 
 // Sample data
 const notifications = [
@@ -74,33 +95,33 @@ export default function HeaderActions() {
   const [isMessagesOpen, setIsMessagesOpen] = useState(false);
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const [showMessageInbox, setShowMessageInbox] = useState(false);
-  const [messages] = useState(() => [
-    {
-      sender: "Sarah Chen",
-      avatar: "/profile-icons/profile-icon-02.png",
-      message: "Your latest design looks amazing! Could you share some tips?",
-      time: "5m ago",
-      isRead: false
-    },
-    {
-      sender: "Alex Thompson",
-      avatar: "/profile-icons/profile-icon-03.png",
-      message: "I'd love to collaborate on the new project you posted.",
-      time: "2h ago",
-      isRead: false
-    },
-    {
-      sender: "Maria Garcia",
-      avatar: "/profile-icons/profile-icon-04.png",
-      message: "Thanks for the feedback on my design!",
-      time: "1d ago",
-      isRead: true
-    }
-  ]);
+  const [conversations, setConversations] = useState<any[]>([]);
+  const [selectedConversation, setSelectedConversation] = useState<any>(null);
+  const [totalUnread, setTotalUnread] = useState(0);
 
   const notificationsRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLDivElement>(null);
+
+  // Fetch conversations
+  useEffect(() => {
+    const fetchConversations = async () => {
+      try {
+        const response = await fetch('/api/messages');
+        if (response.ok) {
+          const data = await response.json();
+          setConversations(data.conversations || []);
+          setTotalUnread(data.conversations?.reduce((acc: number, conv: any) => acc + conv.unreadCount, 0) || 0);
+        }
+      } catch (error) {
+        console.error('Error fetching conversations:', error);
+      }
+    };
+
+    if (isMessagesOpen) {
+      fetchConversations();
+    }
+  }, [isMessagesOpen]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -120,6 +141,12 @@ export default function HeaderActions() {
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
   }, [isNotificationsOpen, isSearchExpanded, isMessagesOpen]);
+
+  const handleSelectConversation = (conversation: any) => {
+    setSelectedConversation(conversation);
+    setShowMessageInbox(true);
+    setIsMessagesOpen(false);
+  };
 
   return (
     <>
@@ -207,13 +234,12 @@ export default function HeaderActions() {
         <div className="relative" ref={messagesRef}>
           <button 
             className="w-12 h-12 flex items-center justify-center hover:bg-white/10 rounded-full relative"
-            onClick={(e) => {
-              e.stopPropagation();
-              setIsMessagesOpen(!isMessagesOpen);
-            }}
+            onClick={() => setIsMessagesOpen(!isMessagesOpen)}
           >
             <Icon name="message" size={24} />
-            <div className="absolute top-3 right-3 w-2 h-2 bg-red-500 rounded-full"></div>
+            {totalUnread > 0 && (
+              <div className="absolute top-3 right-3 w-2 h-2 bg-red-500 rounded-full"></div>
+            )}
           </button>
           
           {/* Messages Dropdown */}
@@ -230,7 +256,10 @@ export default function HeaderActions() {
                 <h2 className="font-medium text-[#202126]">Messages</h2>
                 <button 
                   className="text-sm text-purple-600 hover:text-purple-700"
-                  onClick={(e) => e.stopPropagation()}
+                  onClick={() => {
+                    setShowMessageInbox(true);
+                    setIsMessagesOpen(false);
+                  }}
                 >
                   Mark all as read
                 </button>
@@ -240,18 +269,25 @@ export default function HeaderActions() {
             {/* Scrollable Messages List */}
             <div className="max-h-[400px] overflow-y-auto overscroll-contain">
               <div className="divide-y divide-gray-100">
-                {messages.map((message, index) => (
-                  <MessageItem key={index} {...message} />
+                {conversations.slice(0, 3).map((conversation) => (
+                  <MessageItem
+                    key={conversation.id}
+                    userId={conversation.userId}
+                    userName={conversation.userName}
+                    userImage={conversation.userImage}
+                    lastMessage={conversation.lastMessage}
+                    time={new Date(conversation.updatedAt)}
+                    unreadCount={conversation.unreadCount}
+                    onSelect={() => handleSelectConversation(conversation)}
+                  />
                 ))}
               </div>
             </div>
 
-            {/* See More Footer */}
+            {/* Open Messages Footer */}
             <div className="sticky bottom-0 p-4 border-t border-gray-100 bg-gray-50">
               <button 
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
+                onClick={() => {
                   setShowMessageInbox(true);
                   setIsMessagesOpen(false);
                 }}
@@ -264,9 +300,15 @@ export default function HeaderActions() {
         </div>
       </div>
 
-      {/* Message Inbox Modal */}
+      {/* Full Message Inbox */}
       {showMessageInbox && (
-        <MessageInbox onClose={() => setShowMessageInbox(false)} />
+        <MessageInbox 
+          onClose={() => {
+            setShowMessageInbox(false);
+            setSelectedConversation(null);
+          }} 
+          initialConversation={selectedConversation}
+        />
       )}
     </>
   );

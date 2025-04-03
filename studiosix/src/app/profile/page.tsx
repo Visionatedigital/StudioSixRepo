@@ -7,6 +7,7 @@ import DashboardLayout from '@/components/DashboardLayout';
 import { Icon } from '@/components/Icons';
 import Link from 'next/link';
 import { PencilIcon } from '@heroicons/react/24/outline';
+import { VerifiedBadge } from '@/components/VerifiedBadge';
 
 export default function ProfilePage() {
   const { data: session, update: updateSession } = useSession();
@@ -132,7 +133,7 @@ export default function ProfilePage() {
     <DashboardLayout currentPage="Profile">
       <div className="w-full min-h-[calc(100vh-6rem)] bg-[#F6F8FA] rounded-2xl overflow-hidden">
         {/* Banner Section */}
-        <div className="relative w-full h-[240px]">
+        <div className="relative w-full h-[240px] z-10">
           <div className={`w-full h-full ${!bannerImage ? 'bg-gradient-to-r from-[#814ADA] to-[#392CA0]' : ''}`}>
             {bannerImage && (
               <Image
@@ -148,7 +149,7 @@ export default function ProfilePage() {
               const input = document.getElementById('banner-upload');
               if (input) input.click();
             }}
-            className="absolute bottom-4 right-4 px-4 py-2 bg-white/90 rounded-lg flex items-center gap-2 hover:bg-white transition-colors"
+            className="absolute bottom-4 right-4 px-4 py-2 bg-white/90 rounded-lg flex items-center gap-2 hover:bg-white transition-colors z-20"
           >
             <PencilIcon className="h-5 w-5 text-gray-600" />
             <span>Edit Banner</span>
@@ -198,11 +199,14 @@ export default function ProfilePage() {
 
               {/* User Info */}
               <div className="mb-4">
-                <h1 className="text-2xl font-bold text-[#202126]">{session?.user?.name}</h1>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-2xl font-bold text-[#202126]">{session?.user?.name}</h1>
+                  {session?.user?.verified && <VerifiedBadge size={24} />}
+                </div>
                 <div className="flex items-center gap-2 mt-1">
                   <span className="text-sm text-gray-500">Level 1 Designer</span>
-                  <span className="text-gray-300">•</span>
-                  <span className="text-sm text-gray-500">San Francisco, CA</span>
+                  <span className="text-sm text-gray-500">•</span>
+                  <span className="text-sm text-gray-500">{session?.user?.email}</span>
                 </div>
               </div>
             </div>

@@ -7,9 +7,9 @@ export default function UpgradePage() {
   const [isYearly, setIsYearly] = useState(false);
 
   const plans = {
-    starter: { monthly: 19, yearly: 205 },  // 19 * 12 * 0.9
-    pro: { monthly: 39, yearly: 421 },      // 39 * 12 * 0.9
-    studio: { monthly: 79, yearly: 853 }     // 79 * 12 * 0.9
+    starter: { monthly: 39, yearly: 421 },  // 39 * 12 * 0.9
+    pro: { monthly: 69, yearly: 745 },      // 69 * 12 * 0.9
+    studio: { monthly: 99, yearly: 1069 }    // 99 * 12 * 0.9
   };
 
   const faqItems = [

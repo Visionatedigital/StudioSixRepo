@@ -1,14 +1,16 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
+import { authOptions } from '../../auth/[...nextauth]/route';
+import { prisma } from '@/lib/prisma';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
-import { prisma } from '@/lib/prisma';
 import { existsSync } from 'fs';
+import crypto from 'crypto';
 
 export async function POST(request: Request) {
   try {
     // Check authentication
-    const session = await getServerSession();
+    const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -35,9 +37,9 @@ export async function POST(request: Request) {
     // Create unique filename
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
-    const timestamp = Date.now();
-    const extension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
-    const filename = `${session.user.email}-${type}-${timestamp}${extension}`;
+    const hash = crypto.createHash('md5').update(buffer).digest('hex');
+    const extension = file.type.split('/')[1];
+    const filename = `${type}-${hash}.${extension}`;
 
     // Ensure uploads directory exists
     const uploadsDir = join(process.cwd(), 'public/uploads');
@@ -50,7 +52,7 @@ export async function POST(request: Request) {
     await writeFile(path, buffer);
     const imageUrl = `/uploads/${filename}`;
 
-    // Update user profile in database
+    // Update user profile in database with the image URL
     const user = await prisma.user.update({
       where: { email: session.user.email },
       data: {

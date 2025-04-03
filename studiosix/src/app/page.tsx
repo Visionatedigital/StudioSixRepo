@@ -13,14 +13,11 @@ export default function HomePage() {
           {/* Logo */}
           <div className="absolute left-[35px] top-[60%] -translate-y-1/2 flex items-center">
             <Link href="/" className="block">
-              <Image
+              <img
                 src="/studio-six-logo.svg"
                 alt="Studio Six Logo"
-                width={144}
-                height={48}
                 className="w-[144px] object-contain"
                 style={{ height: 'auto' }}
-                priority
               />
             </Link>
           </div>
@@ -111,25 +108,19 @@ export default function HomePage() {
           <div className="relative w-[850px] h-[650px]">
             {/* Render Image (behind) */}
             <div className="absolute right-[-20px] top-[160px] w-[750px] h-[422px] bg-white rounded-[24px] shadow-lg overflow-hidden transition-all duration-500 ease-out hover:scale-105 hover:shadow-xl">
-              <Image
+              <img
                 src="/render-example.jpg"
                 alt="Rendered visualization"
-                width={750}
-                height={422}
                 className="w-full h-full object-cover rounded-[24px]"
-                priority
               />
             </div>
             {/* Sketch Image (on top) */}
             <div className="absolute right-[270px] top-[-30px] w-[515px] h-[286px] bg-white rounded-[24px] shadow-lg overflow-hidden z-10 transition-all duration-500 ease-out hover:scale-[1.03] hover:shadow-xl">
-          <Image
+              <img
                 src="/sketch-example.jpg"
                 alt="Architectural sketch"
-                width={515}
-                height={286}
                 className="w-full h-full object-cover rounded-[24px]"
-            priority
-          />
+              />
             </div>
           </div>
         </div>
@@ -163,13 +154,10 @@ export default function HomePage() {
                 Upload your architectural sketch, massing model, or 3D design. Whether it's a hand-drawn concept or a digital model, Studio Six instantly prepares it for rendering.
               </p>
               <div className="w-[450px] h-[280px] rounded-[24px] overflow-hidden">
-                <Image
+                <img
                   src="/upload-sketch.gif"
                   alt="Upload sketch interface"
-                  width={450}
-                  height={280}
                   className="w-full h-full object-cover"
-                  unoptimized
                 />
               </div>
             </div>
@@ -188,13 +176,10 @@ export default function HomePage() {
                 Choose your preferred render style—photorealistic, conceptual, or artistic. Adjust lighting, materials, and environmental settings to match your design intent.
               </p>
               <div className="w-[450px] h-[280px] rounded-[24px] overflow-hidden">
-                <Image
+                <img
                   src="/settings.gif"
                   alt="Style settings interface"
-                  width={450}
-                  height={280}
                   className="w-full h-full object-cover"
-                  unoptimized
                 />
               </div>
             </div>
@@ -213,13 +198,10 @@ export default function HomePage() {
                 Let our AI transform your input into a stunning high-quality render. Download your finished image and bring your vision to life—faster than ever before!
               </p>
               <div className="w-[450px] h-[280px] rounded-[24px] overflow-hidden">
-                <Image
+                <img
                   src="/render-in-minutes.gif"
                   alt="Rendering result"
-                  width={450}
-                  height={280}
                   className="w-full h-full object-cover"
-                  unoptimized
                 />
               </div>
             </div>
@@ -249,99 +231,99 @@ export default function HomePage() {
             {/* First set of images */}
             <div className="grid grid-cols-5 auto-rows-[250px] gap-3 p-3 flex-shrink-0">
               <div className="w-[250px] row-span-2 rounded-lg border-[3px] border-white/90 overflow-hidden">
-                <Image src="/gallery/image1.jpg" alt="Gallery image" width={250} height={500} className="w-full h-full object-cover" />
+                <img src="/gallery/image1.jpg" alt="Gallery image" className="w-full h-full object-cover" />
               </div>
               <div className="w-[250px] rounded-lg border-[3px] border-white/90 overflow-hidden">
-                <Image src="/gallery/image2.jpg" alt="Gallery image" width={250} height={250} className="w-full h-full object-cover" />
+                <img src="/gallery/image2.jpg" alt="Gallery image" className="w-full h-full object-cover" />
               </div>
               <div className="w-[250px] row-span-2 rounded-lg border-[3px] border-white/90 overflow-hidden">
-                <Image src="/gallery/image3.jpg" alt="Gallery image" width={250} height={500} className="w-full h-full object-cover" />
+                <img src="/gallery/image3.jpg" alt="Gallery image" className="w-full h-full object-cover" />
               </div>
               <div className="w-[250px] rounded-lg border-[3px] border-white/90 overflow-hidden">
-                <Image src="/gallery/image4.jpg" alt="Gallery image" width={250} height={250} className="w-full h-full object-cover" />
+                <img src="/gallery/image4.jpg" alt="Gallery image" className="w-full h-full object-cover" />
               </div>
               <div className="w-[250px] rounded-lg border-[3px] border-white/90 overflow-hidden">
-                <Image src="/gallery/image5.jpg" alt="Gallery image" width={250} height={250} className="w-full h-full object-cover" />
+                <img src="/gallery/image5.jpg" alt="Gallery image" className="w-full h-full object-cover" />
               </div>
               <div className="w-[250px] row-span-2 rounded-lg border-[3px] border-white/90 overflow-hidden">
-                <Image src="/gallery/image6.jpg" alt="Gallery image" width={250} height={500} className="w-full h-full object-cover" />
+                <img src="/gallery/image6.jpg" alt="Gallery image" className="w-full h-full object-cover" />
               </div>
               <div className="w-[250px] rounded-lg border-[3px] border-white/90 overflow-hidden">
-                <Image src="/gallery/image7.jpg" alt="Gallery image" width={250} height={250} className="w-full h-full object-cover" />
+                <img src="/gallery/image7.jpg" alt="Gallery image" className="w-full h-full object-cover" />
               </div>
               <div className="w-[250px] row-span-2 rounded-lg border-[3px] border-white/90 overflow-hidden">
-                <Image src="/gallery/image8.jpg" alt="Gallery image" width={250} height={500} className="w-full h-full object-cover" />
+                <img src="/gallery/image8.jpg" alt="Gallery image" className="w-full h-full object-cover" />
               </div>
               <div className="w-[250px] rounded-lg border-[3px] border-white/90 overflow-hidden">
-                <Image src="/gallery/image9.jpg" alt="Gallery image" width={250} height={250} className="w-full h-full object-cover" />
+                <img src="/gallery/image9.jpg" alt="Gallery image" className="w-full h-full object-cover" />
               </div>
               <div className="w-[250px] rounded-lg border-[3px] border-white/90 overflow-hidden">
-                <Image src="/gallery/image10.jpg" alt="Gallery image" width={250} height={250} className="w-full h-full object-cover" />
+                <img src="/gallery/image10.jpg" alt="Gallery image" className="w-full h-full object-cover" />
               </div>
               {/* Additional row */}
               <div className="w-[250px] rounded-lg border-[3px] border-white/90 overflow-hidden">
-                <Image src="/gallery/image2.jpg" alt="Gallery image" width={250} height={250} className="w-full h-full object-cover" />
+                <img src="/gallery/image2.jpg" alt="Gallery image" className="w-full h-full object-cover" />
               </div>
               <div className="w-[250px] row-span-2 rounded-lg border-[3px] border-white/90 overflow-hidden">
-                <Image src="/gallery/image3.jpg" alt="Gallery image" width={250} height={500} className="w-full h-full object-cover" />
+                <img src="/gallery/image3.jpg" alt="Gallery image" className="w-full h-full object-cover" />
               </div>
               <div className="w-[250px] rounded-lg border-[3px] border-white/90 overflow-hidden">
-                <Image src="/gallery/image5.jpg" alt="Gallery image" width={250} height={250} className="w-full h-full object-cover" />
+                <img src="/gallery/image5.jpg" alt="Gallery image" className="w-full h-full object-cover" />
               </div>
               <div className="w-[250px] row-span-2 rounded-lg border-[3px] border-white/90 overflow-hidden">
-                <Image src="/gallery/image8.jpg" alt="Gallery image" width={250} height={500} className="w-full h-full object-cover" />
-      </div>
+                <img src="/gallery/image8.jpg" alt="Gallery image" className="w-full h-full object-cover" />
+              </div>
               <div className="w-[250px] rounded-lg border-[3px] border-white/90 overflow-hidden">
-                <Image src="/gallery/image10.jpg" alt="Gallery image" width={250} height={250} className="w-full h-full object-cover" />
+                <img src="/gallery/image10.jpg" alt="Gallery image" className="w-full h-full object-cover" />
               </div>
             </div>
             {/* Second set of images (duplicate for continuous scroll) */}
             <div className="grid grid-cols-5 auto-rows-[250px] gap-3 p-3 flex-shrink-0">
               <div className="w-[250px] row-span-2 rounded-lg border-[3px] border-white/90 overflow-hidden">
-                <Image src="/gallery/image1.jpg" alt="Gallery image" width={250} height={500} className="w-full h-full object-cover" />
+                <img src="/gallery/image1.jpg" alt="Gallery image" className="w-full h-full object-cover" />
               </div>
               <div className="w-[250px] rounded-lg border-[3px] border-white/90 overflow-hidden">
-                <Image src="/gallery/image2.jpg" alt="Gallery image" width={250} height={250} className="w-full h-full object-cover" />
+                <img src="/gallery/image2.jpg" alt="Gallery image" className="w-full h-full object-cover" />
               </div>
               <div className="w-[250px] row-span-2 rounded-lg border-[3px] border-white/90 overflow-hidden">
-                <Image src="/gallery/image3.jpg" alt="Gallery image" width={250} height={500} className="w-full h-full object-cover" />
+                <img src="/gallery/image3.jpg" alt="Gallery image" className="w-full h-full object-cover" />
               </div>
               <div className="w-[250px] rounded-lg border-[3px] border-white/90 overflow-hidden">
-                <Image src="/gallery/image4.jpg" alt="Gallery image" width={250} height={250} className="w-full h-full object-cover" />
+                <img src="/gallery/image4.jpg" alt="Gallery image" className="w-full h-full object-cover" />
               </div>
               <div className="w-[250px] rounded-lg border-[3px] border-white/90 overflow-hidden">
-                <Image src="/gallery/image5.jpg" alt="Gallery image" width={250} height={250} className="w-full h-full object-cover" />
+                <img src="/gallery/image5.jpg" alt="Gallery image" className="w-full h-full object-cover" />
               </div>
               <div className="w-[250px] row-span-2 rounded-lg border-[3px] border-white/90 overflow-hidden">
-                <Image src="/gallery/image6.jpg" alt="Gallery image" width={250} height={500} className="w-full h-full object-cover" />
+                <img src="/gallery/image6.jpg" alt="Gallery image" className="w-full h-full object-cover" />
               </div>
               <div className="w-[250px] rounded-lg border-[3px] border-white/90 overflow-hidden">
-                <Image src="/gallery/image7.jpg" alt="Gallery image" width={250} height={250} className="w-full h-full object-cover" />
+                <img src="/gallery/image7.jpg" alt="Gallery image" className="w-full h-full object-cover" />
               </div>
               <div className="w-[250px] row-span-2 rounded-lg border-[3px] border-white/90 overflow-hidden">
-                <Image src="/gallery/image8.jpg" alt="Gallery image" width={250} height={500} className="w-full h-full object-cover" />
+                <img src="/gallery/image8.jpg" alt="Gallery image" className="w-full h-full object-cover" />
               </div>
               <div className="w-[250px] rounded-lg border-[3px] border-white/90 overflow-hidden">
-                <Image src="/gallery/image9.jpg" alt="Gallery image" width={250} height={250} className="w-full h-full object-cover" />
+                <img src="/gallery/image9.jpg" alt="Gallery image" className="w-full h-full object-cover" />
               </div>
               <div className="w-[250px] rounded-lg border-[3px] border-white/90 overflow-hidden">
-                <Image src="/gallery/image10.jpg" alt="Gallery image" width={250} height={250} className="w-full h-full object-cover" />
+                <img src="/gallery/image10.jpg" alt="Gallery image" className="w-full h-full object-cover" />
               </div>
               {/* Additional row */}
               <div className="w-[250px] rounded-lg border-[3px] border-white/90 overflow-hidden">
-                <Image src="/gallery/image2.jpg" alt="Gallery image" width={250} height={250} className="w-full h-full object-cover" />
+                <img src="/gallery/image2.jpg" alt="Gallery image" className="w-full h-full object-cover" />
               </div>
               <div className="w-[250px] row-span-2 rounded-lg border-[3px] border-white/90 overflow-hidden">
-                <Image src="/gallery/image3.jpg" alt="Gallery image" width={250} height={500} className="w-full h-full object-cover" />
+                <img src="/gallery/image3.jpg" alt="Gallery image" className="w-full h-full object-cover" />
               </div>
               <div className="w-[250px] rounded-lg border-[3px] border-white/90 overflow-hidden">
-                <Image src="/gallery/image5.jpg" alt="Gallery image" width={250} height={250} className="w-full h-full object-cover" />
+                <img src="/gallery/image5.jpg" alt="Gallery image" className="w-full h-full object-cover" />
               </div>
               <div className="w-[250px] row-span-2 rounded-lg border-[3px] border-white/90 overflow-hidden">
-                <Image src="/gallery/image8.jpg" alt="Gallery image" width={250} height={500} className="w-full h-full object-cover" />
+                <img src="/gallery/image8.jpg" alt="Gallery image" className="w-full h-full object-cover" />
               </div>
               <div className="w-[250px] rounded-lg border-[3px] border-white/90 overflow-hidden">
-                <Image src="/gallery/image10.jpg" alt="Gallery image" width={250} height={250} className="w-full h-full object-cover" />
+                <img src="/gallery/image10.jpg" alt="Gallery image" className="w-full h-full object-cover" />
               </div>
             </div>
           </div>
@@ -363,7 +345,7 @@ export default function HomePage() {
 
               {/* Google Sign In */}
               <button className="w-full h-[50px] bg-white border border-[#E5E7EB] shadow-sm rounded-[12px] flex items-center justify-center gap-3 hover:bg-gray-50 transition-colors">
-                <Image
+                <img
                   src="/google-icon.svg"
                   alt="Google"
                   width={18}

@@ -67,8 +67,8 @@ function SignInForm() {
         if (signInResult?.error) {
           setError("Failed to sign in after registration");
         } else {
-          const callbackUrl = searchParams?.get("callbackUrl") || "/dashboard";
-          router.push(callbackUrl);
+          // Always redirect new users to onboarding
+          router.push('/onboarding');
           router.refresh();
         }
       } else {
@@ -82,8 +82,15 @@ function SignInForm() {
         if (result?.error) {
           setError("Invalid email or password");
         } else {
-          const callbackUrl = searchParams?.get("callbackUrl") || "/dashboard";
-          router.push(callbackUrl);
+          // Check user's subscription status
+          const session = await fetch('/api/auth/session');
+          const sessionData = await session.json();
+          
+          if (sessionData?.user?.subscriptionStatus === 'ACTIVE') {
+            router.push('/dashboard');
+          } else {
+            router.push('/onboarding');
+          }
           router.refresh();
         }
       }

@@ -39,6 +39,7 @@ export async function POST(req: Request) {
           email,
           password: hashedPassword,
           credits: 50,
+          subscriptionStatus: 'INACTIVE',
         },
       });
 

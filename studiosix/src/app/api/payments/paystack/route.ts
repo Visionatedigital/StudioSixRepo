@@ -3,6 +3,9 @@ import { getServerSession } from 'next-auth/next';
 import { PrismaClient } from '@prisma/client';
 import { authOptions } from '@/lib/auth';
 import { formatAmountForPaystack } from '@/lib/paystack';
+import { verifyEnv } from '@/lib/env';
+import { v4 as uuidv4 } from 'uuid';
+import { isTransactionReferenceUsed, markTransactionReferenceAsUsed } from '@/lib/redis';
 
 // PrismaClient is attached to the `global` object in development to prevent
 // exhausting your database connection limit.
@@ -14,12 +17,25 @@ if (process.env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = prisma;
 }
 
-const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY!;
+// Verify environment variables
+const env = verifyEnv();
+const PAYSTACK_SECRET_KEY = env.PAYSTACK_SECRET_KEY;
 
-// Cache to track recent transaction attempts (in-memory, will reset on server restart)
-const recentTransactions = new Map<string, { timestamp: number, attempts: number }>();
-const RATE_LIMIT_WINDOW = 60000; // 1 minute
-const MAX_ATTEMPTS = 3;
+// Maximum attempts to generate a unique reference
+const MAX_REFERENCE_ATTEMPTS = 5;
+
+async function generateUniqueReference(): Promise<string> {
+  for (let i = 0; i < MAX_REFERENCE_ATTEMPTS; i++) {
+    const reference = `TX-${uuidv4()}`;
+    const isUsed = await isTransactionReferenceUsed(reference);
+    if (!isUsed) {
+      await markTransactionReferenceAsUsed(reference);
+      return reference;
+    }
+    console.log(`Reference ${reference} already used, trying again...`);
+  }
+  throw new Error('Failed to generate unique transaction reference');
+}
 
 export async function POST(request: Request) {
   try {
@@ -32,56 +48,20 @@ export async function POST(request: Request) {
       );
     }
 
-    const { amount, currency, type, packageId, reference } = await request.json();
+    const { amount, currency, type, packageId } = await request.json();
 
-    if (!reference) {
-      return NextResponse.json(
-        { error: 'Transaction reference is required' },
-        { status: 400 }
-      );
-    }
+    // Generate a unique reference with Redis check
+    const reference = await generateUniqueReference();
 
-    // Check if reference has been used before
-    const existingTransaction = await prisma.paymentTransaction.findFirst({
-      where: {
-        reference,
-      },
+    // Log the request details (excluding sensitive data)
+    console.log('Initializing payment:', {
+      amount,
+      currency,
+      type,
+      packageId,
+      reference,
+      userId: session.user.id,
     });
-
-    if (existingTransaction) {
-      return NextResponse.json(
-        { error: 'Duplicate transaction reference' },
-        { status: 409 }
-      );
-    }
-
-    // Rate limiting check using user ID and reference
-    const userKey = `${session.user.id}-${reference}`;
-    const now = Date.now();
-    const userTransactions = recentTransactions.get(userKey);
-
-    if (userTransactions) {
-      // Clean up old entries
-      if (now - userTransactions.timestamp > RATE_LIMIT_WINDOW) {
-        recentTransactions.delete(userKey);
-      } else if (userTransactions.attempts >= MAX_ATTEMPTS) {
-        return NextResponse.json(
-          { error: 'Too many payment attempts. Please wait a moment before trying again.' },
-          { status: 429 }
-        );
-      } else {
-        userTransactions.attempts += 1;
-      }
-    } else {
-      recentTransactions.set(userKey, { timestamp: now, attempts: 1 });
-    }
-
-    // Clean up old entries from the cache
-    for (const [key, value] of recentTransactions.entries()) {
-      if (now - value.timestamp > RATE_LIMIT_WINDOW) {
-        recentTransactions.delete(key);
-      }
-    }
 
     // Initialize Paystack transaction with the provided reference
     const response = await fetch('https://api.paystack.co/transaction/initialize', {
@@ -95,7 +75,7 @@ export async function POST(request: Request) {
         amount: formatAmountForPaystack(amount),
         currency,
         reference,
-        callback_url: `${process.env.NEXT_PUBLIC_APP_URL}/api/payments/paystack/verify`,
+        callback_url: `${env.NEXT_PUBLIC_APP_URL}/api/payments/paystack/verify`,
         metadata: {
           userId: session.user.id,
           type,
@@ -104,30 +84,42 @@ export async function POST(request: Request) {
       }),
     });
 
-    const data = await response.json();
-
-    if (!data.status) {
-      throw new Error(data.message);
+    // Log the raw response for debugging
+    const responseText = await response.text();
+    console.log('Paystack raw response:', responseText);
+    
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (e) {
+      console.error('Failed to parse Paystack response:', e);
+      throw new Error('Invalid response from Paystack');
     }
 
-    // Verify the reference matches
-    if (data.data.reference !== reference) {
-      console.error('Reference mismatch:', { sent: reference, received: data.data.reference });
-      throw new Error('Transaction reference mismatch');
+    // Log the parsed response
+    console.log('Paystack parsed response:', {
+      status: data.status,
+      message: data.message,
+      reference: data.data?.reference,
+      paystackReference: data.data?.reference,
+    });
+
+    if (!data.status) {
+      throw new Error(data.message || 'Failed to initialize payment');
     }
 
     // Store the pending transaction
     await prisma.paymentTransaction.create({
       data: {
-        userId: session.user.id,
         amount,
-        currency,
-        type,
         reference,
         status: 'PENDING',
         provider: 'PAYSTACK',
         metadata: {
+          userId: session.user.id,
+          type,
           packageId,
+          currency,
           paystackReference: data.data.reference,
         },
       },
@@ -140,7 +132,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error('Error initializing payment:', error);
     return NextResponse.json(
-      { error: 'Failed to initialize payment' },
+      { error: error instanceof Error ? error.message : 'Failed to initialize payment' },
       { status: 500 }
     );
   }
@@ -150,82 +142,70 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const reference = searchParams.get('reference');
+    const trxref = searchParams.get('trxref'); // Paystack sometimes uses trxref instead of reference
 
-    if (!reference) {
+    // Log all query parameters
+    console.log('Verification request parameters:', {
+      reference,
+      trxref,
+      allParams: Object.fromEntries(searchParams.entries())
+    });
+
+    // Use either reference or trxref
+    const transactionReference = reference || trxref;
+
+    if (!transactionReference) {
+      console.error('No transaction reference found in request');
       return NextResponse.json(
-        { error: 'Reference is required' },
+        { error: 'Transaction reference is required' },
         { status: 400 }
       );
     }
 
+    // Log the verification attempt
+    console.log('Verifying payment:', { transactionReference });
+
     // Verify the transaction with Paystack
-    const response = await fetch(`https://api.paystack.co/transaction/verify/${reference}`, {
+    const response = await fetch(`https://api.paystack.co/transaction/verify/${transactionReference}`, {
       headers: {
         Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
       },
     });
 
     const data = await response.json();
+    console.log('Paystack verification response:', data);
 
-    if (!data.status || data.data.status !== 'success') {
-      throw new Error('Payment verification failed');
+    if (!data.status) {
+      throw new Error(data.message || 'Failed to verify payment');
     }
 
-    // Find the pending transaction
-    const transaction = await prisma.paymentTransaction.findUnique({
-      where: { reference },
+    // Update the transaction status
+    const transaction = await prisma.paymentTransaction.findFirst({
+      where: { reference: transactionReference },
     });
 
     if (!transaction) {
+      console.error('Transaction not found:', { transactionReference });
       throw new Error('Transaction not found');
     }
 
     // Update transaction status
-    await prisma.$transaction(async (tx) => {
-      // Update transaction status
-      await tx.paymentTransaction.update({
-        where: { id: transaction.id },
-        data: { status: 'COMPLETED' },
-      });
-
-      // Handle credits purchase
-      if (transaction.type === 'CREDITS') {
-        await tx.user.update({
-          where: { id: transaction.userId },
-          data: {
-            credits: {
-              increment: transaction.amount,
-            },
-          },
-        });
-
-        await tx.creditTransaction.create({
-          data: {
-            userId: transaction.userId,
-            amount: transaction.amount,
-            type: 'PURCHASE',
-            description: `Purchased ${transaction.amount} credits`,
-          },
-        });
-      }
-
-      // Handle subscription purchase
-      if (transaction.type === 'SUBSCRIPTION') {
-        const packageId = transaction.metadata.packageId;
-        // Add subscription logic here
-        // This would typically involve updating the user's subscription status,
-        // setting expiration dates, etc.
-      }
+    await prisma.paymentTransaction.update({
+      where: { id: transaction.id },
+      data: {
+        status: data.data.status === 'success' ? 'COMPLETED' : 'FAILED',
+        providerReference: data.data.reference,
+      },
     });
 
     // Redirect to success page
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/payment/success?reference=${reference}`
+      `${env.NEXT_PUBLIC_APP_URL}/payment/success?reference=${transactionReference}`
     );
   } catch (error) {
     console.error('Error verifying payment:', error);
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/payment/error`
+      `${env.NEXT_PUBLIC_APP_URL}/payment/error`
     );
   }
 } 

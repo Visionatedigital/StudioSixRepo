@@ -48,6 +48,9 @@ const config: Config = {
         'gradient-primary': 'linear-gradient(86.67deg, #844BDC 7.23%, #AC4FF1 100%)',
         'gradient-secondary': 'linear-gradient(90deg, #814ADA 0%, #4130A7 100%)',
         'gradient-text': 'linear-gradient(180deg, #2A0856 3.12%, #3E0B80 80.21%)',
+        'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
+        'gradient-conic':
+          'conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))',
       },
       boxShadow: {
         'menu': '0px 2px 3px rgba(0, 0, 0, 0.01), 0px 2px 2px rgba(135, 80, 255, 0.06)',
@@ -64,7 +67,9 @@ const config: Config = {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    require('@tailwindcss/typography'),
+  ],
 }
 
 export default config 

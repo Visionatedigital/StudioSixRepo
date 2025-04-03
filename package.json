@@ -1,6 +1,31 @@
 {
+  "name": "studiosix",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -H 0.0.0.0",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
   "dependencies": {
-    "@paystack/inline-js": "^2.22.2",
-    "sonner": "^2.0.1"
+    "@types/cheerio": "^0.22.35",
+    "@types/puppeteer-core": "^5.4.0",
+    "canvas": "^3.1.0",
+    "konva": "^9.3.20",
+    "next": "14.1.0",
+    "next-auth": "^4.24.6",
+    "openai": "^4.28.0",
+    "puppeteer-core": "^24.4.0",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "react-konva": "18.2.10"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.19",
+    "@types/react": "^18.2.57",
+    "@types/react-dom": "^18.2.19",
+    "sharp": "^0.33.5",
+    "typescript": "^5.3.3"
   }
 }

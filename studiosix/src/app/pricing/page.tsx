@@ -4,6 +4,11 @@ import React, { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Icon } from '@/components/Icons';
 import Image from 'next/image';
+import PaystackProvider from '@/components/PaystackProvider';
+import { toast } from 'sonner';
+import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
+import { formatDisplayAmount, convertUSDToZAR } from '@/lib/paystack';
 
 // Types from wallet page
 type CurrencyCode = 'USD' | 'EUR' | 'GBP' | 'AUD' | 'CAD' | 'JPY' | 'UGX' | 'KES' | 'ZAR';
@@ -31,7 +36,7 @@ const pricingPlans = [
   {
     name: 'Starter Plan',
     icon: '/icons/logo.svg',
-    priceUSD: 19,
+    priceUSD: 1,
     description: 'Perfect for individuals starting their creative journey with AI.',
     features: [
       '1,500 Monthly Credits',
@@ -48,7 +53,7 @@ const pricingPlans = [
   {
     name: 'Pro Plan',
     icon: '/icons/logo.svg',
-    priceUSD: 39,
+    priceUSD: 69,
     description: 'Ideal for professionals seeking advanced AI design capabilities.',
     features: [
       '5,000 Monthly Credits',
@@ -65,7 +70,7 @@ const pricingPlans = [
   {
     name: 'Studio Plan',
     icon: '/icons/logo.svg',
-    priceUSD: 79,
+    priceUSD: 99,
     description: 'Full-scale solution for agencies and creative teams.',
     features: [
       '10,000 Monthly Credits',
@@ -81,9 +86,76 @@ const pricingPlans = [
   }
 ];
 
+function PricingCard({ 
+  title, 
+  description, 
+  price, 
+  features, 
+  type 
+}: { 
+  title: string; 
+  description: string; 
+  price: number; 
+  features: string[]; 
+  type: string;
+}) {
+  const { data: session } = useSession();
+  const zarPrice = convertUSDToZAR(price);
+
+  return (
+    <div className="flex flex-col p-6 bg-white rounded-lg shadow-lg">
+      <div className="flex-1">
+        <h3 className="text-2xl font-bold text-gray-900">{title}</h3>
+        <p className="mt-4 text-gray-500">{description}</p>
+        <div className="mt-8">
+          <div className="flex items-baseline gap-x-2">
+            <span className="text-4xl font-bold tracking-tight text-gray-900">
+              ${price}
+            </span>
+            <span className="text-sm font-semibold leading-6 tracking-wide text-gray-600">
+              /mo
+            </span>
+          </div>
+          <div className="mt-1 text-sm text-gray-500">
+            (Approx. {formatDisplayAmount(zarPrice, 'ZAR')}/mo)
+          </div>
+        </div>
+        <ul role="list" className="mt-8 space-y-3">
+          {features.map((feature, index) => (
+            <li key={index} className="flex">
+              <Icon
+                name="check-circle"
+                className="h-6 w-6 flex-none text-indigo-600"
+              />
+              <span className="ml-3 text-sm text-gray-500">{feature}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+      {session?.user?.email && (
+        <PaystackProvider
+          config={{
+            amount: price,
+            currency: 'USD',
+            email: session.user.email,
+            metadata: {
+              type: 'SUBSCRIPTION',
+              packageId: type.toLowerCase() + '-plan',
+            },
+          }}
+        >
+          Get Started
+        </PaystackProvider>
+      )}
+    </div>
+  );
+}
+
 export default function PricingPage() {
+  const { data: session } = useSession();
+  const router = useRouter();
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
-  const [selectedCurrency, setSelectedCurrency] = useState<CurrencyCode>('USD');
+  const [selectedCurrency, setSelectedCurrency] = useState<CurrencyCode>('ZAR');
   const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({});
   const [userLocation, setUserLocation] = useState<string | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
@@ -92,7 +164,7 @@ export default function PricingPage() {
   useEffect(() => {
     const fetchExchangeRates = async () => {
       try {
-        const response = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
+        const response = await fetch('https://api.exchangerate-api.com/v4/latest/ZAR');
         const data = await response.json();
         setExchangeRates(data.rates);
       } catch (error) {
@@ -113,6 +185,7 @@ export default function PricingPage() {
         
         // Map country to currency
         const currencyMap: Record<string, string> = {
+          ZA: 'ZAR',
           US: 'USD',
           GB: 'GBP',
           EU: 'EUR',
@@ -121,7 +194,6 @@ export default function PricingPage() {
           JP: 'JPY',
           UG: 'UGX',
           KE: 'KES',
-          ZA: 'ZAR',
         };
         
         if (currencyMap[data.country]) {
@@ -276,15 +348,25 @@ export default function PricingPage() {
                   </div>
 
                   {/* Action Button */}
-                  <button
-                    className={`w-full py-2.5 rounded-lg font-medium transition-colors ${
-                      isHighlighted
-                        ? 'bg-white text-[#1B1464] hover:bg-white/90'
-                        : 'bg-[#F6F8FA] text-[#1B1464] hover:bg-purple-50'
-                    }`}
+                  <PaystackProvider
+                    config={{
+                      amount: Number(getPrice(plan.priceUSD)),
+                      currency: selectedCurrency,
+                      metadata: {
+                        type: 'SUBSCRIPTION',
+                        packageId: plan.name.toLowerCase().replace(' ', '-'),
+                      },
+                    }}
+                    onSuccess={(response) => {
+                      toast.success('Payment successful! Your subscription has been activated.');
+                      router.refresh();
+                    }}
+                    onError={() => {
+                      toast.error('Payment failed. Please try again.');
+                    }}
                   >
                     {plan.buttonText}
-                  </button>
+                  </PaystackProvider>
                 </div>
               );
             })}

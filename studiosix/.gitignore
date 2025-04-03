@@ -42,3 +42,6 @@ prisma/dev.db-journal
 # IDE
 .idea/
 .vscode/
+
+# clerk configuration (can include secrets)
+/.clerk/

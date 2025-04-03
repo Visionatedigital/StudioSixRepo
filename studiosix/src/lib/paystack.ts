@@ -3,19 +3,19 @@ declare module '@paystack/inline-js';
 
 import { PaystackProps } from '@paystack/inline-js';
 
-export type PaystackConfig = {
-  publicKey: string;
+export interface PaystackConfig {
   email: string;
-  amount: number;
+  amount: string | number;
   currency: string;
+  publicKey: string;
   reference?: string;
-  callback: (response: PaystackResponse) => void;
-  onClose: () => void;
   metadata?: {
-    type: 'CREDITS' | 'SUBSCRIPTION';
-    packageId: string;
+    type?: string;
+    packageId?: string;
   };
-};
+  callback?: (response: any) => void;
+  onClose?: () => void;
+}
 
 export type PaystackResponse = {
   reference: string;
@@ -26,10 +26,26 @@ export type PaystackResponse = {
   trxref: string;
 };
 
-export const formatAmountForPaystack = (amount: number) => {
-  // Paystack expects amount in kobo (multiply by 100)
-  return Math.round(amount * 100);
-};
+// Paystack expects amount in kobo (for NGN) or cents (for other currencies)
+export function formatAmountForPaystack(amount: number, currency: string = 'ZAR'): number {
+  // Convert amount to smallest currency unit (cents)
+  const amountInCents = Math.round(amount * 100);
+  return amountInCents;
+}
+
+// Format display amount based on currency
+export function formatDisplayAmount(amount: number, currency: string = 'ZAR'): string {
+  return new Intl.NumberFormat('en-ZA', {
+    style: 'currency',
+    currency: currency,
+  }).format(amount);
+}
+
+// Convert USD to ZAR (using a fixed rate for now)
+export function convertUSDToZAR(usdAmount: number): number {
+  const exchangeRate = 18.5; // 1 USD = 18.5 ZAR (approximate)
+  return Math.round(usdAmount * exchangeRate);
+}
 
 export const generateTransactionReference = () => {
   const uuid = crypto.randomUUID();
@@ -37,11 +53,13 @@ export const generateTransactionReference = () => {
 };
 
 export const CURRENCY_CODES = {
+  ZAR: 'ZAR',
   NGN: 'NGN',
   USD: 'USD',
   GHS: 'GHS',
-  ZAR: 'ZAR',
   KES: 'KES',
 } as const;
 
-export type SupportedCurrency = keyof typeof CURRENCY_CODES; 
+export type SupportedCurrency = keyof typeof CURRENCY_CODES;
+
+export const DEFAULT_CURRENCY = 'ZAR' as const; 

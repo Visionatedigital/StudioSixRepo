@@ -6,6 +6,7 @@ import { Icon } from '@/components/Icons';
 import Image from 'next/image';
 import { getRandomProfileIcon } from '@/utils/profileIcons';
 import { useSession } from 'next-auth/react';
+import { VerifiedBadge } from '@/components/VerifiedBadge';
 
 // Custom scrollbar styles
 const scrollbarStyles = `
@@ -452,8 +453,11 @@ export default function LibraryPage() {
                             />
                           </div>
                           <div>
-                            <div className="font-medium text-[#202126]">{profile.name}</div>
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-1 leading-none">
+                              <div className="font-medium text-[#202126] leading-none">{profile.name}</div>
+                              {profile.verified && <VerifiedBadge size={16} className="translate-y-[-4px]" />}
+                            </div>
+                            <div className="flex items-center gap-1 mt-1">
                               <Image
                                 src={levelBadges[profile.level]}
                                 alt={`Level ${profile.level}`}

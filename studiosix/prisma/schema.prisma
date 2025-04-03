@@ -12,20 +12,28 @@ model User {
   name          String?
   email         String?   @unique
   emailVerified DateTime?
-  bannerImage   String?
-  credits       Int       @default(0)
-  level         Int       @default(1)
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
   image         String?
+  bannerImage   String?
+  credits       Int       @default(50)
+  level         Int       @default(1)
   password      String?
+  hashedPassword String?
+  verified      Boolean   @default(false)
+  subscriptionStatus String @default("INACTIVE") // ACTIVE, EXPIRED, CANCELLED
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
   accounts      Account[]
-  transactions  CreditTransaction[]
   sessions      Session[]
-  followers     Follow[]  @relation("Following")
-  following     Follow[]  @relation("Followers")
+  projects      Project[]
   posts         Post[]
   likes         Like[]
+  followers     Follow[]  @relation("Following")
+  following     Follow[]  @relation("Followers")
+  chatMessages  ChatMessage[]
+  transactions  CreditTransaction[]
+  subscriptions Subscription[]
+  sentMessages     Message[] @relation("SentMessages")
+  receivedMessages Message[] @relation("ReceivedMessages")
 }
 
 model Account {
@@ -52,6 +60,7 @@ model Session {
   userId       String
   expires      DateTime
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
 }
 
 model VerificationToken {
@@ -118,6 +127,89 @@ model Like {
   @@unique([postId, userId])
   @@index([postId])
   @@index([userId])
+}
+
+model Project {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  canvasData  Json?
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  messages    ChatMessage[]
+
+  @@index([userId])
+}
+
+model CaseStudy {
+  id              String   @id @default(cuid())
+  name            String
+  location        String
+  year            Int
+  typology        String
+  relevance_score Float
+  description     String?
+  imageUrl        String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([location])
+  @@index([year])
+  @@index([typology])
+  @@index([relevance_score])
+}
+
+model ChatMessage {
+  id              String   @id @default(cuid())
+  content         String
+  role            String
+  projectId       String
+  project         Project  @relation(fields: [projectId], references: [id])
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+  hasGenerateAction Boolean @default(false)
+  isGeneratedImage Boolean @default(false)
+  selectedElement  Json?
+  prompt          String?
+  sources         Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([projectId])
+}
+
+model Message {
+  id          String   @id @default(cuid())
+  content     String
+  senderId    String
+  receiverId  String
+  read        Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  sender      User     @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver    User     @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([senderId])
+  @@index([receiverId])
+}
+
+model Subscription {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planId        String   // e.g., "starter-plan", "pro-plan", "enterprise-plan"
+  status        String   // ACTIVE, EXPIRED, CANCELLED
+  startDate     DateTime @default(now())
+  endDate       DateTime
+  autoRenew     Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([endDate])
 }
 
 enum TransactionType {

@@ -45,7 +45,8 @@ export async function GET() {
         image: true,
         bannerImage: true,
         credits: true,
-        createdAt: true
+        createdAt: true,
+        verified: true
       },
       take: 3,
       orderBy: {
@@ -85,7 +86,8 @@ export async function GET() {
       level: Math.min(Math.floor(profile.credits / 1000) + 1, 5),
       levelTitle: 'Designer',
       followers: profile.followersCount,
-      following: profile.followingCount
+      following: profile.followingCount,
+      verified: profile.verified
     }));
 
     return NextResponse.json({ profiles: formattedProfiles });

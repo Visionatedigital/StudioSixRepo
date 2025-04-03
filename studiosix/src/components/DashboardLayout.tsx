@@ -7,6 +7,8 @@ import { Icon } from './Icons';
 import HeaderActions from './HeaderActions';
 import { useSession, signOut } from 'next-auth/react';
 import MessageInbox from './MessageInbox';
+import { usePathname } from 'next/navigation';
+import { VerifiedBadge } from './VerifiedBadge';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -15,12 +17,21 @@ interface DashboardLayoutProps {
 
 export default function DashboardLayout({ children, currentPage }: DashboardLayoutProps) {
   const { data: session } = useSession();
+  const pathname = usePathname();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isMessagesOpen, setIsMessagesOpen] = useState(false);
   const [credits, setCredits] = useState<number | null>(null);
   const profileRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
   const [showMessageInbox, setShowMessageInbox] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  // Reset scroll position when pathname changes
+  useEffect(() => {
+    if (contentRef.current) {
+      contentRef.current.scrollTop = 0;
+    }
+  }, [pathname]);
 
   // Mock messages data
   const messages = [
@@ -87,7 +98,17 @@ export default function DashboardLayout({ children, currentPage }: DashboardLayo
   }, [session]);
 
   // Default avatar URL
-  const defaultAvatar = '/images/default-avatar.png';
+  const defaultAvatar = '/profile-icons/profile-icon-01.png';
+
+  // Debug log
+  useEffect(() => {
+    console.log('Session data:', {
+      session,
+      verified: session?.user?.verified,
+      name: session?.user?.name,
+      email: session?.user?.email
+    });
+  }, [session]);
 
   return (
     <>
@@ -109,9 +130,12 @@ export default function DashboardLayout({ children, currentPage }: DashboardLayo
                     />
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-white font-inter font-semibold text-lg">
-                      {session?.user?.name?.split(' ')[0] || 'Designer'}
-                    </span>
+                    <div className="flex items-center gap-1">
+                      <span className="text-white font-inter font-semibold text-lg">
+                        {session?.user?.name?.split(' ')[0] || 'Designer'}
+                      </span>
+                      {session?.user?.verified && <VerifiedBadge className="ml-1" />}
+                    </div>
                     <span className="text-white font-inter text-xs">Level 1 Designer</span>
                   </div>
                 </div>
@@ -139,9 +163,9 @@ export default function DashboardLayout({ children, currentPage }: DashboardLayo
                   Home
                 </span>
               </Link>
-              <Link href="/prompt" className={`flex flex-row items-center px-3 py-2.5 gap-1 w-full h-10 rounded-[10px] ${currentPage === 'Prompt' ? 'bg-white border border-[#D3BBFB] shadow-[0px_2px_3px_rgba(0,0,0,0.01),0px_2px_2px_rgba(135,80,255,0.06)]' : ''}`}>
-                <Icon name="prompt" size={20} isActive={currentPage === 'Prompt'} />
-                <span className={`font-roboto font-medium text-sm ${currentPage === 'Prompt' ? 'bg-gradient-to-b from-[#2A0856] to-[#3E0B80] bg-clip-text text-transparent' : 'text-[#202126]'}`}>
+              <Link href="/ai-design-assistant" className={`flex flex-row items-center px-3 py-2.5 gap-1 w-full h-10 rounded-[10px] ${currentPage === 'AI Design Assistant' ? 'bg-white border border-[#D3BBFB] shadow-[0px_2px_3px_rgba(0,0,0,0.01),0px_2px_2px_rgba(135,80,255,0.06)]' : ''}`}>
+                <Icon name="prompt" size={20} isActive={currentPage === 'AI Design Assistant'} />
+                <span className={`font-roboto font-medium text-sm ${currentPage === 'AI Design Assistant' ? 'bg-gradient-to-b from-[#2A0856] to-[#3E0B80] bg-clip-text text-transparent' : 'text-[#202126]'}`}>
                   AI Design Assistant
                 </span>
               </Link>
@@ -161,7 +185,7 @@ export default function DashboardLayout({ children, currentPage }: DashboardLayo
               <Link href="/library" className={`flex flex-row items-center px-3 py-2.5 gap-1 w-full h-10 rounded-[10px] ${currentPage === 'Library' ? 'bg-white border border-[#D3BBFB] shadow-[0px_2px_3px_rgba(0,0,0,0.01),0px_2px_2px_rgba(135,80,255,0.06)]' : ''}`}>
                 <Icon name="library" size={20} isActive={currentPage === 'Library'} />
                 <span className={`font-roboto font-medium text-sm ${currentPage === 'Library' ? 'bg-gradient-to-b from-[#2A0856] to-[#3E0B80] bg-clip-text text-transparent' : 'text-[#202126]'}`}>
-                  Library
+                  Community
                 </span>
               </Link>
               <Link href="/wallet" className={`flex flex-row items-center px-3 py-2.5 gap-1 w-full h-10 rounded-[10px] ${currentPage === 'Wallet' ? 'bg-white border border-[#D3BBFB] shadow-[0px_2px_3px_rgba(0,0,0,0.01),0px_2px_2px_rgba(135,80,255,0.06)]' : ''}`}>
@@ -280,9 +304,12 @@ export default function DashboardLayout({ children, currentPage }: DashboardLayo
                           />
                         </div>
                         <div>
-                          <h3 className="font-medium text-[#202126]">
-                            {session?.user?.name?.split(' ')[0] || 'Designer'}
-                          </h3>
+                          <div className="flex items-center gap-1">
+                            <h3 className="font-medium text-[#202126] leading-none">
+                              {session?.user?.name?.split(' ')[0] || 'Designer'}
+                            </h3>
+                            {session?.user?.verified && <VerifiedBadge className="translate-y-[-2px]" />}
+                          </div>
                           <p className="text-sm text-gray-500">
                             {session?.user?.email || 'No email'}
                           </p>
@@ -315,7 +342,7 @@ export default function DashboardLayout({ children, currentPage }: DashboardLayo
           </div>
 
           {/* Scrollable Content Area */}
-          <div className="flex-1 mt-[88px] overflow-y-auto">
+          <div ref={contentRef} className="flex-1 mt-[88px] overflow-y-auto">
             <div className="h-full">
               {children}
             </div>

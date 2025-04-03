@@ -9,10 +9,12 @@ import { Prisma, User } from '@prisma/client';
 declare module "next-auth" {
   interface User {
     id: string;
-    email: string;
+    email: string | null;
     name: string | null;
     image: string | null;
     bannerImage: string | null;
+    verified: boolean;
+    subscriptionStatus: string;
   }
 
   interface Session {
@@ -23,10 +25,12 @@ declare module "next-auth" {
 declare module "next-auth/jwt" {
   interface JWT {
     id: string;
-    email: string;
+    email: string | null;
     name: string | null;
     image: string | null;
     bannerImage: string | null;
+    verified: boolean;
+    subscriptionStatus: string;
   }
 }
 
@@ -52,7 +56,17 @@ export const authOptions: AuthOptions = {
           where: {
             email: credentials.email,
           },
-        }) as UserWithPassword | null;
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            image: true,
+            bannerImage: true,
+            verified: true,
+            subscriptionStatus: true,
+            password: true,
+          }
+        });
 
         if (!user || !user.password) {
           throw new Error('Invalid email or password');
@@ -71,23 +85,34 @@ export const authOptions: AuthOptions = {
           name: user.name,
           image: user.image,
           bannerImage: user.bannerImage,
+          verified: user.verified,
+          subscriptionStatus: user.subscriptionStatus,
         };
       },
     }),
   ],
   callbacks: {
-    async jwt({ token, user, trigger, session }) {
+    async jwt({ token, user }) {
       if (user) {
+        // When signing in
         token.id = user.id;
         token.email = user.email;
         token.name = user.name;
         token.image = user.image;
         token.bannerImage = user.bannerImage;
-      }
-      // Handle session updates
-      if (trigger === 'update' && session) {
-        token.image = session.user.image;
-        token.bannerImage = session.user.bannerImage;
+        token.verified = user.verified;
+        token.subscriptionStatus = user.subscriptionStatus;
+      } else {
+        // On subsequent requests, fetch fresh user data
+        const freshUser = await prisma.user.findUnique({
+          where: { id: token.id },
+          select: {
+            subscriptionStatus: true,
+          },
+        });
+        if (freshUser) {
+          token.subscriptionStatus = freshUser.subscriptionStatus;
+        }
       }
       return token;
     },
@@ -98,6 +123,8 @@ export const authOptions: AuthOptions = {
         session.user.name = token.name;
         session.user.image = token.image;
         session.user.bannerImage = token.bannerImage;
+        session.user.verified = token.verified;
+        session.user.subscriptionStatus = token.subscriptionStatus;
       }
       return session;
     },
@@ -107,6 +134,18 @@ export const authOptions: AuthOptions = {
   },
   session: {
     strategy: 'jwt',
+    maxAge: 30 * 24 * 60 * 60, // 30 days
+  },
+  cookies: {
+    sessionToken: {
+      name: 'next-auth.session-token',
+      options: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: process.env.NODE_ENV === 'production',
+      },
+    },
   },
   debug: process.env.NODE_ENV === 'development',
 };

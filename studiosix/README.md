@@ -1,36 +1,82 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# StudioSix AI Design Companion
+
+StudioSix is an AI-enhanced architecture platform that combines powerful design tools with artificial intelligence to streamline the creative process. The AI Design Companion is a key feature that provides an infinite canvas with integrated AI capabilities for generating and manipulating design elements.
+
+## Features
+
+### Infinite Canvas
+- Smooth panning and zooming with mouse, touchpad, or touch gestures
+- Infinite workspace for creative freedom
+- Fluid interaction without forced grid snapping
+
+### Drawing Tools
+- Freehand sketching with customizable brush settings
+- Color palette with multiple color options
+- Adjustable stroke width
+- Undo/redo support
+
+### Shape and Text Tools
+- Add rectangles and other basic shapes
+- Insert and edit text elements
+- Transform, scale, and rotate any element
+- Drag and drop functionality
+
+### AI Integration
+- Direct Stable Diffusion integration for image generation
+- Customizable generation parameters:
+  - Prompt and negative prompt
+  - Image dimensions
+  - Number of steps
+  - CFG scale
+  - Sampler selection
+- Real-time feedback with notifications
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+- Node.js 18 or later
+- npm or yarn
+- Stable Diffusion API key
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+### Environment Setup
+Create a `.env.local` file in the root directory with the following variables:
+```
+NEXT_PUBLIC_STABLE_DIFFUSION_API_URL=your_api_url
+NEXT_PUBLIC_STABLE_DIFFUSION_API_KEY=your_api_key
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Installation
+1. Clone the repository
+2. Install dependencies:
+   ```bash
+   npm install
+   # or
+   yarn install
+   ```
+3. Start the development server:
+   ```bash
+   npm run dev
+   # or
+   yarn dev
+   ```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Usage
+1. Navigate to the AI Design Companion page
+2. Use the toolbar to select tools and adjust settings
+3. Draw, add shapes, or insert text on the canvas
+4. Use the AI generation feature to create images from text prompts
+5. Transform and arrange elements as needed
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Technical Stack
+- Next.js 13+ with App Router
+- React Konva for canvas rendering
+- TypeScript for type safety
+- Tailwind CSS for styling
+- Headless UI for accessible components
+- Stable Diffusion API for AI image generation
 
-## Learn More
+## Contributing
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## License
+This project is licensed under the MIT License - see the LICENSE file for details.

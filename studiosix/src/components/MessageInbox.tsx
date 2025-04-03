@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import Image from 'next/image';
 import { useSession } from 'next-auth/react';
+import { Search } from 'lucide-react';
 
 interface Message {
   id: string;
@@ -8,6 +9,14 @@ interface Message {
   senderId: string;
   receiverId: string;
   createdAt: Date;
+}
+
+interface User {
+  id: string;
+  name: string | null;
+  email: string | null;
+  image: string | null;
+  verified: boolean;
 }
 
 interface Conversation {
@@ -20,11 +29,23 @@ interface Conversation {
   updatedAt: Date;
 }
 
-export default function MessageInbox({ onClose }: { onClose: () => void }) {
+interface MessageInboxProps {
+  onClose: () => void;
+  initialConversation?: Conversation | null;
+}
+
+export default function MessageInbox({ onClose, initialConversation }: MessageInboxProps) {
   const { data: session } = useSession();
-  const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
+  const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(initialConversation || null);
   const [messageInput, setMessageInput] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<User[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
+
+  // Fetch conversations
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -37,50 +58,114 @@ export default function MessageInbox({ onClose }: { onClose: () => void }) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [onClose]);
 
-  // Mock data - Replace with real data from your API
-  const conversations: Conversation[] = [
-    {
-      id: '1',
-      userId: '1',
-      userName: 'John Doe',
-      userImage: '/profile-icons/Profile-icon-01.svg',
-      lastMessage: 'Hey, I loved your latest design!',
-      unreadCount: 2,
-      updatedAt: new Date(),
-    },
-    {
-      id: '2',
-      userId: '2',
-      userName: 'Jane Smith',
-      userImage: '/profile-icons/Profile-icon-02.svg',
-      lastMessage: 'Could you share more details about the project?',
+  // Search users
+  useEffect(() => {
+    const searchUsers = async () => {
+      if (!searchQuery.trim()) {
+        setSearchResults([]);
+        setIsSearching(false);
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/users/search?q=${encodeURIComponent(searchQuery)}`);
+        const data = await response.json();
+        setSearchResults(data.users);
+      } catch (error) {
+        console.error('Error searching users:', error);
+      }
+    };
+
+    const debounce = setTimeout(searchUsers, 300);
+    return () => clearTimeout(debounce);
+  }, [searchQuery]);
+
+  // Fetch conversations
+  useEffect(() => {
+    const fetchConversations = async () => {
+      try {
+        const response = await fetch('/api/messages');
+        if (response.ok) {
+          const data = await response.json();
+          setConversations(data.conversations);
+        }
+      } catch (error) {
+        console.error('Error fetching conversations:', error);
+      }
+    };
+
+    fetchConversations();
+  }, []);
+
+  // Fetch messages for selected conversation
+  useEffect(() => {
+    const fetchMessages = async () => {
+      if (!selectedConversation) return;
+
+      try {
+        const response = await fetch(`/api/messages?userId=${selectedConversation.userId}`);
+        if (response.ok) {
+          const data = await response.json();
+          setMessages(data.messages);
+        }
+      } catch (error) {
+        console.error('Error fetching messages:', error);
+      }
+    };
+
+    fetchMessages();
+  }, [selectedConversation]);
+
+  // Update selected conversation when initialConversation changes
+  useEffect(() => {
+    if (initialConversation) {
+      setSelectedConversation(initialConversation);
+    }
+  }, [initialConversation]);
+
+  const handleStartConversation = async (user: User) => {
+    // Create a new conversation or switch to existing one
+    setSelectedConversation({
+      id: user.id,
+      userId: user.id,
+      userName: user.name || 'Unknown User',
+      userImage: user.image || '/profile-icons/Profile-icon-01.svg',
+      lastMessage: '',
       unreadCount: 0,
       updatedAt: new Date(),
-    },
-  ];
+    });
+    setSearchQuery('');
+    setIsSearching(false);
+  };
 
-  const messages: Message[] = selectedConversation ? [
-    {
-      id: '1',
-      content: 'Hey, I loved your latest design!',
-      senderId: selectedConversation.userId,
-      receiverId: session?.user?.id || '',
-      createdAt: new Date(),
-    },
-    {
-      id: '2',
-      content: 'Thank you! I appreciate the feedback.',
-      senderId: session?.user?.id || '',
-      receiverId: selectedConversation.userId,
-      createdAt: new Date(),
-    },
-  ] : [];
-
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!messageInput.trim() || !selectedConversation) return;
-    // Add logic to send message
-    console.log('Sending message:', messageInput);
-    setMessageInput('');
+
+    try {
+      const response = await fetch('/api/messages/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: messageInput,
+          receiverId: selectedConversation.userId,
+        }),
+      });
+
+      if (response.ok) {
+        // Add message to the UI
+        const newMessage: Message = {
+          id: Date.now().toString(), // Temporary ID until we get the real one
+          content: messageInput,
+          senderId: session?.user?.id || '',
+          receiverId: selectedConversation.userId,
+          createdAt: new Date(),
+        };
+        setMessages([...messages, newMessage]);
+        setMessageInput('');
+      }
+    } catch (error) {
+      console.error('Error sending message:', error);
+    }
   };
 
   return (
@@ -90,41 +175,85 @@ export default function MessageInbox({ onClose }: { onClose: () => void }) {
         <div ref={modalRef} className="bg-white rounded-xl w-[80vw] h-[80vh] flex overflow-hidden relative">
           {/* Left Panel - Conversations List */}
           <div className="w-1/3 border-r border-[#E0DAF3] flex flex-col">
-            <div className="p-4 border-b border-[#E0DAF3]">
+            <div className="p-4 border-b border-[#E0DAF3] space-y-4">
               <h2 className="text-xl font-semibold text-[#202126]">Messages</h2>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setIsSearching(true);
+                  }}
+                  placeholder="Search users..."
+                  className="w-full rounded-lg border border-[#E0DAF3] pl-10 pr-4 py-2 focus:outline-none focus:border-purple-600"
+                />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+              </div>
             </div>
             <div className="flex-1 overflow-y-auto">
-              {conversations.map((conversation) => (
-                <div
-                  key={conversation.id}
-                  onClick={() => setSelectedConversation(conversation)}
-                  className={`p-4 flex items-start space-x-3 cursor-pointer hover:bg-gray-50 transition-colors ${
-                    selectedConversation?.id === conversation.id ? 'bg-gray-50' : ''
-                  }`}
-                >
-                  <div className="relative">
-                    <Image
-                      src={conversation.userImage}
-                      alt={conversation.userName}
-                      width={48}
-                      height={48}
-                      className="rounded-full"
-                    />
-                    {conversation.unreadCount > 0 && (
-                      <span className="absolute -top-1 -right-1 bg-purple-600 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">
-                        {conversation.unreadCount}
-                      </span>
-                    )}
+              {isSearching && searchQuery ? (
+                // Search Results
+                searchResults.map((user) => (
+                  <div
+                    key={user.id}
+                    onClick={() => handleStartConversation(user)}
+                    className="p-4 flex items-center space-x-3 cursor-pointer hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="relative w-10 h-10">
+                      <Image
+                        src={user.image || '/profile-icons/Profile-icon-01.svg'}
+                        alt={user.name || 'User'}
+                        fill
+                        className="rounded-full object-cover"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-medium text-[#202126] flex items-center gap-1">
+                        {user.name || user.email}
+                        {user.verified && (
+                          <svg className="w-4 h-4 text-purple-600" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M9 12L11 14L15 10M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        )}
+                      </h3>
+                      <p className="text-sm text-gray-500 truncate">{user.email}</p>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-medium text-[#202126]">{conversation.userName}</h3>
-                    <p className="text-sm text-gray-500 truncate">{conversation.lastMessage}</p>
+                ))
+              ) : (
+                // Existing Conversations
+                conversations.map((conversation) => (
+                  <div
+                    key={conversation.id}
+                    onClick={() => setSelectedConversation(conversation)}
+                    className={`p-4 flex items-start space-x-3 cursor-pointer hover:bg-gray-50 transition-colors ${
+                      selectedConversation?.id === conversation.id ? 'bg-gray-50' : ''
+                    }`}
+                  >
+                    <div className="relative w-10 h-10">
+                      <Image
+                        src={conversation.userImage}
+                        alt={conversation.userName}
+                        fill
+                        className="rounded-full object-cover"
+                      />
+                      {conversation.unreadCount > 0 && (
+                        <span className="absolute -top-1 -right-1 bg-purple-600 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">
+                          {conversation.unreadCount}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-medium text-[#202126]">{conversation.userName}</h3>
+                      <p className="text-sm text-gray-500 truncate">{conversation.lastMessage}</p>
+                    </div>
+                    <span className="text-xs text-gray-400">
+                      {new Date(conversation.updatedAt).toLocaleDateString()}
+                    </span>
                   </div>
-                  <span className="text-xs text-gray-400">
-                    {conversation.updatedAt.toLocaleDateString()}
-                  </span>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
 
@@ -135,13 +264,14 @@ export default function MessageInbox({ onClose }: { onClose: () => void }) {
                 {/* Chat Header */}
                 <div className="p-4 border-b border-[#E0DAF3] flex items-center justify-between">
                   <div className="flex items-center space-x-3">
-                    <Image
-                      src={selectedConversation.userImage}
-                      alt={selectedConversation.userName}
-                      width={40}
-                      height={40}
-                      className="rounded-full"
-                    />
+                    <div className="w-10 h-10 relative">
+                      <Image
+                        src={selectedConversation.userImage}
+                        alt={selectedConversation.userName}
+                        fill
+                        className="rounded-full object-cover"
+                      />
+                    </div>
                     <h2 className="font-semibold text-[#202126]">
                       {selectedConversation.userName}
                     </h2>
@@ -149,7 +279,7 @@ export default function MessageInbox({ onClose }: { onClose: () => void }) {
                 </div>
 
                 {/* Messages */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                <div className="flex-1 overflow-y-auto p-4 space-y-3">
                   {messages.map((message) => (
                     <div
                       key={message.id}
@@ -158,15 +288,15 @@ export default function MessageInbox({ onClose }: { onClose: () => void }) {
                       }`}
                     >
                       <div
-                        className={`max-w-[70%] rounded-2xl px-4 py-2 ${
+                        className={`max-w-[60%] rounded-xl px-3 py-1.5 text-sm ${
                           message.senderId === session?.user?.id
-                            ? 'bg-gradient-to-r from-purple-600 to-purple-800 text-white'
+                            ? 'bg-purple-100 text-purple-900'
                             : 'bg-gray-100 text-[#202126]'
                         }`}
                       >
-                        <p>{message.content}</p>
-                        <span className="text-xs opacity-70">
-                          {message.createdAt.toLocaleTimeString()}
+                        <p className="leading-relaxed">{message.content}</p>
+                        <span className="text-[10px] opacity-60 mt-1 block">
+                          {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       </div>
                     </div>

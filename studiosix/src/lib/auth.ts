@@ -10,7 +10,7 @@ export const authOptions: NextAuthOptions = {
   session: {
     strategy: "jwt"
   },
-  adapter: PrismaAdapter(prisma),
+  adapter: PrismaAdapter(prisma) as any, // Type cast to avoid adapter type mismatch
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
@@ -28,14 +28,23 @@ export const authOptions: NextAuthOptions = {
         }
 
         const user = await prisma.user.findUnique({
-          where: { email: credentials.email }
+          where: { email: credentials.email },
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            image: true,
+            password: true,
+            verified: true,
+            subscriptionStatus: true
+          }
         });
 
-        if (!user || !user.image) {
+        if (!user || !user.password) {
           throw new Error("Invalid credentials");
         }
 
-        const isValid = await bcrypt.compare(credentials.password, user.image);
+        const isValid = await bcrypt.compare(credentials.password, user.password);
 
         if (!isValid) {
           throw new Error("Invalid credentials");
@@ -44,23 +53,42 @@ export const authOptions: NextAuthOptions = {
         return {
           id: user.id,
           email: user.email,
-          name: user.name
+          name: user.name,
+          image: user.image,
+          verified: user.verified,
+          subscriptionStatus: user.subscriptionStatus
         };
       }
     })
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
+      if (trigger === "update" && session) {
+        // Handle session update
+        return { ...token, ...session.user };
+      }
+
       if (user) {
-        token.id = user.id;
+        // Initial sign in
+        return {
+          ...token,
+          id: user.id,
+          verified: user.verified,
+          subscriptionStatus: user.subscriptionStatus
+        };
       }
       return token;
     },
     async session({ session, token }) {
-      if (session.user) {
-        session.user.id = token.id as string;
-      }
-      return session;
+      return {
+        ...session,
+        user: {
+          ...session.user,
+          id: token.id as string,
+          verified: token.verified as boolean,
+          subscriptionStatus: token.subscriptionStatus as string
+        }
+      };
     },
     async redirect({ url, baseUrl }) {
       // Allows relative callback URLs
@@ -72,6 +100,6 @@ export const authOptions: NextAuthOptions = {
   },
   pages: {
     signIn: "/sign-in",
-    error: "/sign-in", // Error code passed in query string as ?error=
-  },
+    error: "/sign-in"
+  }
 }; 

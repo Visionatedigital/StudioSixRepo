@@ -141,32 +141,44 @@ async function sendToAutomatic1111(settings: GenerationSettings, image: string, 
   }
 }
 
-export async function POST(request: Request) {
-  try {
-    const { settings, image, prompt } = await request.json();
+const AUTOMATIC1111_URL = 'http://44.200.48.147:7860';
 
-    if (!settings || !image) {
+export async function POST(req: Request) {
+  try {
+    const body = await req.json();
+    
+    const response = await fetch(`${AUTOMATIC1111_URL}/sdapi/v1/img2img`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        init_images: body.init_images,
+        prompt: body.prompt,
+        negative_prompt: body.negative_prompt,
+        steps: body.steps,
+        cfg_scale: body.cfg_scale,
+        width: body.width,
+        height: body.height,
+        sampler_name: body.sampler_name,
+        alwayson_scripts: body.alwayson_scripts,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
       return NextResponse.json(
-        { error: 'Settings and image are required' },
-        { status: 400 }
+        { error: `Stable Diffusion API error: ${error}` },
+        { status: response.status }
       );
     }
 
-    console.log('Received request with settings:', JSON.stringify(settings, null, 2));
-    console.log('Image data length:', image.length);
-    console.log('User prompt:', prompt);
-
-    const generatedImage = await sendToAutomatic1111(settings, image, prompt);
-
-    return NextResponse.json({ image: generatedImage });
+    const data = await response.json();
+    return NextResponse.json(data);
   } catch (error: any) {
-    console.error('Error in generate route:', {
-      message: error?.message || 'Unknown error',
-      cause: error?.cause,
-      stack: error?.stack
-    });
+    console.error('Error in generate route:', error);
     return NextResponse.json(
-      { error: 'Failed to generate image: ' + (error?.message || 'Unknown error') },
+      { error: error.message || 'Internal server error' },
       { status: 500 }
     );
   }
