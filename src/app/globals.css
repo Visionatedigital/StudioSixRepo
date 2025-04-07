@@ -1,0 +1,617 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Animation keyframes */
+@keyframes shine {
+  0% {
+    left: -75%;
+  }
+  100% {
+    left: 125%;
+  }
+}
+
+.animate-shine {
+  animation: shine 3s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes scroll-left {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-scroll-left {
+  animation: scroll-left 60s linear infinite;
+}
+
+/* Smooth scroll styles - only apply when has-scroll-smooth class is present */
+html.has-scroll-smooth {
+  overflow: hidden;
+}
+
+html.has-scroll-dragging {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+.has-scroll-smooth body {
+  overflow: hidden;
+}
+
+.has-scroll-smooth [data-scroll-container] {
+  min-height: 100vh;
+}
+
+[data-scroll-direction="horizontal"] [data-scroll-container] {
+  height: 100vh;
+  display: inline-block;
+  white-space: nowrap;
+}
+
+[data-scroll-direction="horizontal"] [data-scroll-section] {
+  display: inline-block;
+  vertical-align: top;
+  white-space: nowrap;
+  height: 100%;
+}
+
+.c-scrollbar {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 11px;
+  height: 100%;
+  transform-origin: center right;
+  transition: transform 0.3s, opacity 0.3s;
+  opacity: 0;
+}
+
+.c-scrollbar:hover {
+  transform: scaleX(1.45);
+}
+
+.c-scrollbar_thumb {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background-color: black;
+  opacity: 0.5;
+  width: 7px;
+  border-radius: 10px;
+  margin: 2px;
+  cursor: -webkit-grab;
+  cursor: grab;
+}
+
+.has-scroll-dragging .c-scrollbar_thumb {
+  cursor: -webkit-grabbing;
+  cursor: grabbing;
+}
+
+.has-scroll-scrolling .c-scrollbar_thumb {
+  cursor: -webkit-grabbing;
+  cursor: grabbing;
+}
+
+:root {
+  --foreground-rgb: 0, 0, 0;
+  --background-rgb: 255, 255, 255;
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: rgb(var(--background-rgb));
+  overflow-x: hidden;
+}
+
+@layer base {
+  html {
+    font-family: Inter, system-ui, sans-serif;
+  }
+}
+
+@layer utilities {
+  .bg-gradient-primary {
+    background: linear-gradient(86.67deg, #844BDC 7.23%, #AC4FF1 100%);
+  }
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&family=Cairo:wght@300;400&family=Cabin&family=Inter:wght@600&display=swap');
+
+.sign-in-container {
+  box-sizing: border-box;
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  background: #FFFFFF;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+}
+
+.sign-in-card {
+  position: relative;
+  width: 408px;
+  height: 633px;
+  background: #F6F8FA;
+  box-shadow: 0px 4px 250px rgba(0, 0, 0, 0.25);
+  border-radius: 43px;
+  padding: 0;
+}
+
+.logo-group {
+  position: relative;
+  width: 64px;
+  height: 71px;
+  margin: 29px auto 0;
+}
+
+.logo-group svg {
+  width: 100%;
+  height: 100%;
+}
+
+.content-wrapper {
+  padding: 0 35px;
+  margin-top: 20px;
+}
+
+.sign-in-card h1 {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 500;
+  font-size: 32px;
+  line-height: 48px;
+  color: #1B1464;
+  text-align: center;
+  margin: 0;
+}
+
+.subtitle {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 24px;
+  text-align: center;
+  color: #000000;
+  margin: 0 0 20px 0;
+}
+
+.google-sign-in {
+  width: 100%;
+  height: 40px;
+  margin: 0 0 20px 0;
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.google-btn {
+  width: 100%;
+  height: 40px;
+  background-color: #4285f4;
+  border-radius: 2px;
+  box-shadow: 0 3px 4px 0 rgba(0,0,0,.25);
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.google-icon-wrapper {
+  width: 40px;
+  height: 40px;
+  border-radius: 2px;
+  background-color: #fff;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.google-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.google-btn-text {
+  margin-left: 10px;
+  color: white;
+  font-size: 14px;
+  letter-spacing: 0.2px;
+  font-family: 'Roboto', sans-serif;
+  flex-grow: 1;
+  text-align: center;
+  padding-right: 40px;
+}
+
+.form-group {
+  margin: 15px 0;
+}
+
+.form-group label {
+  display: block;
+  font-family: 'Poppins', sans-serif;
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 24px;
+  color: #000000;
+  margin-bottom: 5px;
+}
+
+.input-field {
+  width: 100%;
+  height: 34px;
+  background: rgba(199, 204, 216, 0.22);
+  border-radius: 10px;
+  border: none;
+  padding: 0 10px;
+}
+
+.remember-forgot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 12px 0;
+}
+
+.remember-me {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: 'Poppins', sans-serif;
+  font-size: 16px;
+}
+
+.remember-me input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  border: 1px solid #D9D9D9;
+}
+
+.forgot-password {
+  font-family: 'Poppins', sans-serif;
+  font-size: 16px;
+  color: #1B1464;
+  text-decoration: none;
+}
+
+.login-button {
+  width: 100%;
+  height: 52px;
+  background: linear-gradient(86.67deg, #844BDC 7.23%, #AC4FF1 100%);
+  box-shadow: 0px 1px 4px rgba(25, 33, 61, 0.08);
+  border-radius: 10px;
+  border: none;
+  color: #FFFFFF;
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  font-size: 20px;
+  cursor: pointer;
+  margin: 10px 0;
+}
+
+.bottom-text {
+  text-align: center;
+  margin-top: 10px;
+}
+
+.bottom-text p {
+  font-family: 'Cairo', sans-serif;
+  font-weight: 300;
+  font-size: 16px;
+  margin: 0 0 15px 0;
+}
+
+.sign-up-link {
+  color: #000000;
+  text-decoration: none;
+  margin-left: 10px;
+  font-weight: 500;
+}
+
+.back-to-home {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: 'Cabin', sans-serif;
+}
+
+.back-to-home a {
+  color: #000000;
+  text-decoration: none;
+}
+
+.arrow {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.sign-up-container {
+  box-sizing: border-box;
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  background: #F6F8FA;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.sign-up-card {
+  position: relative;
+  width: 408px;
+  height: 633px;
+  background: #F6F8FA;
+  box-shadow: 0px 4px 250px rgba(0, 0, 0, 0.25);
+  border-radius: 43px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.sign-up-card .logo-group {
+  width: 64px;
+  height: 71px;
+  margin-top: 106px;
+}
+
+.sign-up-card h1 {
+  font-family: 'Poppins', sans-serif;
+  font-style: normal;
+  font-weight: 500;
+  font-size: 32px;
+  line-height: 48px;
+  color: #1B1464;
+  margin: 50px 0 0 0;
+  text-align: center;
+}
+
+.sign-up-card .subtitle {
+  font-family: 'Poppins', sans-serif;
+  font-style: normal;
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 24px;
+  text-align: center;
+  color: #000000;
+  margin: 10px 0 30px 0;
+  width: 100%;
+}
+
+.sign-up-card .google-sign-in {
+  width: calc(100% - 70px);
+  margin: 0 35px;
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  margin-top: -20px;
+}
+
+.sign-up-card .google-btn {
+  width: 100%;
+  height: 40px;
+  background: #4285f4;
+  border-radius: 2px;
+  box-shadow: 0 3px 4px 0 rgba(0,0,0,.25);
+  display: flex;
+  align-items: center;
+}
+
+.sign-up-card .or-divider {
+  font-family: 'Poppins', sans-serif;
+  font-style: normal;
+  font-weight: 300;
+  font-size: 24px;
+  line-height: 36px;
+  text-align: center;
+  color: #000000;
+  margin: 30px 0;
+}
+
+.sign-up-card .sign-up-with-email {
+  font-family: 'Poppins', sans-serif;
+  font-style: normal;
+  font-weight: 300;
+  font-size: 16px;
+  line-height: 24px;
+  text-align: center;
+  color: #000000;
+  margin-bottom: 20px;
+}
+
+.content-wrapper {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.sign-up-email-card {
+  position: relative;
+  width: 408px;
+  height: 808px;
+  background: #F6F8FA;
+  box-shadow: 0px 4px 250px rgba(0, 0, 0, 0.25);
+  border-radius: 43px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.sign-up-email-card .logo-group {
+  margin-top: 25px;
+}
+
+.sign-up-email-card .content-wrapper {
+  width: 100%;
+  padding: 0 35px;
+  margin-top: 20px;
+}
+
+.sign-up-email-card h1 {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 500;
+  font-size: 32px;
+  line-height: 48px;
+  color: #1B1464;
+  text-align: center;
+  margin: 20px 0 0 0;
+}
+
+.sign-up-email-card .subtitle {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 24px;
+  text-align: center;
+  color: #000000;
+  margin: 10px 0 30px 0;
+}
+
+.form-container {
+  width: 100%;
+  margin-bottom: 20px;
+}
+
+.sign-up-email-card .form-group {
+  margin: 15px 0;
+}
+
+.sign-up-email-card .form-group label {
+  display: block;
+  font-family: 'Poppins', sans-serif;
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 24px;
+  color: #000000;
+  margin-bottom: 5px;
+}
+
+.sign-up-email-card .input-field {
+  width: 100%;
+  height: 42px;
+  background: #ECEEF3;
+  border-radius: 10px;
+  border: none;
+  padding: 0 15px;
+  font-family: 'Poppins', sans-serif;
+  font-size: 14px;
+}
+
+.terms-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 20px 0;
+}
+
+.terms-checkbox input[type="checkbox"] {
+  width: 24px;
+  height: 19px;
+  background: #D9D9D9;
+  border-radius: 5px;
+}
+
+.terms-checkbox label {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 21px;
+  color: #000000;
+}
+
+.register-button {
+  width: 100%;
+  height: 52px;
+  background: linear-gradient(86.67deg, #844BDC 7.23%, #AC4FF1 100%);
+  box-shadow: 0px 1px 4px rgba(25, 33, 61, 0.08);
+  border-radius: 10px;
+  border: none;
+  color: #FFFFFF;
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  font-size: 20px;
+  cursor: pointer;
+  margin: 10px 0 20px 0;
+}
+
+.sign-up-email-card .back-to-home {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.sign-up-email-card .back-to-home a {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 24px;
+  color: #000000;
+  text-decoration: none;
+}
+
+.sign-up-email-card .arrow {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.error-message {
+  color: #dc2626;
+  font-size: 14px;
+  margin: 8px 0;
+  text-align: center;
+  font-family: 'Poppins', sans-serif;
+}
+
+.sign-in-card button:disabled,
+.sign-up-email-card button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+/* Custom styles for markdown content */
+.prose {
+  @apply text-sm text-gray-800;
+}
+
+.prose p {
+  @apply my-1 text-left;
+}
+
+.prose strong {
+  @apply font-semibold;
+}
+
+.prose em {
+  @apply italic;
+}
+
+.prose ul {
+  @apply list-disc pl-4 my-2;
+}
+
+.prose ol {
+  @apply list-decimal pl-4 my-2;
+}
+
+.prose li {
+  @apply my-1;
+}
+
+.prose code {
+  @apply bg-gray-100 rounded px-1 py-0.5 text-sm;
+}
