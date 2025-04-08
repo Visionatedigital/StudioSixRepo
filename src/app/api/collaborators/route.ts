@@ -133,12 +133,17 @@ export async function POST(request: NextRequest) {
     await prisma.notification.create({
       data: {
         userId: userToAdd.id,
-        type: 'PROJECT_INVITATION',
+        type: 'COLLABORATION_INVITE',
         message: `You have been invited to collaborate on ${project.name}`,
         metadata: {
           projectId,
           projectName: project.name,
           role,
+          senderId: session.user.id,
+          senderName: session.user.name,
+          senderEmail: session.user.email,
+          senderImage: session.user.image,
+          status: 'PENDING'
         },
       },
     });

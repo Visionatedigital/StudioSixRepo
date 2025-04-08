@@ -6,24 +6,7 @@ import { Icon } from './Icons';
 import MessageInbox from './MessageInbox';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
-import { NotificationType } from '@prisma/client';
-
-interface NotificationItemProps {
-  id: string;
-  type: NotificationType;
-  read: boolean;
-  createdAt: string;
-  project?: {
-    id: string;
-    name: string;
-  };
-  sender?: {
-    id: string;
-    name: string | null;
-    email: string;
-    image: string | null;
-  };
-}
+import { NotificationType, NotificationItemProps } from '@/types';
 
 interface MessageItemProps {
   userId: string;
@@ -36,7 +19,12 @@ interface MessageItemProps {
 }
 
 const NotificationItem: React.FC<NotificationItemProps> = ({ id, type, read, createdAt, project, sender }) => {
+  console.log('Notification props:', { id, type, project, sender });
+  
   const getMessage = () => {
+    const senderName = sender?.name || sender?.email || 'Someone';
+    const projectName = project?.name || 'a project';
+    
     switch (type) {
       case 'CREDITS_LOW':
         return `You have 10 credits remaining. Top up now to continue creating!`;
@@ -45,13 +33,15 @@ const NotificationItem: React.FC<NotificationItemProps> = ({ id, type, read, cre
       case 'WEEKLY_SUMMARY':
         return `You've created 15 designs this week. Great work!`;
       case 'COLLABORATION_INVITE':
-        return `${sender?.name || sender?.email} invited you to collaborate on ${project?.name}`;
+        return `${senderName} invited you to collaborate on ${projectName}`;
       case 'COLLABORATION_ACCEPTED':
-        return `${sender?.name || sender?.email} accepted your collaboration invite`;
+        return `${senderName} accepted your collaboration invite`;
       case 'COLLABORATION_REJECTED':
-        return `${sender?.name || sender?.email} declined your collaboration invite`;
+        return `${senderName} declined your collaboration invite`;
       case 'PROJECT_UPDATED':
-        return `${sender?.name || sender?.email} updated ${project?.name}`;
+        return `${senderName} updated ${projectName}`;
+      case 'PROJECT_INVITATION':
+        return `${senderName} invited you to collaborate on ${projectName}`;
       default:
         return 'New notification';
     }
@@ -100,7 +90,7 @@ const NotificationItem: React.FC<NotificationItemProps> = ({ id, type, read, cre
   );
 };
 
-const MessageItem: React.FC<MessageItemProps> = ({ userName, userImage, lastMessage, time, unreadCount, onSelect }) => (
+const MessageItem: React.FC<MessageItemProps> = ({ userId, userName, userImage, lastMessage, time, unreadCount, onSelect }) => (
   <div className={`p-4 hover:bg-gray-50 cursor-pointer ${unreadCount > 0 ? 'bg-purple-50/50' : ''}`} onClick={onSelect}>
     <div className="flex gap-3">
       <div className="relative w-10 h-10">
@@ -188,6 +178,17 @@ export default function HeaderActions() {
     } catch (error) {
       console.error('Error marking notification as read:', error);
     }
+  };
+
+  // Handle notification click based on type
+  const handleNotificationClick = (notification: NotificationItemProps) => {
+    // Mark notification as read
+    markAsRead(notification.id);
+    
+    // Close notifications dropdown
+    setIsNotificationsOpen(false);
+    
+    // For collaboration invites, redirects happen via Link component in the template
   };
 
   const markAllAsRead = async () => {
@@ -325,8 +326,19 @@ export default function HeaderActions() {
               ) : (
                 <div className="divide-y divide-gray-100">
                   {notifications.map((notification) => (
-                    <div key={notification.id} onClick={() => markAsRead(notification.id)}>
-                      <NotificationItem {...notification} />
+                    <div key={notification.id}>
+                      {(notification.type === 'COLLABORATION_INVITE' || 
+                        notification.type === 'PROJECT_INVITATION' || 
+                        notification.type === 'COLLABORATION_ACCEPTED' || 
+                        notification.type === 'COLLABORATION_REJECTED') ? (
+                        <Link href="/ai-design-assistant/projects" onClick={() => markAsRead(notification.id)}>
+                          <NotificationItem {...notification} />
+                        </Link>
+                      ) : (
+                        <div onClick={() => handleNotificationClick(notification)}>
+                          <NotificationItem {...notification} />
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

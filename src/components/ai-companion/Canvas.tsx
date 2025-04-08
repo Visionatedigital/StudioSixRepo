@@ -34,6 +34,9 @@ import CommentBubble from './CommentBubble';
 import { useSearchParams } from 'next/navigation';
 import InviteCollaboratorModal from './InviteCollaboratorModal';
 import { UserPlus } from 'lucide-react';
+import CanvasHeader from './CanvasHeader';
+import { io, Socket } from 'socket.io-client';
+import CollaboratorCursor from './CollaboratorCursor';
 
 // Dynamically import Stage with no SSR
 const DynamicStage = dynamic(() => import('react-konva').then((mod) => mod.Stage), {
@@ -110,6 +113,14 @@ interface Collaborator {
 
 type CanvasElementType = CanvasElement;
 
+interface CollaboratorCursor {
+  userId: string;
+  userName: string;
+  color: string;
+  x: number;
+  y: number;
+}
+
 export default function Canvas({ name, description, projectId }: Props) {
   const { data: session } = useSession();
   const searchParams = useSearchParams();
@@ -164,6 +175,8 @@ export default function Canvas({ name, description, projectId }: Props) {
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const [collaboratorCursors, setCollaboratorCursors] = useState<{ [key: string]: CollaboratorCursor }>({});
 
   // Get current canvas data with safety check
   const currentCanvas = canvasStack[currentCanvasIndex] || canvasStack[0];
@@ -266,16 +279,107 @@ export default function Canvas({ name, description, projectId }: Props) {
     loadProjectData();
   }, [projectId, projectName]);
 
-  // Add save function
-  const handleSave = async () => {
-    if (!projectId) {
-      showNotification('error', 'Error', 'No project ID found');
+  // Initialize WebSocket connection
+  useEffect(() => {
+    if (!projectId || !session?.user) return;
+
+    const socket = io(process.env.NEXT_PUBLIC_WEBSOCKET_URL || 'http://localhost:3000');
+    setSocket(socket);
+
+    socket.emit('join-project', {
+      projectId,
+      userId: session.user.id,
+      userName: session.user.name || session.user.email
+    });
+
+    socket.on('user-joined', (user) => {
+      showNotification(
+        'success',
+        'User joined',
+        `${user.userName} joined the project`
+      );
+    });
+
+    socket.on('user-left', (user) => {
+      setCollaboratorCursors(prev => {
+        const next = { ...prev };
+        delete next[user.userId];
+        return next;
+      });
+      showNotification(
+        'success',
+        'User left',
+        `${user.userName} left the project`
+      );
+    });
+
+    socket.on('cursor-update', (cursor: CollaboratorCursor) => {
+      setCollaboratorCursors(prev => ({
+        ...prev,
+        [cursor.userId]: cursor
+      }));
+    });
+
+    socket.on('canvas-updated', (data) => {
+      // Handle canvas updates from other users
+      if (data.type === 'elements') {
+        setElements(data.data);
+      } else if (data.type === 'canvasStack') {
+        setCanvasStack(data.data);
+      }
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [projectId, session?.user]);
+
+  // Track and broadcast cursor position
+  const handleMouseMove = (e: KonvaEventObject<MouseEvent>) => {
+    const stage = e.target.getStage();
+    if (!stage) return;
+
+    const point = stage.getPointerPosition();
+    if (!point) return;
+
+    if (socket && projectId) {
+      socket.emit('cursor-move', {
+        x: point.x,
+        y: point.y,
+        projectId
+      });
+    }
+
+    if (tool === 'mouse' && isDraggingCanvas) {
+      const newPosition = {
+        x: e.evt.clientX - mouseStartPos.x,
+        y: e.evt.clientY - mouseStartPos.y
+      };
+      setPosition(newPosition);
       return;
     }
     
-    setIsSaving(true);
-    showNotification('success', 'Saving...', 'Saving your project state');
+    if (isDrawing && currentLine) {
+      // Update the current line with new points
+      const newPoints = [...currentLine.points, point.x, point.y];
+      const updatedLine = {
+      ...currentLine,
+        points: newPoints,
+      };
+      setCurrentLine(updatedLine);
+      
+      // Update the line in the lines array
+      setLines(prev => {
+        const newLines = [...prev];
+        newLines[newLines.length - 1] = updatedLine;
+        return newLines;
+      });
+    }
+  };
 
+  // Broadcast canvas updates
+  const handleSave = async () => {
+    setIsSaving(true);
     try {
       // Create a complete snapshot of the current canvas state
       const canvasState = {
@@ -362,7 +466,30 @@ export default function Canvas({ name, description, projectId }: Props) {
         `All changes saved at ${timestamp}`
       );
 
-      setIsSaving(false);
+      // Update history
+      setHistory(prev => {
+        const newHistory = [...prev];
+        newHistory[historyIndex + 1] = {
+          elements: [...elements],
+          canvasStack: [...canvasStack]
+        };
+        return newHistory;
+      });
+      setHistoryIndex(historyIndex + 1);
+
+      // Broadcast changes to other users
+      if (socket) {
+        socket.emit('canvas-update', {
+          projectId,
+          type: 'elements',
+          data: elements
+        });
+        socket.emit('canvas-update', {
+          projectId,
+          type: 'canvasStack',
+          data: canvasStack
+        });
+      }
     } catch (error) {
       console.error('Error saving project:', error);
       showNotification(
@@ -370,6 +497,7 @@ export default function Canvas({ name, description, projectId }: Props) {
         'Save Failed', 
         'Failed to save project. Please try again.'
       );
+    } finally {
       setIsSaving(false);
     }
   };
@@ -424,6 +552,13 @@ export default function Canvas({ name, description, projectId }: Props) {
 
     const point = stage.getPointerPosition();
     if (!point) return;
+
+    // If mouse tool and target is stage, set isDraggingCanvas to true and update cursor
+    if (tool === 'mouse' && e.target === stage) {
+      setIsDraggingCanvas(true);
+      stage.container().style.cursor = 'grabbing';
+      setMouseStartPos({ x: e.evt.clientX - position.x, y: e.evt.clientY - position.y });
+    }
 
     // Convert point to canvas coordinates
     const x = (point.x - position.x) / scale;
@@ -628,43 +763,14 @@ export default function Canvas({ name, description, projectId }: Props) {
     }
   };
 
-  const handleMouseMove = (e: KonvaEventObject<MouseEvent>) => {
-    const stage = e.target.getStage();
-    if (!stage) return;
-
-    const point = stage.getPointerPosition();
-    if (!point) return;
-
-    if (tool === 'mouse' && isDraggingCanvas) {
-      const newPosition = {
-        x: e.evt.clientX - mouseStartPos.x,
-        y: e.evt.clientY - mouseStartPos.y
-      };
-      setPosition(newPosition);
-      return;
-    }
-
-    if (isDrawing && currentLine) {
-      // Update the current line with new points
-      const newPoints = [...currentLine.points, point.x, point.y];
-      const updatedLine = {
-      ...currentLine,
-        points: newPoints,
-      };
-      setCurrentLine(updatedLine);
-      
-      // Update the line in the lines array
-      setLines(prev => {
-        const newLines = [...prev];
-        newLines[newLines.length - 1] = updatedLine;
-        return newLines;
-      });
-    }
-  };
-
   const handleMouseUp = (e: KonvaEventObject<MouseEvent>) => {
+    const stage = e.target.getStage();
+    
     if (tool === 'mouse') {
       setIsDraggingCanvas(false);
+      if (stage) {
+        stage.container().style.cursor = 'default';
+      }
     }
 
     if (isDrawing && currentLine) {
@@ -681,22 +787,28 @@ export default function Canvas({ name, description, projectId }: Props) {
   };
 
   const handleMouseLeave = () => {
+    const stage = stageRef.current;
+    
     if (isDrawing && currentLine) {
       // Save the current line when leaving the canvas
       setLines(prev => [...prev, currentLine]);
-      setCurrentLine(null);
+    setCurrentLine(null);
       setIsDrawing(false);
     }
+    
     setIsDraggingCanvas(false);
+    if (stage && tool === 'mouse') {
+      stage.container().style.cursor = 'default';
+    }
   };
 
   const handleStageMouseEnter = (e: KonvaEventObject<MouseEvent>) => {
     const stage = e.target.getStage();
     if (!stage) return;
 
-    // Set the cursor based on the current tool
+    // Set the cursor based on the current tool and dragging state
     if (tool === 'mouse') {
-      stage.container().style.cursor = isDraggingCanvas ? 'grabbing' : 'grab';
+      stage.container().style.cursor = isDraggingCanvas ? 'grabbing' : 'default';
     } else if (tool === 'draw') {
       stage.container().style.cursor = 'crosshair';
     } else {
@@ -886,38 +998,121 @@ export default function Canvas({ name, description, projectId }: Props) {
 
   // Calculate the grid size based on scale
   const gridSize = 20; // Base size of grid spacing
-  const dotSize = 2; // Size of each dot
   
   // Create grid pattern
   const renderGrid = () => {
-    const dots = [];
+    const lines = [];
     const width = dimensions.width - (isChatOpen ? 400 : 0);
     const height = dimensions.height;
     
-    // Calculate visible area based on position and scale
-    const startX = Math.floor(-position.x / (gridSize * scale));
-    const startY = Math.floor(-position.y / (gridSize * scale));
-    const endX = Math.ceil((width - position.x) / (gridSize * scale));
-    const endY = Math.ceil((height - position.y) / (gridSize * scale));
+    // Add buffer to ensure grid extends beyond viewport
+    const bufferFactor = 2;
+    
+    // Calculate visible area based on position and scale with buffer
+    const startX = Math.floor((-position.x - width * bufferFactor) / (gridSize * scale));
+    const endX = Math.ceil((width * (1 + bufferFactor) - position.x) / (gridSize * scale));
+    const startY = Math.floor((-position.y - height * bufferFactor) / (gridSize * scale));
+    const endY = Math.ceil((height * (1 + bufferFactor) - position.y) / (gridSize * scale));
 
-    for (let x = startX; x <= endX; x++) {
-      for (let y = startY; y <= endY; y++) {
-        dots.push(
-          <Rect
-            key={`dot-${x}-${y}`}
-            x={x * gridSize}
-            y={y * gridSize}
-            width={dotSize}
-            height={dotSize}
-            fill="#E2E8F0"
-            perfectDrawEnabled={false}
+    // Calculate major grid interval based on zoom level
+    let majorGridInterval;
+    if (scale >= 4) {
+      majorGridInterval = 1;
+    } else if (scale >= 2) {
+      majorGridInterval = 2;
+    } else if (scale >= 1) {
+      majorGridInterval = 5;
+    } else if (scale >= 0.5) {
+      majorGridInterval = 10;
+    } else if (scale >= 0.2) {
+      majorGridInterval = 20;
+    } else {
+      majorGridInterval = 40;
+    }
+
+    // Calculate subdivision interval based on zoom level
+    const shouldShowSubdivisions = scale >= 0.2;
+    const subdivisionSize = shouldShowSubdivisions ? gridSize / 2 : gridSize;
+
+    // Calculate opacity based on zoom level
+    const getOpacity = (isMajor: boolean) => {
+      if (scale < 0.2) {
+        return isMajor ? 0.4 : 0;
+      } else if (scale < 0.5) {
+        return isMajor ? 0.35 : 0.1;
+      } else {
+        return isMajor ? 0.3 : 0.15;
+      }
+    };
+
+    // Calculate stroke width based on zoom level
+    const getStrokeWidth = (isMajor: boolean) => {
+      if (scale < 0.2) {
+        return isMajor ? 0.75 : 0;
+      } else if (scale < 0.5) {
+        return isMajor ? 0.5 : 0.25;
+      } else {
+        return isMajor ? 0.5 : 0.25;
+      }
+    };
+
+    // Render vertical lines with extended range
+    for (let x = startX * 2; x <= endX * 2; x++) {
+      const actualX = Math.round(x * subdivisionSize);
+      const isMajor = x % (majorGridInterval * 2) === 0;
+      const isMinor = x % 2 === 0;
+      
+      if (!shouldShowSubdivisions && !isMinor) continue;
+
+      lines.push(
+        <Line
+          key={`v-${x}`}
+          points={[
+            actualX,
+            Math.round(startY * gridSize),
+            actualX,
+            Math.round(endY * gridSize)
+          ]}
+          stroke="#E5E5E5"
+          strokeWidth={getStrokeWidth(isMajor)}
+          opacity={getOpacity(isMajor)}
+          perfectDrawEnabled={true}
             listening={false}
-            opacity={0.5}
+          hitStrokeWidth={0}
+          lineCap="square"
           />
         );
       }
+
+    // Render horizontal lines with extended range
+    for (let y = startY * 2; y <= endY * 2; y++) {
+      const actualY = Math.round(y * subdivisionSize);
+      const isMajor = y % (majorGridInterval * 2) === 0;
+      const isMinor = y % 2 === 0;
+      
+      if (!shouldShowSubdivisions && !isMinor) continue;
+
+      lines.push(
+        <Line
+          key={`h-${y}`}
+          points={[
+            Math.round(startX * gridSize),
+            actualY,
+            Math.round(endX * gridSize),
+            actualY
+          ]}
+          stroke="#E5E5E5"
+          strokeWidth={getStrokeWidth(isMajor)}
+          opacity={getOpacity(isMajor)}
+          perfectDrawEnabled={true}
+          listening={false}
+          hitStrokeWidth={0}
+          lineCap="square"
+        />
+      );
     }
-    return dots;
+
+    return lines;
   };
 
   const exportDrawing = async () => {
@@ -1313,7 +1508,7 @@ export default function Canvas({ name, description, projectId }: Props) {
       case 'text': {
         const textElement = element as TextElement;
         return (
-          <KonvaText
+            <KonvaText
             text={textElement.text}
             x={textElement.x}
             y={textElement.y}
@@ -1333,7 +1528,7 @@ export default function Canvas({ name, description, projectId }: Props) {
           image.src = genImage.src;
         }
         return (
-          <KonvaImage
+            <KonvaImage
             image={image}
             x={genImage.x}
             y={genImage.y}
@@ -1450,23 +1645,24 @@ export default function Canvas({ name, description, projectId }: Props) {
   }, [projectName]);
 
   // Add undo/redo functions
+  const canUndo = historyIndex > 0;
+  const canRedo = historyIndex < history.length - 1;
+
   const handleUndo = () => {
-    if (historyIndex > 0) {
-      const newIndex = historyIndex - 1;
-      const previousState = history[newIndex];
+    if (canUndo) {
+      const previousState = history[historyIndex - 1];
       setElements(previousState.elements);
       setCanvasStack(previousState.canvasStack);
-      setHistoryIndex(newIndex);
+      setHistoryIndex(historyIndex - 1);
     }
   };
 
   const handleRedo = () => {
-    if (historyIndex < history.length - 1) {
-      const newIndex = historyIndex + 1;
-      const nextState = history[newIndex];
+    if (canRedo) {
+      const nextState = history[historyIndex + 1];
       setElements(nextState.elements);
       setCanvasStack(nextState.canvasStack);
-      setHistoryIndex(newIndex);
+      setHistoryIndex(historyIndex + 1);
     }
   };
 
@@ -1512,12 +1708,23 @@ export default function Canvas({ name, description, projectId }: Props) {
 
   const handleInviteCollaborator = async (userId: string, role: 'VIEWER' | 'EDITOR') => {
     try {
+      // First fetch the user's email using their ID
+      const userResponse = await fetch(`/api/users/${userId}`);
+      if (!userResponse.ok) {
+        throw new Error('Failed to fetch user details');
+      }
+      const userData = await userResponse.json();
+      
       const response = await fetch('/api/collaborators', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ projectId, userId, role }),
+        body: JSON.stringify({ 
+          projectId, 
+          email: userData.user.email, 
+          role 
+        }),
       });
 
       if (!response.ok) {
@@ -1525,7 +1732,7 @@ export default function Canvas({ name, description, projectId }: Props) {
       }
 
       const data = await response.json();
-      setCollaborators([...collaborators, data.collaborator]);
+      setCollaborators([...collaborators, data]);
       showNotification('success', 'Collaborator invited', 'The user has been invited to collaborate on this project.');
     } catch (error) {
       console.error('Error inviting collaborator:', error);
@@ -1570,7 +1777,7 @@ export default function Canvas({ name, description, projectId }: Props) {
           </div>
           {remainingCount > 0 && (
             <span className="text-xs text-gray-500">+{remainingCount}</span>
-          )}
+        )}
           <span className="text-xs text-gray-500">
             {collaboratorCount === 1 ? '1 collaborator' : `${collaboratorCount} collaborators`}
           </span>
@@ -1629,222 +1836,33 @@ export default function Canvas({ name, description, projectId }: Props) {
   };
 
   return (
-    <div className="relative h-full w-full">
-      {/* Navigation Header */}
-      <div className="fixed top-0 left-0 right-0 bg-[#F6F8FA] z-50 border-b border-[#E0DAF3]">
-        <div className="flex items-center justify-between px-5 py-3">
-          <div className="flex items-center gap-4">
-            {/* Logo */}
-            <Link href="/dashboard" className="block">
-              <Image
-                src="/icons/logo.svg"
-                alt="Studio Six Logo"
-                width={32}
-                height={32}
-                className="w-8 h-8 object-contain"
-                style={{ height: 'auto' }}
-                priority
-              />
-            </Link>
-            {/* Navigation */}
-            <div className="flex items-center gap-2">
-              {currentCanvas.parentId && (
-                <button 
-                  onClick={handleBackToParent}
-                  className="w-8 h-8 border border-[#CDD0D5] rounded-lg flex items-center justify-center hover:bg-gray-50 transition-colors"
-                >
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M12.5 15L7.5 10L12.5 5" stroke="#202126" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </button>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              <Link href="/dashboard" className="text-sm text-[#6C7275] hover:text-[#202126]">Dashboard</Link>
-              <span className="text-[#6C7275]">/</span>
-              {getBreadcrumbPath().map((canvas, index) => (
-                <div key={canvas.id} className="flex items-center gap-2">
-                  <span className={`text-sm ${index === currentCanvasIndex ? 'font-medium text-[#202126]' : 'text-[#6C7275] hover:text-[#202126] cursor-pointer'}`}>
-                    {canvas.name}
-                  </span>
-                  {index < getBreadcrumbPath().length - 1 && (
-                    <span className="text-[#6C7275]">/</span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
+    <div className="h-screen w-full relative bg-[#fafafa]">
+      <CanvasHeader
+        projectName={name}
+        onInviteClick={() => setShowInviteModal(true)}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        canUndo={canUndo}
+        canRedo={canRedo}
+        isSaving={isSaving}
+        onSave={handleSave}
+        projectId={projectId}
+      />
+      
+      {/* Add padding-top to account for the fixed header */}
+      <div className="pt-16">
+        {/* Collaborator cursors */}
+        {Object.values(collaboratorCursors).map((cursor) => (
+          <CollaboratorCursor
+            key={cursor.userId}
+            x={cursor.x}
+            y={cursor.y}
+            userName={cursor.userName}
+            color={cursor.color}
+          />
+        ))}
 
-          {/* Action Buttons */}
-          <div className="flex items-center gap-2">
-            {/* Collaborator Button */}
-            <button
-              onClick={() => setShowInviteModal(true)}
-              className="w-8 h-8 border border-[#CDD0D5] rounded-lg flex items-center justify-center hover:bg-gray-50 transition-colors"
-              title="Invite Collaborators"
-            >
-              <UserPlus size={20} className="text-[#202126]" />
-            </button>
-
-            {/* Undo/Redo Buttons */}
-            <button
-              onClick={handleUndo}
-              disabled={historyIndex <= 0}
-              className={`w-8 h-8 border border-[#CDD0D5] rounded-lg flex items-center justify-center transition-colors ${
-                historyIndex <= 0 
-                  ? 'opacity-50 cursor-not-allowed' 
-                  : 'hover:bg-gray-50'
-              }`}
-              title="Undo"
-            >
-              <Image
-                src="/icons/arrow-counter-clockwise.svg"
-                alt="Undo"
-                width={20}
-                height={20}
-                className="text-[#202126]"
-              />
-            </button>
-            <button
-              onClick={handleRedo}
-              disabled={historyIndex >= history.length - 1}
-              className={`w-8 h-8 border border-[#CDD0D5] rounded-lg flex items-center justify-center transition-colors ${
-                historyIndex >= history.length - 1 
-                  ? 'opacity-50 cursor-not-allowed' 
-                  : 'hover:bg-gray-50'
-              }`}
-              title="Redo"
-            >
-              <Image
-                src="/icons/arrow-clockwise.svg"
-                alt="Redo"
-                width={20}
-                height={20}
-                className="text-[#202126]"
-              />
-            </button>
-
-            {/* Save Button */}
-            <button
-              onClick={handleSave}
-              disabled={isSaving}
-              className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all duration-200 ${
-                isSaving 
-                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                  : 'bg-[#814ADA] text-white hover:bg-[#6B3DB3]'
-              }`}
-            >
-              {isSaving ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Image
-                    src="/icons/save-icon.svg"
-                    alt="Save"
-                    width={16}
-                    height={16}
-                    className="text-white"
-                  />
-                  Save
-                </>
-              )}
-            </button>
-
-          {/* Header Actions and Profile */}
-            <HeaderActions />
-            <div className="relative" ref={profileRef}>
-              <button 
-                className="w-10 h-10 rounded-full overflow-hidden border-2 border-[#D3BBFB] hover:border-[#844BDC] transition-colors"
-                onClick={() => setIsProfileOpen(!isProfileOpen)}
-              >
-                <Image
-                  src={session?.user?.image || "/profile-icons/profile-icon-01.png"}
-                  alt="Profile"
-                  width={40}
-                  height={40}
-                  className="w-full h-full object-cover"
-                />
-              </button>
-
-              {/* Profile Dropdown */}
-              <div className={`absolute right-0 mt-2 w-[240px] bg-white rounded-lg shadow-xl overflow-hidden transition-all duration-200 ease-in-out z-[50] ${
-                isProfileOpen 
-                  ? 'opacity-100 translate-y-0 visible pointer-events-auto' 
-                  : 'opacity-0 -translate-y-2 invisible pointer-events-none'
-              }`}>
-                <div className="p-4 border-b border-gray-100">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full overflow-hidden">
-                      <Image
-                        src={session?.user?.image || "/profile-icons/profile-icon-01.png"}
-                        alt="Profile"
-                        width={40}
-                        height={40}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                    <div>
-                      <h3 className="font-medium text-[#202126]">
-                        {session?.user?.name?.split(' ')[0] || 'Designer'}
-                      </h3>
-                      <p className="text-sm text-gray-500">
-                        {session?.user?.email || 'No email'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                <div className="py-2">
-                  <Link href="/profile" className="block w-full px-4 py-2 text-left text-sm text-[#202126] hover:bg-gray-50">
-                    View Profile
-                  </Link>
-                  <Link href="/settings" className="block w-full px-4 py-2 text-left text-sm text-[#202126] hover:bg-gray-50">
-                    Account Settings
-                  </Link>
-                  <Link href="/pricing" className="block w-full px-4 py-2 text-left text-sm text-[#202126] hover:bg-gray-50">
-                    Billing & Plans
-                  </Link>
-                </div>
-                <div className="p-2 border-t border-gray-100">
-                  <button 
-                    onClick={() => signOut({ callbackUrl: '/' })}
-                    className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-gray-50"
-                  >
-                    Sign Out
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Drawing Mode Overlay */}
-      {drawingMode && (
-        <div className="absolute inset-0 bg-gradient-to-b from-white/80 to-gray-100/80 pointer-events-none" />
-      )}
-
-      {/* Drop Zone Overlay */}
-      {isDragging && (
-        <div 
-          className="absolute inset-0 bg-purple-50/50 border-2 border-dashed border-purple-500 z-50 pointer-events-none"
-          style={{
-            transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
-            transformOrigin: '0 0',
-            width: dimensions.width - (isChatOpen ? 400 : 0),
-            height: dimensions.height,
-          }}
-        />
-      )}
-
-      <div 
-        className="absolute inset-0"
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-      >
+        {/* Rest of your canvas content */}
         <DynamicStage
           width={dimensions.width}
           height={dimensions.height}
@@ -1861,21 +1879,12 @@ export default function Canvas({ name, description, projectId }: Props) {
           ref={stageRef}
           className="pointer-events-auto"
           style={{
-            cursor: selectedTool === 'mouse' && isDraggingCanvas ? 'grabbing' : 'default',
+            cursor: isDraggingCanvas ? 'grabbing' : 'default',
             zIndex: 1
           }}
         >
           <Layer>
-            {/* Background Layer */}
-            <Rect
-              width={dimensions.width}
-              height={dimensions.height}
-              fill="white"
-              perfectDrawEnabled={false}
-              listening={false}
-            />
-
-            {/* Grid Layer */}
+            {/* Remove the white background rect and let the grid span everything */}
             <Group>
               {renderGrid()}
             </Group>

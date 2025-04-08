@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { useSession } from 'next-auth/react';
 import Image from 'next/image';
+import SharedProjects from '@/components/SharedProjects';
 
 interface Project {
   id: string;
@@ -179,6 +180,12 @@ export default function ProjectsPage() {
               ))}
             </div>
           )}
+          
+          {!isLoading && (
+            <div className="my-10 border-t border-gray-200"></div>
+          )}
+          
+          <SharedProjects />
         </div>
       </div>
     </DashboardLayout>

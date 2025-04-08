@@ -57,7 +57,7 @@ export default function AIDesignAssistantPage() {
       console.log('[CREATE_PROJECT] Project created successfully:', data);
       toast.success('Project created successfully!');
       setShowModal(false);
-      router.push(`/ai-companion?name=${encodeURIComponent(projectName)}&description=${encodeURIComponent(description)}&projectId=${data.id}`);
+      router.push(`/ai-companion?name=${encodeURIComponent(projectName)}&description=${encodeURIComponent(description)}&projectId=${data.id}&isNew=true`);
     } catch (error) {
       console.error('[CREATE_PROJECT] Error details:', error);
       if (error instanceof Error) {

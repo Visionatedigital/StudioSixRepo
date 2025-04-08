@@ -94,7 +94,7 @@ export default function InviteCollaboratorModal({ isOpen, onClose, onInvite }: P
                       alt={user.name || ''}
                       width={32}
                       height={32}
-                      className="rounded-full"
+                      className="rounded-full object-cover w-8 h-8"
                     />
                   ) : (
                     <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
@@ -121,7 +121,7 @@ export default function InviteCollaboratorModal({ isOpen, onClose, onInvite }: P
                     alt={selectedUser.name || ''}
                     width={32}
                     height={32}
-                    className="rounded-full"
+                    className="rounded-full object-cover w-8 h-8"
                   />
                 ) : (
                   <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
