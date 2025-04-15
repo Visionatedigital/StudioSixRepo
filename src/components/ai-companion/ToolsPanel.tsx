@@ -4,7 +4,13 @@ import Image from 'next/image';
 import { useState } from 'react';
 import clsx from 'clsx';
 
-type Tool = 'text' | 'board' | 'comment' | 'note' | 'image' | 'upload' | 'draw' | 'trash' | 'prompt';
+interface ContainerTemplate {
+  id: string;
+  name: string;
+  description?: string;
+}
+
+type Tool = 'text' | 'board' | 'container' | 'note' | 'image' | 'upload' | 'draw' | 'trash' | 'prompt';
 
 interface ToolDefinition {
   id: Tool;
@@ -14,11 +20,47 @@ interface ToolDefinition {
 }
 
 interface ToolsPanelProps {
-  onToolSelect: (toolId: Tool) => void;
+  onToolSelect: (toolId: Tool, templateId?: string) => void;
   selectedTool: Tool;
 }
 
+function ContainerSubmenu({ onSelect, onClose }: { 
+  onSelect: (templateId: string) => void;
+  onClose: () => void;
+}) {
+  const templates: ContainerTemplate[] = [
+    { id: 'concept-development', name: 'Concept Development' },
+    { id: 'design-exploration', name: 'Design Exploration' },
+    { id: 'visual-presentation', name: 'Visual Presentation' },
+    { id: 'custom', name: 'Custom Template' }
+  ];
+
+  return (
+    <div className="absolute left-[80px] top-1/2 -translate-y-1/2 bg-white rounded-lg shadow-lg p-4 w-[280px] z-50">
+      <h3 className="text-lg font-semibold mb-4">Select Template</h3>
+      <div className="grid grid-cols-2 gap-3">
+        {templates.map((template) => (
+          <button
+            key={template.id}
+            onClick={() => onSelect(template.id)}
+            className="p-4 border rounded-lg hover:border-purple-500 hover:bg-purple-50 transition-colors text-left"
+          >
+            <p className="font-medium">{template.name}</p>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function ToolsPanel({ onToolSelect, selectedTool }: ToolsPanelProps) {
+  const [showContainerSubmenu, setShowContainerSubmenu] = useState(false);
+
+  const handleContainerSelect = (templateId: string) => {
+    onToolSelect('container', templateId);
+    setShowContainerSubmenu(false);
+  };
+
   const tools: ToolDefinition[] = [
     {
       id: 'draw',
@@ -43,9 +85,10 @@ export default function ToolsPanel({ onToolSelect, selectedTool }: ToolsPanelPro
       icon: '/icons/library-icon.svg'
     },
     {
-      id: 'comment',
-      name: 'Comment',
-      icon: '/icons/comment-icon.svg'
+      id: 'container',
+      name: 'Template',
+      icon: '/icons/container-icon.svg',
+      activeIcon: '/icons/container-white-icon.svg'
     },
     {
       id: 'note',
@@ -75,7 +118,14 @@ export default function ToolsPanel({ onToolSelect, selectedTool }: ToolsPanelPro
       {tools.map((tool) => (
         <button
           key={tool.id}
-          onClick={() => onToolSelect(tool.id)}
+          onClick={() => {
+            if (tool.id === 'container') {
+              setShowContainerSubmenu(!showContainerSubmenu);
+            } else {
+              onToolSelect(tool.id);
+              setShowContainerSubmenu(false);
+            }
+          }}
           className={clsx(
             'p-2.5 rounded-lg transition-colors relative group flex flex-col items-center gap-0.5 aspect-square',
             selectedTool === tool.id
@@ -95,6 +145,13 @@ export default function ToolsPanel({ onToolSelect, selectedTool }: ToolsPanelPro
           <span className="text-xs font-medium leading-tight text-center">{tool.name}</span>
         </button>
       ))}
+      
+      {showContainerSubmenu && (
+        <ContainerSubmenu
+          onSelect={handleContainerSelect}
+          onClose={() => setShowContainerSubmenu(false)}
+        />
+      )}
     </div>
   );
 } 

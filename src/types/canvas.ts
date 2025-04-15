@@ -1,4 +1,4 @@
-export type Tool = 'mouse' | 'todo' | 'text' | 'board' | 'column' | 'comment' | 'note' | 'image' | 'upload' | 'draw' | 'trash' | 'prompt';
+export type Tool = 'mouse' | 'todo' | 'text' | 'board' | 'column' | 'container' | 'note' | 'image' | 'upload' | 'draw' | 'trash' | 'prompt';
 
 export type ElementType = 
   | 'text'
@@ -9,7 +9,7 @@ export type ElementType =
   | 'prompt'
   | 'shape'
   | 'line'
-  | 'comment'
+  | 'container'
   | 'generated';
 
 export interface BaseElement {
@@ -57,7 +57,12 @@ export interface PromptElement extends BaseElement {
 export interface BoardElement extends BaseElement {
   type: 'board';
   name: string;
-  preview?: string;
+  elements: string[];
+  width: number;
+  height: number;
+  rotation?: number;
+  draggable?: boolean;
+  resizable?: boolean;
 }
 
 export interface ShapeElement extends BaseElement {
@@ -91,9 +96,38 @@ export interface Comment {
 }
 
 export interface CommentElement extends BaseElement {
-  type: 'comment';
+  type: 'container';
   text: string;
   targetId: string;
+  backgroundColor?: string;
+  borderColor?: string;
+  borderRadius?: number;
+  content?: {
+    type: 'project-input' | 'design-tools' | 'generated-output' | 'template-group';
+    fields?: Array<{ type: string; label: string; placeholder?: string; accept?: string }>;
+    tools?: Array<{ id: string; name: string; icon: string }>;
+    containers?: Array<{
+      id: string;
+      type: 'project-input' | 'design-tools' | 'generated-output';
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      name: string;
+      backgroundColor: string;
+      borderColor: string;
+      borderRadius: number;
+      fields?: Array<{ type: string; label: string; placeholder?: string; accept?: string }>;
+      tools?: Array<{ id: string; name: string; icon: string }>;
+    }>;
+  };
+}
+
+export interface ContainerElement extends BaseElement {
+  type: 'container';
+  name: string;
+  backgroundColor?: string;
+  borderColor?: string;
 }
 
 export type CanvasElement = 
@@ -105,7 +139,8 @@ export type CanvasElement =
   | ShapeElement 
   | LineElement
   | GeneratedImageElement
-  | CommentElement;
+  | CommentElement
+  | ContainerElement;
 
 export interface CanvasData {
   id: string;

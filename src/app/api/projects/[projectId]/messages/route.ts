@@ -3,15 +3,18 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
-export async function GET(request: NextRequest) {
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { projectId: string } }
+) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const url = new URL(request.url);
-    const projectId = url.pathname.split('/')[3]; // Extract projectId from URL path
+    // Ensure projectId is properly awaited
+    const projectId = await Promise.resolve(params.projectId);
 
     const messages = await prisma.chatMessage.findMany({
       where: {
@@ -32,15 +35,18 @@ export async function GET(request: NextRequest) {
   }
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(
+  request: NextRequest,
+  { params }: { params: { projectId: string } }
+) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const url = new URL(request.url);
-    const projectId = url.pathname.split('/')[3]; // Extract projectId from URL path
+    // Ensure projectId is properly awaited
+    const projectId = await Promise.resolve(params.projectId);
     const body = await request.json();
     const { content, role, hasGenerateAction, isGeneratedImage } = body;
 

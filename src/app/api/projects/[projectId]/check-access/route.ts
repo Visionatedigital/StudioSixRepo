@@ -13,7 +13,8 @@ export async function GET(
       return NextResponse.json({ hasAccess: false, reason: 'unauthorized' }, { status: 401 });
     }
 
-    const projectId = params.projectId;
+    // Ensure projectId is properly awaited
+    const projectId = await Promise.resolve(params.projectId);
     
     // Check if user is the owner
     const project = await prisma.project.findUnique({

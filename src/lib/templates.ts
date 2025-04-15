@@ -12,64 +12,42 @@ interface TemplateData {
 export const conceptDevelopmentTemplate: TemplateData = {
   name: 'Concept Development',
   elements: [
-    // Text element explaining concept development
     {
       id: uuidv4(),
-      type: 'text',
-      x: 100,
-      y: 100,
-      text: 'Concept Development',
-      fontSize: 28,
-      fill: '#333333',
-      width: 300,
-      height: 50,
-      canvasId: 'root',
-      rotation: 0
-    },
-    {
-      id: uuidv4(),
-      type: 'text',
-      x: 100,
-      y: 160,
-      text: 'Use this space to explore design concepts, gather site data, and develop your initial ideas.',
-      fontSize: 16,
-      fill: '#666666',
+      type: 'container',
+      name: 'Project Input',
+      x: 50,
+      y: 50,
       width: 400,
-      height: 100,
-      canvasId: 'root',
-      rotation: 0
-    },
-    // Board elements for different concept areas
-    {
-      id: uuidv4(),
-      type: 'board',
-      x: 100,
-      y: 280,
-      width: 200,
-      height: 150,
-      name: 'Site Analysis',
+      height: 700,
+      backgroundColor: '#FFFFFF',
+      borderColor: '#E5E7EB',
       canvasId: 'root',
       rotation: 0
     },
     {
       id: uuidv4(),
-      type: 'board',
-      x: 350,
-      y: 280,
-      width: 200,
-      height: 150,
-      name: 'Precedent Studies',
+      type: 'container',
+      name: 'Design Tools',
+      x: 500,
+      y: 50,
+      width: 700,
+      height: 300,
+      backgroundColor: '#FFFFFF',
+      borderColor: '#E5E7EB',
       canvasId: 'root',
       rotation: 0
     },
     {
       id: uuidv4(),
-      type: 'board',
-      x: 600,
-      y: 280,
-      width: 200,
-      height: 150,
-      name: 'Initial Sketches',
+      type: 'container',
+      name: 'Generated Output',
+      x: 500,
+      y: 400,
+      width: 700,
+      height: 350,
+      backgroundColor: '#FFFFFF',
+      borderColor: '#E5E7EB',
       canvasId: 'root',
       rotation: 0
     }
@@ -78,10 +56,8 @@ export const conceptDevelopmentTemplate: TemplateData = {
     {
       id: 'root',
       name: 'Concept Development',
-      elements: [], // Will be populated with element IDs
-      parentId: undefined
-    },
-    // Child canvas for each board would be generated dynamically
+      elements: []
+    }
   ]
 };
 
@@ -126,7 +102,8 @@ export const designExplorationTemplate: TemplateData = {
       height: 150,
       name: 'Layout Options',
       canvasId: 'root',
-      rotation: 0
+      rotation: 0,
+      elements: []
     },
     {
       id: uuidv4(),
@@ -135,9 +112,10 @@ export const designExplorationTemplate: TemplateData = {
       y: 280,
       width: 200,
       height: 150,
-      name: 'Material Studies',
+      name: 'Color Schemes',
       canvasId: 'root',
-      rotation: 0
+      rotation: 0,
+      elements: []
     },
     {
       id: uuidv4(),
@@ -146,9 +124,46 @@ export const designExplorationTemplate: TemplateData = {
       y: 280,
       width: 200,
       height: 150,
+      name: 'Typography',
+      canvasId: 'root',
+      rotation: 0,
+      elements: []
+    },
+    {
+      id: uuidv4(),
+      type: 'board',
+      x: 100,
+      y: 500,
+      width: 200,
+      height: 150,
+      name: 'Material Studies',
+      canvasId: 'root',
+      rotation: 0,
+      elements: []
+    },
+    {
+      id: uuidv4(),
+      type: 'board',
+      x: 350,
+      y: 500,
+      width: 200,
+      height: 150,
       name: 'Form Development',
       canvasId: 'root',
-      rotation: 0
+      rotation: 0,
+      elements: []
+    },
+    {
+      id: uuidv4(),
+      type: 'board',
+      x: 600,
+      y: 500,
+      width: 200,
+      height: 150,
+      name: 'User Experience',
+      canvasId: 'root',
+      rotation: 0,
+      elements: []
     }
   ],
   canvasStack: [
@@ -202,7 +217,8 @@ export const visualPresentationTemplate: TemplateData = {
       height: 150,
       name: 'Moodboard',
       canvasId: 'root',
-      rotation: 0
+      rotation: 0,
+      elements: []
     },
     {
       id: uuidv4(),
@@ -213,7 +229,8 @@ export const visualPresentationTemplate: TemplateData = {
       height: 150,
       name: 'Renders',
       canvasId: 'root',
-      rotation: 0
+      rotation: 0,
+      elements: []
     },
     {
       id: uuidv4(),
@@ -224,7 +241,8 @@ export const visualPresentationTemplate: TemplateData = {
       height: 150,
       name: 'Presentation Boards',
       canvasId: 'root',
-      rotation: 0
+      rotation: 0,
+      elements: []
     }
   ],
   canvasStack: [
@@ -242,6 +260,8 @@ export async function applyTemplate(projectId: string, templateId: string): Prom
   try {
     // Select the appropriate template
     let template: TemplateData;
+    console.log('Applying template:', templateId, 'to project:', projectId);
+    
     switch (templateId) {
       case 'concept-development':
         template = conceptDevelopmentTemplate;
@@ -253,28 +273,55 @@ export async function applyTemplate(projectId: string, templateId: string): Prom
         template = visualPresentationTemplate;
         break;
       default:
+        console.error('Invalid template ID:', templateId);
         return false;
     }
 
-    // Update element canvasIds with the proper element IDs
+    console.log('Selected template:', template);
+
+    // Generate new IDs for canvases and elements
     const canvasIdMap = new Map<string, string>();
+    const elementIdMap = new Map<string, string>();
+
+    // Generate new IDs for canvases
     template.canvasStack.forEach(canvas => {
-      canvasIdMap.set(canvas.id, canvas.id);
+      const newId = uuidv4();
+      canvasIdMap.set(canvas.id, newId);
     });
 
-    // Populate canvas stack elements with element IDs
-    template.canvasStack = template.canvasStack.map(canvas => ({
+    // Generate new IDs for elements and update their canvasId references
+    const updatedElements = template.elements.map(element => {
+      const newId = uuidv4();
+      elementIdMap.set(element.id, newId);
+      
+      // Update the element's ID and ensure it's associated with the root canvas
+      return {
+        ...element,
+        id: newId,
+        canvasId: 'root' // Force all elements to be on the root canvas
+      };
+    });
+
+    // Update canvas stack with new IDs and element references
+    const updatedCanvasStack = template.canvasStack.map(canvas => ({
       ...canvas,
-      elements: template.elements
-        .filter(element => element.canvasId === canvas.id)
+      id: canvasIdMap.get(canvas.id) || canvas.id,
+      elements: updatedElements
+        .filter(element => element.canvasId === 'root')
         .map(element => element.id)
     }));
 
+    console.log('Processed template canvasStack:', updatedCanvasStack);
+    console.log('Processed template elements:', updatedElements);
+
     // Prepare canvas data for API
     const canvasData = {
-      elements: template.elements,
-      canvasStack: template.canvasStack
+      elements: updatedElements,
+      canvasStack: updatedCanvasStack,
+      templateElements: updatedElements // Add template elements for reference
     };
+
+    console.log('Prepared canvasData for API:', canvasData);
 
     // Update the project with the template data
     const response = await fetch(`/api/projects/${projectId}`, {
@@ -289,9 +336,12 @@ export async function applyTemplate(projectId: string, templateId: string): Prom
     });
 
     if (!response.ok) {
-      throw new Error('Failed to apply template');
+      const errorText = await response.text();
+      console.error('Failed to apply template:', errorText);
+      throw new Error('Failed to apply template: ' + errorText);
     }
 
+    console.log('Template applied successfully');
     return true;
   } catch (error) {
     console.error('Error applying template:', error);

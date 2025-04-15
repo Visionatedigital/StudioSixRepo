@@ -26,7 +26,7 @@ import {
   ImageElement
 } from '@/types/canvas';
 import dynamic from 'next/dynamic';
-import { Stage, Layer, Rect, Circle, Line, Text as KonvaText, Image as KonvaImage, Transformer, Group } from 'react-konva';
+import { Stage, Layer, Rect, Circle, Line, Text as KonvaText, Image as KonvaImage, Transformer, Group, Path } from 'react-konva';
 import Board from './Board';
 import { v4 as uuidv4 } from 'uuid';
 import DeleteConfirmationModal from './DeleteConfirmationModal';
@@ -37,6 +37,7 @@ import { UserPlus } from 'lucide-react';
 import CanvasHeader from './CanvasHeader';
 import { io, Socket } from 'socket.io-client';
 import CollaboratorCursor from './CollaboratorCursor';
+import React from 'react';
 
 // Dynamically import Stage with no SSR
 const DynamicStage = dynamic(() => import('react-konva').then((mod) => mod.Stage), {
@@ -121,6 +122,53 @@ interface CollaboratorCursor {
   y: number;
 }
 
+// Add type definitions at the top of the file
+interface ContainerLayout {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  name: string;
+  backgroundColor: string;
+  borderColor: string;
+  borderRadius: number;
+}
+
+interface ConceptDevelopmentTemplate {
+  width: number;
+  height: number;
+  name: string;
+  backgroundColor: string;
+  borderColor: string;
+  layout: {
+    projectInput: ContainerLayout;
+    designTools: ContainerLayout;
+    generatedOutput: ContainerLayout;
+  };
+}
+
+interface TemplateContainer {
+  id: string;
+  type: 'project-input' | 'design-tools' | 'generated-output';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  name: string;
+  backgroundColor: string;
+  borderColor: string;
+  borderRadius: number;
+  fields?: Array<{ type: string; label: string; placeholder?: string; accept?: string }>;
+  tools?: Array<{ id: string; name: string; icon: string }>;
+}
+
+interface TemplateGroup extends CommentElement {
+  content: {
+    type: 'template-group';
+    containers: TemplateContainer[];
+  };
+}
+
 export default function Canvas({ name, description, projectId }: Props) {
   const { data: session } = useSession();
   const searchParams = useSearchParams();
@@ -154,6 +202,7 @@ export default function Canvas({ name, description, projectId }: Props) {
   const profileRef = useRef<HTMLDivElement>(null);
   const [promptElements, setPromptElements] = useState<PromptElement[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+  const [isElementDragging, setIsElementDragging] = useState(false);
   const dropZoneRef = useRef<HTMLDivElement>(null);
   const [showAIChat, setShowAIChat] = useState(false);
   const [isDraggingCanvas, setIsDraggingCanvas] = useState(false);
@@ -177,6 +226,7 @@ export default function Canvas({ name, description, projectId }: Props) {
   const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
   const [socket, setSocket] = useState<Socket | null>(null);
   const [collaboratorCursors, setCollaboratorCursors] = useState<{ [key: string]: CollaboratorCursor }>({});
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
 
   // Get current canvas data with safety check
   const currentCanvas = canvasStack[currentCanvasIndex] || canvasStack[0];
@@ -192,13 +242,17 @@ export default function Canvas({ name, description, projectId }: Props) {
       if (!projectId) return;
 
       try {
+        console.log('Loading project data for ID:', projectId);
         const response = await fetch(`/api/projects/${projectId}`);
         if (!response.ok) {
-          throw new Error('Failed to fetch project data');
+          const errorText = await response.text();
+          console.error('Failed to fetch project data:', errorText);
+          throw new Error('Failed to fetch project data: ' + errorText);
         }
         const project = await response.json();
         
         console.log('Raw project data:', project);
+        console.log('Canvas data from project:', project.canvasData);
         
         // Create initial canvas data
         const initialCanvasData: CanvasData = {
@@ -209,9 +263,9 @@ export default function Canvas({ name, description, projectId }: Props) {
         };
 
         // If project has canvas data, use it, otherwise start with empty canvas
-        const savedCanvasData = project.canvasData || [];
+        const savedCanvasData = project.canvasData?.canvasStack || [];
         
-        console.log('Saved canvas data:', savedCanvasData);
+        console.log('Saved canvas stack:', savedCanvasData);
         
         // Process the saved canvas data
         const processedCanvasStack = savedCanvasData
@@ -228,14 +282,10 @@ export default function Canvas({ name, description, projectId }: Props) {
         // Set the canvas stack with the initial canvas and saved data
         setCanvasStack([initialCanvasData, ...processedCanvasStack]);
 
-        // Extract all elements from all canvases
-        const allElements = processedCanvasStack.flatMap((canvas: CanvasData) => 
-          Array.isArray(canvas.elements) 
-            ? canvas.elements.filter((el: any) => el && typeof el === 'object')
-            : []
-        );
+        // Extract all elements from project.canvasData.elements or templateElements
+        const allElements = project.canvasData?.elements || project.canvasData?.templateElements || [];
 
-        console.log('All elements to be loaded:', allElements);
+        console.log('All elements from project:', allElements);
         
         if (allElements.length > 0) {
           // Convert any saved image data back to Image objects
@@ -261,7 +311,14 @@ export default function Canvas({ name, description, projectId }: Props) {
           }));
 
           console.log('Processed elements:', processedElements);
-          setElements(processedElements);
+          
+          // Ensure all elements have a canvasId
+          const elementsWithCanvasId = processedElements.map(element => ({
+            ...element,
+            canvasId: element.canvasId || 'root'
+          }));
+          
+          setElements(elementsWithCanvasId);
         }
 
         // Log the final state
@@ -547,218 +604,275 @@ export default function Canvas({ name, description, projectId }: Props) {
   };
 
   const handleCanvasClick = (e: KonvaEventObject<MouseEvent>) => {
-    const stage = e.target.getStage();
-    if (!stage) return;
+    // Early return if no stage ref
+    if (!stageRef.current) return;
 
-    const point = stage.getPointerPosition();
-    if (!point) return;
+    // Get stage and validate click target
+    const clickedStage = stageRef.current;
+    const isClickOnStage = e.target === clickedStage;
+    
+    // Get pointer position
+    const pointerPos = clickedStage.getPointerPosition();
+    if (!pointerPos) return;
 
-    // If mouse tool and target is stage, set isDraggingCanvas to true and update cursor
-    if (tool === 'mouse' && e.target === stage) {
+    // Convert to stage coordinates
+    const transform = clickedStage.getAbsoluteTransform().copy().invert();
+    const pos = transform.point(pointerPos);
+
+    // Handle mouse tool dragging
+    if (tool === 'mouse' && isClickOnStage) {
       setIsDraggingCanvas(true);
-      stage.container().style.cursor = 'grabbing';
+      clickedStage.container().style.cursor = 'grabbing';
       setMouseStartPos({ x: e.evt.clientX - position.x, y: e.evt.clientY - position.y });
+      return;
     }
 
-    // Convert point to canvas coordinates
-    const x = (point.x - position.x) / scale;
-    const y = (point.y - position.y) / scale;
+    // Handle container creation
+    if (tool === 'container' && isClickOnStage) {
+      const template = getContainerTemplate(selectedTemplateId || '');
+      
+      if (selectedTemplateId === 'concept-development' && 'layout' in template) {
+        // Get the click position from the stage
+        const pointerPos = stageRef.current?.getPointerPosition();
+        if (!pointerPos) return;
 
-    console.log('Canvas click:', { tool, target: e.target, point, x, y }); // Debug log
+        // Convert to stage coordinates
+        const transform = stageRef.current?.getAbsoluteTransform().copy().invert();
+        if (!transform) return;
+        const pos = transform.point(pointerPos);
 
-    if (tool === 'board' && e.target === stage) {
-      console.log('Creating new board'); // Debug log
+        // Create a single container group
+        const mainContainerId = uuidv4();
+        const mainContainer: CommentElement = {
+          id: mainContainerId,
+          type: 'container',
+          x: pos.x - (template.width / 2),
+          y: pos.y - (template.height / 2),
+          width: template.width,
+          height: template.height,
+          text: template.name,
+          targetId: '',
+          canvasId: currentCanvas.id,
+          rotation: 0,
+          backgroundColor: 'transparent',
+          borderColor: 'transparent',
+          content: {
+            type: 'template-group',
+            containers: [
+              {
+                id: uuidv4(),
+                type: 'project-input',
+                x: template.layout.projectInput.x,
+                y: template.layout.projectInput.y,
+                width: template.layout.projectInput.width,
+                height: template.layout.projectInput.height,
+                name: template.layout.projectInput.name,
+                backgroundColor: template.layout.projectInput.backgroundColor,
+                borderColor: template.layout.projectInput.borderColor,
+                borderRadius: template.layout.projectInput.borderRadius,
+                fields: [
+                  { type: 'text-area', label: 'Project Brief', placeholder: 'Enter your project brief or requirements...' },
+                  { type: 'file-upload', label: 'Site Images & Documents', accept: 'image/*,.pdf' }
+                ]
+              },
+              {
+                id: uuidv4(),
+                type: 'design-tools',
+                x: template.layout.designTools.x,
+                y: template.layout.designTools.y,
+                width: template.layout.designTools.width,
+                height: template.layout.designTools.height,
+                name: template.layout.designTools.name,
+                backgroundColor: template.layout.designTools.backgroundColor,
+                borderColor: template.layout.designTools.borderColor,
+                borderRadius: template.layout.designTools.borderRadius,
+                tools: [
+                  { id: 'floor-plan', name: '2D Floor Plan', icon: '📐' },
+                  { id: '3d-sketch', name: '3D Sketch', icon: '🎨' },
+                  { id: 'site-analysis', name: 'Site Analysis', icon: '📊' }
+                ]
+              },
+              {
+                id: uuidv4(),
+                type: 'generated-output',
+                x: template.layout.generatedOutput.x,
+                y: template.layout.generatedOutput.y,
+                width: template.layout.generatedOutput.width,
+                height: template.layout.generatedOutput.height,
+                name: '',
+                backgroundColor: '#FFFFFF',
+                borderColor: '#E5E7EB',
+                borderRadius: 8
+              }
+            ]
+          }
+        };
+
+        // Add the container group to elements and canvas stack
+        setElements(prev => [...prev, mainContainer]);
+        setCanvasStack(prev => prev.map(canvas => 
+          canvas.id === currentCanvas.id 
+            ? { ...canvas, elements: [...canvas.elements, mainContainer.id] }
+            : canvas
+        ));
+
+        setTool('mouse');
+        setSelectedTool('mouse');
+        setSelectedTemplateId(null);
+        return;
+      } else {
+        // Handle other templates as before
+        const containerId = uuidv4();
+        const newContainer: CommentElement = {
+          id: containerId,
+          type: 'container',
+          x: pos.x,
+          y: pos.y,
+          width: template.width || 300,
+          height: template.height || 200,
+          text: template.name || 'Container',
+          targetId: '',
+          canvasId: currentCanvas.id,
+          rotation: 0,
+          backgroundColor: template.backgroundColor || '#FFFFFF',
+          borderColor: template.borderColor || '#E5E7EB'
+        };
+        
+        setElements(prev => [...prev, newContainer]);
+        setCanvasStack(prev => prev.map(canvas => 
+          canvas.id === currentCanvas.id 
+            ? { ...canvas, elements: [...canvas.elements, newContainer.id] }
+            : canvas
+        ));
+        
+        setSelectedId(containerId);
+      }
+      
+      setTool('mouse');
+      setSelectedTool('mouse');
+      setSelectedTemplateId(null);
+      return;
+    }
+
+    // Handle board creation
+    if (tool === 'board' && isClickOnStage) {
+      console.log('Creating new board at position:', pos);
       const boardId = uuidv4();
-      const canvasId = uuidv4();
       const newBoard: BoardElement = {
         id: boardId,
         type: 'board',
-        x,
-        y,
-        width: 200,
-        height: 150,
-        name: `Board ${canvasStack.length}`,
-        canvasId: currentCanvas.id
-      };
-
-      // Create new canvas for the board
-      const newCanvasData: CanvasData = {
-        id: canvasId,
-        name: newBoard.name,
+        x: pos.x,
+        y: pos.y,
+        width: 300,  // Increased default width
+        height: 200, // Increased default height
+        name: 'New Board',
+        canvasId: currentCanvas.id,
         elements: [],
-        parentId: currentCanvas.id
+        rotation: 0,  // Add rotation property
+        draggable: true,  // Make it draggable
+        resizable: true   // Make it resizable
       };
-
-      // First add the board to elements
-      setElements(prev => [...prev, newBoard]);
       
-      // Then update the canvas stack with both the new canvas and the board reference
-      setCanvasStack(prev => {
-        // First add the board ID to the current canvas
-        const updatedCanvases = prev.map(canvas => 
-          canvas.id === currentCanvas.id 
-            ? { ...canvas, elements: [...canvas.elements, boardId] }
-            : canvas
-        );
-        
-        // Then add the new canvas
-        return [...updatedCanvases, newCanvasData];
-      });
-
-      setTool('mouse');
-      setSelectedTool('mouse');
-      return; // Add return to prevent further processing
-    }
-
-    if (tool === 'draw') {
-      setIsDrawing(true);
-      const newLine = {
-        points: [point.x, point.y],
-        color: strokeColor,
-        width: strokeWidth,
-      };
-      setCurrentLine(newLine);
-      setLines(prev => [...prev, newLine]); // Add the line immediately
-      return; // Add return to prevent further processing
-    }
-
-    if (tool === 'todo' && e.target === stage) {
-      // Create new sticky note element
-      const newElement: TextElement = {
-        id: Date.now().toString(),
-        type: 'text',
-        x,
-        y,
-        text: 'Double click to edit',
-        fontSize: 16,
-        fill: '#F59E0B',
-        width: 150,
-        height: 150,
-        backgroundColor: '#FEF3C7',
-        rotation: 0,
-        isSticky: true,
-        canvasId: currentCanvas.id
-      };
-      setElements(prev => [...prev, newElement]);
-      setCanvasStack(prev => prev.map(canvas => 
-        canvas.id === currentCanvas.id 
-          ? { ...canvas, elements: [...canvas.elements, newElement.id] }
-          : canvas
-      ));
-      setTool('mouse');
-      setSelectedTool('mouse');
-    } else if (tool === 'text') {
-      // Create new text element
-      const newElement: TextElement = {
-        id: Date.now().toString(),
-        type: 'text',
-        x,
-        y,
-        text: 'Double click to edit',
-        fontSize: 16,
-        fill: '#000000',
-        width: 200,
-        height: 30,
-        canvasId: currentCanvas.id
-      };
-      setElements(prev => [...prev, newElement]);
-      // Add element ID to current canvas
-      setCanvasStack(prev => prev.map(canvas => 
-        canvas.id === currentCanvas.id 
-          ? { ...canvas, elements: [...canvas.elements, newElement.id] }
-          : canvas
-      ));
-      setTool('mouse');
-      setSelectedTool('mouse');
-    } else if (tool === 'note' && e.target === stage) {
-      console.log('Creating new sticky note at:', { x, y }); // Debug log
-      const newNote: StickyNoteData = {
-        id: `note-${Date.now()}`,
-        x,
-        y,
-        content: '',
-        style: {
-          width: 200,
-          height: 200,
-          backgroundColor: '#fef3c7',
-          color: '#2D3748',
-          fontSize: '14px'
-        }
-      };
-      console.log('New note data:', newNote); // Debug log
-      setStickyNotes(prev => {
-        console.log('Previous notes:', prev); // Debug log
-        const updated = [...prev, newNote];
-        console.log('Updated notes:', updated); // Debug log
+      console.log('New board data:', newBoard);
+      
+      setElements(prev => {
+        const updated = [...prev, newBoard];
+        console.log('Updated elements:', updated);
         return updated;
       });
-      setTool('mouse');
-      setSelectedTool('mouse');
-    } else if (tool === 'prompt' && e.target === stage) {
-      const newPrompt: PromptElement = {
-        id: `prompt-${Date.now()}`,
-        type: 'prompt',
-        x,
-        y,
-        width: 300,
-        height: 100,
-        prompt: '',
-        position: { x, y },
-        size: { width: 300, height: 100 },
-        canvasId: currentCanvas.id,
-        rotation: 0,
-        status: 'idle'
-      };
-
-      setPromptElements(prev => [...prev, newPrompt]);
-      setTool('mouse');
-      setSelectedTool('mouse');
-    } else if (selectedTool === 'comment') {
-      const stage = e.target.getStage();
-      if (!stage) return;
-
-      const point = stage.getPointerPosition();
-      if (!point) return;
-
-      // Find clicked element
-      const clickedElement = elements.find(el => {
-        if (el.type !== 'board') return false;
-        const shape = stage.findOne(`#${el.id}`);
-        return shape && shape.isVisible();
+      
+      setCanvasStack(prev => {
+        const updated = prev.map(canvas => 
+          canvas.id === currentCanvas.id 
+            ? { ...canvas, elements: [...canvas.elements, newBoard.id] }
+            : canvas
+        );
+        console.log('Updated canvas stack:', updated);
+        return updated;
       });
+      
+      setSelectedId(boardId); // Select the board immediately after creation
+      setTool('mouse'); // Switch back to mouse tool
+      setSelectedTool('mouse');
+      return;
+    }
 
-      if (clickedElement) {
-        const newComment = {
-          id: uuidv4(),
-          type: 'comment' as const,
-          x: point.x,
-          y: point.y,
-          width: 200,
-          height: 100,
-          text: '',
-          targetId: clickedElement.id,
-          isNew: true,
-          canvasId: currentCanvas.id
-        };
+    // Handle other tools
+    if (isClickOnStage) {
+      switch (tool) {
+        case 'draw':
+          setIsDrawing(true);
+          const newLine = {
+            points: [pos.x, pos.y],
+            color: strokeColor,
+            width: strokeWidth,
+          };
+          setCurrentLine(newLine);
+          setLines(prev => [...prev, newLine]);
+          break;
 
-        setElements(prev => [...prev, newComment]);
-        return;
+        case 'todo':
+          const newSticky: TextElement = {
+            id: Date.now().toString(),
+            type: 'text',
+            x: pos.x,
+            y: pos.y,
+            text: 'Double click to edit',
+            fontSize: 16,
+            fill: '#F59E0B',
+            width: 150,
+            height: 150,
+            backgroundColor: '#FEF3C7',
+            rotation: 0,
+            isSticky: true,
+            canvasId: currentCanvas.id
+          };
+          setElements(prev => [...prev, newSticky]);
+          setCanvasStack(prev => prev.map(canvas => 
+            canvas.id === currentCanvas.id 
+              ? { ...canvas, elements: [...canvas.elements, newSticky.id] }
+              : canvas
+          ));
+          break;
+
+        case 'text':
+          const textElement: TextElement = {
+            id: Date.now().toString(),
+            type: 'text',
+            x: pos.x,
+            y: pos.y,
+            text: 'Double click to edit',
+            fontSize: 16,
+            fill: '#000000',
+            width: 200,
+            height: 30,
+            canvasId: currentCanvas.id
+          };
+          setElements(prev => [...prev, textElement]);
+          setCanvasStack(prev => prev.map(canvas => 
+            canvas.id === currentCanvas.id 
+              ? { ...canvas, elements: [...canvas.elements, textElement.id] }
+              : canvas
+          ));
+          break;
+
+        default:
+          setSelectedId(null);
+          break;
       }
       return;
-    } else {
-      // Handle element selection for all other tools
-      const elementId = e.target.parent?.attrs?.id || e.target.attrs?.id;
-      const element = elements.find(el => el.id === elementId);
+    }
 
-      if (element) {
-        if (tool === 'trash') {
-          setElements(prev => prev.filter(el => el.id !== elementId));
-      setSelectedId(null);
-        } else {
-          setSelectedId(elementId);
-        }
-      } else if (e.target === stage) {
+    // Handle element selection
+    const elementId = e.target.parent?.attrs?.id || e.target.attrs?.id;
+    const element = elements.find(el => el.id === elementId);
+
+    if (element) {
+      if (tool === 'trash') {
+        setElements(prev => prev.filter(el => el.id !== elementId));
         setSelectedId(null);
+      } else {
+        setSelectedId(elementId);
       }
     }
   };
@@ -887,15 +1001,26 @@ export default function Canvas({ name, description, projectId }: Props) {
     setStickyNotes(prev => prev.filter(note => note.id !== id));
   };
 
-  const handleToolSelect = (toolId: Tool) => {
+  const handleToolSelect = (toolId: Tool, templateId?: string) => {
+    console.log('Tool selected:', toolId, 'Template:', templateId, 'Current tool:', selectedTool);
+    
+    if (toolId === 'container' && templateId) {
+      setSelectedTemplateId(templateId);
+      setSelectedTool(toolId);
+      setTool(toolId);
+      return;
+    }
+    
     // If clicking the currently selected tool, switch back to mouse tool
     if (toolId === selectedTool) {
+      console.log('Switching back to mouse tool');
       setSelectedTool('mouse');
       setTool('mouse');
       setDrawingMode(false);
       return;
     }
 
+    console.log('Setting new tool:', toolId);
     setSelectedTool(toolId);
     setTool(toolId);
     
@@ -908,6 +1033,90 @@ export default function Canvas({ name, description, projectId }: Props) {
     // Handle special cases
     if (toolId === 'trash') {
       setSelectedId(null);
+    }
+  };
+
+  // Update the getContainerTemplate function return type
+  const getContainerTemplate = (templateId: string): ConceptDevelopmentTemplate | {
+    width: number;
+    height: number;
+    name: string;
+    backgroundColor: string;
+    borderColor: string;
+  } => {
+    switch (templateId) {
+      case 'concept-development':
+        return {
+          width: 1200,
+          height: 800,
+          name: 'Concept Development',
+          backgroundColor: '#FFFFFF',
+          borderColor: '#E5E7EB',
+          layout: {
+            projectInput: {
+              x: 0,
+              y: 0,
+              width: 400,
+              height: 700,
+              name: '',
+              backgroundColor: '#FFFFFF',
+              borderColor: '#E5E7EB',
+              borderRadius: 8
+            },
+            designTools: {
+              x: 450,
+              y: 0,
+              width: 700,
+              height: 400,
+              name: '',
+              backgroundColor: '#FFFFFF',
+              borderColor: '#E5E7EB',
+              borderRadius: 8
+            },
+            generatedOutput: {
+              x: 450,
+              y: 450,
+              width: 700,
+              height: 250,
+              name: '',
+              backgroundColor: '#FFFFFF',
+              borderColor: '#E5E7EB',
+              borderRadius: 8
+            }
+          }
+        };
+      case 'design-exploration':
+        return {
+          width: 600,
+          height: 400,
+          name: 'Design Exploration',
+          backgroundColor: '#EEF2FF',
+          borderColor: '#6366F1'
+        };
+      case 'visual-presentation':
+        return {
+          width: 600,
+          height: 400,
+          name: 'Visual Presentation',
+          backgroundColor: '#F0FDF4',
+          borderColor: '#22C55E'
+        };
+      case 'custom':
+        return {
+          width: 400,
+          height: 300,
+          name: 'Custom Template',
+          backgroundColor: '#FDF2F8',
+          borderColor: '#EC4899'
+        };
+      default:
+        return {
+          width: 300,
+          height: 200,
+          name: 'Container',
+          backgroundColor: '#F9FAFB',
+          borderColor: '#D1D5DB'
+        };
     }
   };
 
@@ -1001,118 +1210,66 @@ export default function Canvas({ name, description, projectId }: Props) {
   
   // Create grid pattern
   const renderGrid = () => {
-    const lines = [];
+    const dots = [];
     const width = dimensions.width - (isChatOpen ? 400 : 0);
     const height = dimensions.height;
     
-    // Add buffer to ensure grid extends beyond viewport
-    const bufferFactor = 2;
-    
-    // Calculate visible area based on position and scale with buffer
-    const startX = Math.floor((-position.x - width * bufferFactor) / (gridSize * scale));
-    const endX = Math.ceil((width * (1 + bufferFactor) - position.x) / (gridSize * scale));
-    const startY = Math.floor((-position.y - height * bufferFactor) / (gridSize * scale));
-    const endY = Math.ceil((height * (1 + bufferFactor) - position.y) / (gridSize * scale));
+    // Calculate visible area based on position and scale
+    const viewportLeft = -position.x / scale;
+    const viewportTop = -position.y / scale;
+    const viewportRight = (width - position.x) / scale;
+    const viewportBottom = (height - position.y) / scale;
 
-    // Calculate major grid interval based on zoom level
-    let majorGridInterval;
+    // Add small buffer to prevent popping at edges
+    const buffer = 100;
+    const startX = Math.floor((viewportLeft - buffer) / 16) * 16;
+    const endX = Math.ceil((viewportRight + buffer) / 16) * 16;
+    const startY = Math.floor((viewportTop - buffer) / 16) * 16;
+    const endY = Math.ceil((viewportBottom + buffer) / 16) * 16;
+
+    // Calculate dot size and spacing based on zoom level
+    let dotSize;
+    let dotSpacing;
     if (scale >= 4) {
-      majorGridInterval = 1;
+      dotSize = 1.5;
+      dotSpacing = 32;
     } else if (scale >= 2) {
-      majorGridInterval = 2;
+      dotSize = 1.25;
+      dotSpacing = 32;
     } else if (scale >= 1) {
-      majorGridInterval = 5;
+      dotSize = 1;
+      dotSpacing = 32;
     } else if (scale >= 0.5) {
-      majorGridInterval = 10;
-    } else if (scale >= 0.2) {
-      majorGridInterval = 20;
+      dotSize = 0.75;
+      dotSpacing = 48;
     } else {
-      majorGridInterval = 40;
+      dotSize = 0.5;
+      dotSpacing = 64;
     }
 
-    // Calculate subdivision interval based on zoom level
-    const shouldShowSubdivisions = scale >= 0.2;
-    const subdivisionSize = shouldShowSubdivisions ? gridSize / 2 : gridSize;
-
     // Calculate opacity based on zoom level
-    const getOpacity = (isMajor: boolean) => {
-      if (scale < 0.2) {
-        return isMajor ? 0.4 : 0;
-      } else if (scale < 0.5) {
-        return isMajor ? 0.35 : 0.1;
-      } else {
-        return isMajor ? 0.3 : 0.15;
-      }
-    };
+    const opacity = scale < 0.2 ? 0.15 : scale < 0.5 ? 0.2 : 0.25;
 
-    // Calculate stroke width based on zoom level
-    const getStrokeWidth = (isMajor: boolean) => {
-      if (scale < 0.2) {
-        return isMajor ? 0.75 : 0;
-      } else if (scale < 0.5) {
-        return isMajor ? 0.5 : 0.25;
-      } else {
-        return isMajor ? 0.5 : 0.25;
-      }
-    };
-
-    // Render vertical lines with extended range
-    for (let x = startX * 2; x <= endX * 2; x++) {
-      const actualX = Math.round(x * subdivisionSize);
-      const isMajor = x % (majorGridInterval * 2) === 0;
-      const isMinor = x % 2 === 0;
-      
-      if (!shouldShowSubdivisions && !isMinor) continue;
-
-      lines.push(
-        <Line
-          key={`v-${x}`}
-          points={[
-            actualX,
-            Math.round(startY * gridSize),
-            actualX,
-            Math.round(endY * gridSize)
-          ]}
-          stroke="#E5E5E5"
-          strokeWidth={getStrokeWidth(isMajor)}
-          opacity={getOpacity(isMajor)}
-          perfectDrawEnabled={true}
+    // Create dots only for visible area with spacing
+    for (let x = startX; x <= endX; x += dotSpacing) {
+      for (let y = startY; y <= endY; y += dotSpacing) {
+        dots.push(
+          <Circle
+            key={`${x}-${y}`}
+            x={x}
+            y={y}
+            radius={dotSize}
+            fill="#000000"
+            opacity={opacity}
+            perfectDrawEnabled={false}
             listening={false}
-          hitStrokeWidth={0}
-          lineCap="square"
+            hitStrokeWidth={0}
           />
         );
       }
-
-    // Render horizontal lines with extended range
-    for (let y = startY * 2; y <= endY * 2; y++) {
-      const actualY = Math.round(y * subdivisionSize);
-      const isMajor = y % (majorGridInterval * 2) === 0;
-      const isMinor = y % 2 === 0;
-      
-      if (!shouldShowSubdivisions && !isMinor) continue;
-
-      lines.push(
-        <Line
-          key={`h-${y}`}
-          points={[
-            Math.round(startX * gridSize),
-            actualY,
-            Math.round(endX * gridSize),
-            actualY
-          ]}
-          stroke="#E5E5E5"
-          strokeWidth={getStrokeWidth(isMajor)}
-          opacity={getOpacity(isMajor)}
-          perfectDrawEnabled={true}
-          listening={false}
-          hitStrokeWidth={0}
-          lineCap="square"
-        />
-      );
     }
 
-    return lines;
+    return dots;
   };
 
   const exportDrawing = async () => {
@@ -1503,12 +1660,110 @@ export default function Canvas({ name, description, projectId }: Props) {
     setBoardToDelete(null); // Reset the board to delete
   };
 
+  // Update the renderElement function to handle the new container types
   const renderElement = (element: CanvasElement) => {
     switch (element.type) {
+      case 'board': {
+        const boardElement = element as BoardElement;
+        const isSelected = selectedId === boardElement.id;
+        const shapeRef = useRef<Konva.Group>(null);
+        const trRef = useRef<Konva.Transformer>(null);
+
+        useEffect(() => {
+          if (isSelected && shapeRef.current && trRef.current) {
+            trRef.current.nodes([shapeRef.current]);
+            trRef.current.getLayer()?.batchDraw();
+          }
+        }, [isSelected]);
+
+        return (
+          <>
+            <Group
+              key={boardElement.id}
+              id={boardElement.id}
+              x={boardElement.x}
+              y={boardElement.y}
+              width={boardElement.width}
+              height={boardElement.height}
+              draggable={tool === 'mouse'}
+              ref={shapeRef}
+              onClick={() => setSelectedId(boardElement.id)}
+              onDragStart={handleDragStart}
+              onDragEnd={(e) => {
+                const node = e.target;
+                setElements(prev => prev.map(el => 
+                  el.id === node.id() 
+                    ? { ...el, x: node.x(), y: node.y() }
+                    : el
+                ));
+              }}
+              onTransformEnd={(e) => {
+                const node = e.target;
+                const scaleX = node.scaleX();
+                const scaleY = node.scaleY();
+                
+                node.scaleX(1);
+                node.scaleY(1);
+                
+                setElements(prev => prev.map(el => 
+                  el.id === node.id() 
+                    ? {
+                        ...el,
+                        x: node.x(),
+                        y: node.y(),
+                        width: Math.max(node.width() * scaleX, 100),
+                        height: Math.max(node.height() * scaleY, 100),
+                        rotation: node.rotation()
+                      }
+                    : el
+                ));
+              }}
+            >
+              <Board
+                id={boardElement.id}
+                x={0}
+                y={0}
+                width={boardElement.width}
+                height={boardElement.height}
+                name={boardElement.name}
+                isSelected={isSelected}
+                onNameChange={(newName) => handleBoardNameChange(boardElement.id, newName)}
+                onDelete={() => setBoardToDelete({ id: boardElement.id, name: boardElement.name })}
+                activeTool={tool}
+                onSelect={() => setSelectedId(boardElement.id)}
+                onChange={(attrs) => handleElementChange(boardElement.id, attrs)}
+                onDoubleClick={() => handleBoardDoubleClick(boardElement)}
+              />
+            </Group>
+            {isSelected && (
+              <Transformer
+                ref={trRef}
+                boundBoxFunc={(oldBox, newBox) => {
+                  const minWidth = 100;
+                  const minHeight = 100;
+                  if (newBox.width < minWidth || newBox.height < minHeight) {
+                    return oldBox;
+                  }
+                  return newBox;
+                }}
+                enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
+                rotateEnabled={true}
+                keepRatio={false}
+                padding={5}
+                anchorSize={10}
+                anchorCornerRadius={5}
+                borderStroke="#814ADA"
+                anchorStroke="#814ADA"
+                anchorFill="#fff"
+              />
+            )}
+          </>
+        );
+      }
       case 'text': {
         const textElement = element as TextElement;
         return (
-            <KonvaText
+          <KonvaText
             text={textElement.text}
             x={textElement.x}
             y={textElement.y}
@@ -1549,30 +1804,556 @@ export default function Canvas({ name, description, projectId }: Props) {
           />
         );
       }
-      case 'comment': {
-        const commentElement = element as CommentElement;
+      case 'container': {
+        const containerElement = element as CommentElement;
+        const isTemplateGroup = containerElement.content?.type === 'template-group';
+        
+        if (isTemplateGroup && containerElement.content?.containers) {
+          return (
+            <Group
+              x={containerElement.x}
+              y={containerElement.y}
+              width={containerElement.width}
+              height={containerElement.height}
+              draggable={tool === 'mouse'}
+              onClick={() => setSelectedId(containerElement.id)}
+              onDragStart={handleDragStart}
+              onDragEnd={(e) => {
+                const node = e.target;
+                setElements(prev => prev.map(el => 
+                  el.id === containerElement.id 
+                    ? { ...el, x: node.x(), y: node.y() }
+                    : el
+                ));
+              }}
+            >
+              {containerElement.content.containers.map((container) => (
+                <Group key={container.id}>
+                  {/* Drop Shadow Effect */}
+                  <Rect
+                    x={container.x + 4}
+                    y={container.y + 4}
+                    width={container.width}
+                    height={container.height}
+                    fill="#000000"
+                    opacity={0.04}
+                    cornerRadius={16}
+                    shadowBlur={10}
+                    shadowColor="rgba(0, 0, 0, 0.1)"
+                    shadowOffset={{ x: 0, y: 2 }}
+                    shadowOpacity={0.5}
+                  />
+                  {/* Main Container */}
+                  <Rect
+                    x={container.x}
+                    y={container.y}
+                    width={container.width}
+                    height={container.height}
+                    fill="#FFFFFF"
+                    stroke="#E0DAF3"
+                    strokeWidth={2}
+                    cornerRadius={16}
+                    shadowBlur={8}
+                    shadowColor="rgba(0, 0, 0, 0.06)"
+                    shadowOffset={{ x: 0, y: 1 }}
+                    shadowOpacity={0.3}
+                  />
+                  {container.name && (
+                    <KonvaText
+                      x={container.x + 16}
+                      y={container.y + 16}
+                      text={container.name}
+                      fontSize={18}
+                      fontFamily="Inter"
+                      fill="#1E293B"
+                      width={container.width - 32}
+                      height={30}
+                      wrap="word"
+                      align="left"
+                    />
+                  )}
+                  {container.type === 'project-input' && container.fields && (
+                    <Group>
+                      {/* Project Brief Section */}
+                      <Group>
+                        {/* Project Brief Header */}
+                        <KonvaText
+                          x={container.x + 24}
+                          y={container.y + 24}
+                          text="Project Brief"
+                          fontSize={18}
+                          fontFamily="Inter"
+                          fill="#1E293B"
+                          fontStyle="600"
+                        />
+
+                        <Rect
+                          x={container.x + 24}
+                          y={container.y + 72}
+                          width={container.width - 48}
+                          height={180}
+                          fill="#FFFFFF"
+                          stroke="#E0DAF3"
+                          cornerRadius={16}
+                        />
+                        <KonvaText
+                          x={container.x + 40}
+                          y={container.y + 112}
+                          text="Enter your project brief or requirements..."
+                          fontSize={16}
+                          fontFamily="Inter"
+                          fill="#9CA3AF"
+                        />
+                      </Group>
+
+                      {/* Upload Files Section */}
+                      <Group>
+                        <KonvaText
+                          x={container.x + 24}
+                          y={container.y + 288}
+                          text="Upload Files"
+                          fontSize={18}
+                          fontFamily="Inter"
+                          fill="#1E293B"
+                          fontStyle="600"
+                        />
+                        <Rect
+                          x={container.x + 24}
+                          y={container.y + 336}
+                          width={container.width - 48}
+                          height={200}
+                          fill="#FFFFFF"
+                          stroke="#E0DAF3"
+                          cornerRadius={16}
+                          dash={[8, 8]}
+                        />
+                        
+                        {/* Upload Icon */}
+                        <Path
+                          x={container.x + (container.width / 2) - 12}
+                          y={container.y + 396}
+                          data="M19 7v3h-2V7h-3V5h3V2h2v3h3v2h-3zm-3 11h8v-7h2v7c0 1.1-.9 2-2 2h-8c-1.1 0-2-.9-2-2v-7h2v7z"
+                          fill="#1E293B"
+                          scaleX={1.2}
+                          scaleY={1.2}
+                        />
+
+                        {/* Combined Upload Text */}
+                        <KonvaText
+                          x={container.x + 24}
+                          y={container.y + 436}
+                          width={container.width - 48}
+                          text="Upload files or drag and drop"
+                          fontSize={16}
+                          fontFamily="Inter"
+                          fill="#1E293B"
+                          align="center"
+                        />
+
+                        {/* File Type Info */}
+                        <KonvaText
+                          x={container.x + 24}
+                          y={container.y + 466}
+                          width={container.width - 48}
+                          text="PDF, images, or other documents up to 10MB"
+                          fontSize={14}
+                          fontFamily="Inter"
+                          fill="#6B7280"
+                          align="center"
+                        />
+
+                        {/* Save Input Button - Now at the bottom */}
+                        <Group>
+                          <Rect
+                            x={container.x + container.width - 120}
+                            y={container.y + 560}
+                            width={96}
+                            height={32}
+                            fill="#814ADA"
+                            cornerRadius={6}
+                            shadowColor="rgba(0, 0, 0, 0.1)"
+                            shadowBlur={4}
+                            shadowOffset={{ x: 0, y: 2 }}
+                            shadowOpacity={0.5}
+                          />
+                          <KonvaText
+                            x={container.x + container.width - 120}
+                            y={container.y + 560}
+                            width={96}
+                            height={32}
+                            text="Save Input"
+                            fontSize={14}
+                            fontFamily="Inter"
+                            fill="#FFFFFF"
+                            align="center"
+                            verticalAlign="middle"
+                          />
+                        </Group>
+                      </Group>
+                    </Group>
+                  )}
+                  {container.type === 'design-tools' && (
+                    <Group>
+                      {/* Tabs Container */}
+                      <Group>
+                        {['Site Analysis', 'Case Studies', 'Concept'].map((tab, index) => (
+                          <Group key={tab}>
+                            {/* Tab Background */}
+                            <Rect
+                              x={container.x + (index * (container.width / 3))}
+                              y={container.y + 24}
+                              width={container.width / 3}
+                              height={40}
+                              fill={index === 0 ? '#F5F3FF' : '#FFFFFF'}
+                              cornerRadius={8}
+                            />
+                            {/* Tab Text */}
+                            <KonvaText
+                              x={container.x + (index * (container.width / 3))}
+                              y={container.y + 34}
+                              width={container.width / 3}
+                              text={tab}
+                              fontSize={14}
+                              fontFamily="Inter"
+                              fill={index === 0 ? '#814ADA' : '#6B7280'}
+                              align="center"
+                              verticalAlign="middle"
+                            />
+                          </Group>
+                        ))}
+                      </Group>
+
+                      {/* Site Analysis Content */}
+                      <Group y={80}>
+                        {/* Description Input Box */}
+                        <Rect
+                          x={container.x + 24}
+                          y={container.y}
+                          width={container.width - 48}
+                          height={60}
+                          fill="#FFFFFF"
+                          stroke="#E0DAF3"
+                          cornerRadius={8}
+                        />
+                        <KonvaText
+                          x={container.x + 40}
+                          y={container.y + 16}
+                          text="Describe your site..."
+                          fontSize={14}
+                          fontFamily="Inter"
+                          fill="#9CA3AF"
+                        />
+
+                        {/* Color-coded Tags with dynamic row wrapping */}
+                        <Group>
+                          {(() => {
+                            interface Tag {
+                              tag: string;
+                              color: string;
+                              textColor: string;
+                              x?: number;
+                            }
+
+                            const tags: Tag[] = [
+                              { tag: 'Enclosed', color: '#ECFDF5', textColor: '#047857' },
+                              { tag: 'Permeable', color: '#FEFCE8', textColor: '#854D0E' },
+                              { tag: 'Layered', color: '#F0F9FF', textColor: '#075985' },
+                              { tag: 'Intimate', color: '#FFF7ED', textColor: '#9A3412' },
+                              { tag: 'Ethereal', color: '#ECFDF5', textColor: '#047857' },
+                              { tag: 'Dynamic', color: '#FEFCE8', textColor: '#854D0E' },
+                              { tag: 'Serene', color: '#F0F9FF', textColor: '#075985' },
+                              { tag: 'Textured', color: '#FFF7ED', textColor: '#9A3412' }
+                            ];
+
+                            const rows: Tag[][] = [[]];
+                            let currentRow = 0;
+                            let currentX = 24;
+
+                            tags.forEach((tag) => {
+                              const tagWidth = tag.tag.length * 8 + 32;
+                              
+                              if (currentX + tagWidth > container.width - 48) {
+                                currentRow++;
+                                currentX = 24;
+                                rows[currentRow] = [];
+                              }
+                              
+                              if (!rows[currentRow]) {
+                                rows[currentRow] = [];
+                              }
+                              
+                              rows[currentRow].push({
+                                ...tag,
+                                x: currentX
+                              });
+                              
+                              currentX += tagWidth + 12;
+                            });
+
+                            return rows.map((row, rowIndex) => 
+                              row.map((item) => (
+                                <Group key={`${rowIndex}-${item.tag}`}>
+                                  <Rect
+                                    x={container.x + (item.x || 0)}
+                                    y={container.y + 80 + (rowIndex * 36)}
+                                    width={item.tag.length * 8 + 32}
+                                    height={28}
+                                    fill={item.color}
+                                    stroke={item.textColor}
+                                    strokeWidth={1}
+                                    cornerRadius={14}
+                                  />
+                                  <KonvaText
+                                    x={container.x + (item.x || 0) + 16}
+                                    y={container.y + 80 + (rowIndex * 36)}
+                                    width={item.tag.length * 8}
+                                    height={28}
+                                    text={item.tag}
+                                    fontSize={12}
+                                    fontFamily="Inter"
+                                    fill={item.textColor}
+                                    align="left"
+                                    verticalAlign="middle"
+                                  />
+                                </Group>
+                              ))
+                            );
+                          })()}
+                        </Group>
+
+                        {/* Bottom Controls Group */}
+                        <Group y={200}>
+                          {/* Abstraction Level Slider - Left Side */}
+                          <Group>
+                            {/* Slider Heading */}
+                            <KonvaText
+                              x={container.x + 24}
+                              y={container.y}
+                              text="How abstract do you want your site statement?"
+                              fontSize={14}
+                              fontFamily="Inter"
+                              fill="#4B5563"
+                              fontStyle="500"
+                            />
+
+                            {/* Purple Track Background */}
+                            <Rect
+                              x={container.x + 24}
+                              y={container.y + 36}
+                              width={300}
+                              height={4}
+                              fill="#E5E7EB"
+                              cornerRadius={2}
+                            />
+                            
+                            {/* Purple Active Track */}
+                            <Rect
+                              x={container.x + 24}
+                              y={container.y + 36}
+                              width={150}
+                              height={4}
+                              fill="#814ADA"
+                              cornerRadius={2}
+                            />
+                            
+                            {/* Purple Handle */}
+                            <Circle
+                              x={container.x + 174}
+                              y={container.y + 38}
+                              radius={12}
+                              fill="#814ADA"
+                            />
+
+                            {/* Icons and Labels */}
+                            <Group x={container.x + 24} y={container.y + 52}>
+                              <KonvaText
+                                text="✏️"
+                                fontSize={16}
+                                y={2}
+                              />
+                              <KonvaText
+                                x={24}
+                                text="Literal"
+                                fontSize={14}
+                                fontFamily="Inter"
+                                fill="#6B7280"
+                              />
+                              <KonvaText
+                                x={132}
+                                text="Balanced"
+                                fontSize={14}
+                                fontFamily="Inter"
+                                fill="#6B7280"
+                              />
+                              <KonvaText
+                                x={240}
+                                text="✨"
+                                fontSize={16}
+                                y={2}
+                              />
+                              <KonvaText
+                                x={264}
+                                text="Poetic"
+                                fontSize={14}
+                                fontFamily="Inter"
+                                fill="#6B7280"
+                              />
+                            </Group>
+                          </Group>
+
+                          {/* Generate Button - Right Side */}
+                          <Group x={container.x + container.width - 224}>
+                            <Rect
+                              x={0}
+                              y={container.y + 24}
+                              width={200}
+                              height={36}
+                              fill="#814ADA"
+                              cornerRadius={18}
+                              shadowColor="rgba(0, 0, 0, 0.1)"
+                              shadowBlur={4}
+                              shadowOffset={{ x: 0, y: 2 }}
+                              shadowOpacity={0.5}
+                            />
+                            <KonvaText
+                              x={0}
+                              y={container.y + 24}
+                              width={200}
+                              height={36}
+                              text="Generate Site Statement"
+                              fontSize={14}
+                              fontFamily="Inter"
+                              fill="#FFFFFF"
+                              align="center"
+                              verticalAlign="middle"
+                            />
+                          </Group>
+                        </Group>
+                      </Group>
+                    </Group>
+                  )}
+                  {container.type === 'generated-output' && (
+                    <Group>
+                      {/* Dotted Frame */}
+                      <Rect
+                        x={container.x + 24}
+                        y={container.y + 24}
+                        width={container.width - 48}
+                        height={container.height - 48}
+                        stroke="#9CA3AF"
+                        strokeWidth={2}
+                        dash={[6, 6]}
+                        cornerRadius={8}
+                      />
+                      
+                      {/* Placeholder Text */}
+                      <KonvaText
+                        x={container.x + 24}
+                        y={container.y + (container.height - 48) / 2}
+                        width={container.width - 48}
+                        text="Generated content will appear here"
+                        fontSize={14}
+                        fontFamily="Inter"
+                        fill="#6B7280"
+                        align="center"
+                      />
+                    </Group>
+                  )}
+                </Group>
+              ))}
+            </Group>
+          );
+        }
         return (
           <Group>
-            <CommentBubble
-              key={commentElement.id}
-              id={commentElement.id}
-              x={commentElement.x}
-              y={commentElement.y}
-              text={commentElement.text}
-              isNew={false}
-              onSave={(text) => {
-                setElements(prev =>
-                  prev.map(el =>
-                    el.id === commentElement.id && el.type === 'comment'
-                      ? { ...el, text }
-                      : el
-                  )
-                );
-              }}
-              onCancel={() => {
-                setElements(prev => prev.filter(el => el.id !== commentElement.id));
-              }}
+            <Rect
+              x={0}
+              y={0}
+              width={containerElement.width}
+              height={containerElement.height}
+              fill={containerElement.backgroundColor || '#FFFFFF'}
+              stroke={containerElement.borderColor || '#E5E7EB'}
+              strokeWidth={2}
+              cornerRadius={containerElement.borderRadius || 8}
             />
+            <KonvaText
+              x={16}
+              y={16}
+              text={containerElement.text}
+              fontSize={18}
+              fontFamily="Inter"
+              fill="#4A1D96" // Dark purple for headings
+              width={containerElement.width - 32}
+              height={30}
+              wrap="word"
+              align="left"
+            />
+            {containerElement.content?.type === 'project-input' && (
+              <Group y={56}>
+                {containerElement.content.fields?.map((field, index) => (
+                  <Group key={field.label} y={index * 120}>
+                    <KonvaText
+                      x={16}
+                      y={0}
+                      text={field.label}
+                      fontSize={14}
+                      fontFamily="Inter"
+                      fill="#4A1D96"
+                      width={containerElement.width - 32}
+                    />
+                    <Rect
+                      x={16}
+                      y={24}
+                      width={containerElement.width - 32}
+                      height={field.type === 'text-area' ? 100 : 80}
+                      fill="#F9FAFB"
+                      stroke="#E5E7EB"
+                      cornerRadius={6}
+                    />
+                    <KonvaText
+                      x={24}
+                      y={40}
+                      text={field.placeholder || ''}
+                      fontSize={14}
+                      fontFamily="Inter"
+                      fill="#9CA3AF"
+                      width={containerElement.width - 48}
+                    />
+                  </Group>
+                ))}
+              </Group>
+            )}
+            {containerElement.content?.type === 'design-tools' && (
+              <Group>
+                {containerElement.content.tools?.map((tool, index) => (
+                  <Group key={tool.id} x={16 + (index * (containerElement.width - 32) / 3)} y={0}>
+                    <Rect
+                      width={(containerElement.width - 64) / 3}
+                      height={80}
+                      fill="#FFFFFF"
+                      stroke="#814ADA"
+                      cornerRadius={6}
+                    />
+                    <KonvaText
+                      y={20}
+                      text={tool.icon}
+                      fontSize={24}
+                      width={(containerElement.width - 64) / 3}
+                      align="center"
+                    />
+                    <KonvaText
+                      y={50}
+                      text={tool.name}
+                      fontSize={14}
+                      fontFamily="Inter"
+                      fill="#814ADA"
+                      width={(containerElement.width - 64) / 3}
+                      align="center"
+                    />
+                  </Group>
+                ))}
+              </Group>
+            )}
           </Group>
         );
       }
@@ -2227,6 +3008,23 @@ export default function Canvas({ name, description, projectId }: Props) {
         onClose={() => setShowInviteModal(false)}
         onInvite={handleInviteCollaborator}
       />
+
+      <div 
+        className="absolute inset-0"
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        style={{
+          pointerEvents: isDragging ? 'auto' : 'none',
+          zIndex: 1000
+        }}
+      >
+        {isDragging && (
+          <div className="absolute inset-0 bg-purple-50/50 border-2 border-dashed border-purple-500 rounded-lg flex items-center justify-center">
+            <p className="text-purple-600 font-medium">Drop image here</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 } 

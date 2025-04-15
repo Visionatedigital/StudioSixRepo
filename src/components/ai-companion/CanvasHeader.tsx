@@ -8,6 +8,8 @@ import { useSession, signOut } from 'next-auth/react';
 import MessageInbox from '../MessageInbox';
 import { UserPlus } from 'lucide-react';
 import { VerifiedBadge } from '../VerifiedBadge';
+import { saveAsTemplate } from '@/lib/canvas-utils';
+import { Stage } from 'konva/lib/Stage';
 
 interface Collaborator {
   id: string;
@@ -31,6 +33,7 @@ interface CanvasHeaderProps {
   isSaving: boolean;
   onSave: () => void;
   projectId?: string;
+  stageRef?: React.RefObject<Stage>;
 }
 
 // Collaborator Avatars Component
@@ -108,7 +111,8 @@ export default function CanvasHeader({
   canRedo,
   isSaving,
   onSave,
-  projectId
+  projectId,
+  stageRef
 }: CanvasHeaderProps) {
   const { data: session } = useSession();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -128,6 +132,25 @@ export default function CanvasHeader({
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [profileRef]);
+
+  const handleSaveAsTemplate = async () => {
+    if (!stageRef?.current) return;
+
+    try {
+      await saveAsTemplate(
+        stageRef.current,
+        `${projectName} Template`,
+        `Template based on ${projectName}`,
+        'concept',
+        true
+      );
+      // Show success message
+      alert('Template saved successfully!');
+    } catch (error) {
+      console.error('Error saving template:', error);
+      alert('Failed to save template');
+    }
+  };
 
   return (
     <div className="fixed top-0 left-0 right-0 z-50 flex justify-between items-center px-4 py-2 bg-gray-50">
@@ -214,6 +237,14 @@ export default function CanvasHeader({
               <span>Save</span>
             </>
           )}
+        </button>
+
+        <button
+          onClick={handleSaveAsTemplate}
+          className="flex items-center space-x-2 px-3 py-1.5 text-sm bg-white border border-purple-600 text-purple-600 hover:bg-purple-100 rounded-md transition-colors"
+        >
+          <Icon name="template" size={16} />
+          <span>Save as Template</span>
         </button>
 
         <div className="h-5 w-px bg-gray-300 mx-2" />

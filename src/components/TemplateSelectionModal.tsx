@@ -34,19 +34,19 @@ export default function TemplateSelectionModal({
       id: 'concept-development',
       title: 'Concept Development',
       description: 'Start turning your ideas and site constraints into a visual concept. Scribble early thoughts, analyze site data, explore precedent studies, and let AI assist with creative prompts.',
-      image: '/images/templates/concept-development.jpg'
+      image: '/images/390d22aaf3ca6d926787a845d1271e54.jpg'
     },
     {
       id: 'design-exploration',
       title: 'Design Exploration',
       description: 'Already have a starting point? Use this space to test layouts, evolve your design language, and get suggestions to improve what you\'ve begun.',
-      image: '/images/templates/design-exploration.jpg'
+      image: '/images/e18702bb-df05-47f2-92d0-d14ee8a17099.png'
     },
     {
       id: 'visual-presentation',
       title: 'Visual Presentation',
       description: 'Need to communicate your idea clearly? Use this space to compile moodboards, generate renders, and create a visual story your client will love.',
-      image: '/images/templates/visual-presentation.jpg'
+      image: '/images/30141da2-23de-483e-9baf-9160daa3449c.png'
     }
   ];
   
