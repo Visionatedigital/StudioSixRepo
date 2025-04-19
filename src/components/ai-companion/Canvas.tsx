@@ -23,7 +23,9 @@ import {
   BaseElement, 
   CommentElement, 
   GeneratedImageElement,
-  ImageElement
+  ImageElement,
+  ContainerElement,
+  ShapeElement
 } from '@/types/canvas';
 import dynamic from 'next/dynamic';
 import { Stage, Layer, Rect, Circle, Line, Text as KonvaText, Image as KonvaImage, Transformer, Group, Path } from 'react-konva';
@@ -38,6 +40,12 @@ import CanvasHeader from './CanvasHeader';
 import { io, Socket } from 'socket.io-client';
 import CollaboratorCursor from './CollaboratorCursor';
 import React from 'react';
+import SiteAnalysisGenerator from './SiteAnalysisGenerator';
+import SiteAnalysisDisplay from './SiteAnalysisDisplay';
+import { Html } from 'react-konva-utils';
+import FileUploadContainer from './FileUploadContainer';
+import { generateSiteAnalysis } from '@/services/siteAnalysis';
+import { processFile } from '@/utils/imageProcessing';
 
 // Dynamically import Stage with no SSR
 const DynamicStage = dynamic(() => import('react-konva').then((mod) => mod.Stage), {
@@ -169,6 +177,20 @@ interface TemplateGroup extends CommentElement {
   };
 }
 
+interface GeneratedContentElement extends BaseElement {
+  type: 'generated-content';
+  content: {
+    siteStatement: string;
+    swot: {
+      strengths: string[];
+      weaknesses: string[];
+      opportunities: string[];
+      threats: string[];
+    };
+    keyCharacteristics: string[];
+  };
+}
+
 export default function Canvas({ name, description, projectId }: Props) {
   const { data: session } = useSession();
   const searchParams = useSearchParams();
@@ -227,6 +249,18 @@ export default function Canvas({ name, description, projectId }: Props) {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [collaboratorCursors, setCollaboratorCursors] = useState<{ [key: string]: CollaboratorCursor }>({});
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [projectBrief, setProjectBrief] = useState<string>('');
+  const [uploadedFiles, setUploadedFiles] = useState<Array<{
+    id: string;
+    name: string;
+    file: File;
+    status: 'uploading' | 'complete';
+    progress: number;
+  }>>([]);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [siteDescription, setSiteDescription] = useState('');
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [abstractionLevel, setAbstractionLevel] = useState(50);
 
   // Get current canvas data with safety check
   const currentCanvas = canvasStack[currentCanvasIndex] || canvasStack[0];
@@ -722,30 +756,30 @@ export default function Canvas({ name, description, projectId }: Props) {
         return;
       } else {
         // Handle other templates as before
-        const containerId = uuidv4();
-        const newContainer: CommentElement = {
-          id: containerId,
-          type: 'container',
-          x: pos.x,
-          y: pos.y,
+      const containerId = uuidv4();
+      const newContainer: CommentElement = {
+        id: containerId,
+        type: 'container',
+        x: pos.x,
+        y: pos.y,
           width: template.width || 300,
           height: template.height || 200,
           text: template.name || 'Container',
-          targetId: '',
-          canvasId: currentCanvas.id,
-          rotation: 0,
+        targetId: '',
+        canvasId: currentCanvas.id,
+        rotation: 0,
           backgroundColor: template.backgroundColor || '#FFFFFF',
           borderColor: template.borderColor || '#E5E7EB'
-        };
-        
-        setElements(prev => [...prev, newContainer]);
-        setCanvasStack(prev => prev.map(canvas => 
-          canvas.id === currentCanvas.id 
-            ? { ...canvas, elements: [...canvas.elements, newContainer.id] }
-            : canvas
-        ));
-        
-        setSelectedId(containerId);
+      };
+      
+      setElements(prev => [...prev, newContainer]);
+      setCanvasStack(prev => prev.map(canvas => 
+        canvas.id === currentCanvas.id 
+          ? { ...canvas, elements: [...canvas.elements, newContainer.id] }
+          : canvas
+      ));
+      
+      setSelectedId(containerId);
       }
       
       setTool('mouse');
@@ -1056,7 +1090,7 @@ export default function Canvas({ name, description, projectId }: Props) {
             projectInput: {
               x: 0,
               y: 0,
-              width: 400,
+          width: 400,
               height: 700,
               name: '',
               backgroundColor: '#FFFFFF',
@@ -1263,7 +1297,7 @@ export default function Canvas({ name, description, projectId }: Props) {
             opacity={opacity}
             perfectDrawEnabled={false}
             listening={false}
-            hitStrokeWidth={0}
+          hitStrokeWidth={0}
           />
         );
       }
@@ -1805,7 +1839,7 @@ export default function Canvas({ name, description, projectId }: Props) {
         );
       }
       case 'container': {
-        const containerElement = element as CommentElement;
+        const containerElement = element as ContainerElement;
         const isTemplateGroup = containerElement.content?.type === 'template-group';
         
         if (isTemplateGroup && containerElement.content?.containers) {
@@ -1878,8 +1912,8 @@ export default function Canvas({ name, description, projectId }: Props) {
                       <Group>
                         {/* Project Brief Header */}
                         <KonvaText
-                          x={container.x + 24}
-                          y={container.y + 24}
+                          x={24}
+                          y={24}
                           text="Project Brief"
                           fontSize={18}
                           fontFamily="Inter"
@@ -1887,347 +1921,197 @@ export default function Canvas({ name, description, projectId }: Props) {
                           fontStyle="600"
                         />
 
-                        <Rect
-                          x={container.x + 24}
-                          y={container.y + 72}
-                          width={container.width - 48}
-                          height={180}
-                          fill="#FFFFFF"
-                          stroke="#E0DAF3"
-                          cornerRadius={16}
-                        />
-                        <KonvaText
-                          x={container.x + 40}
-                          y={container.y + 112}
-                          text="Enter your project brief or requirements..."
-                          fontSize={16}
-                          fontFamily="Inter"
-                          fill="#9CA3AF"
-                        />
+                        {/* Project Brief Input Box */}
+                        <Html
+                          divProps={{
+                            style: {
+                              position: 'absolute',
+                              width: '352px',
+                              top: '60px',
+                              left: '24px'
+                            }
+                          }}
+                        >
+                          <textarea
+                            value={projectBrief}
+                            onChange={(e) => setProjectBrief(e.target.value)}
+                            placeholder="Enter your project brief or requirements..."
+                            className="w-full h-[120px] p-4 bg-white border border-[#E0DAF3] rounded-2xl resize-none text-gray-600 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                            style={{
+                              fontSize: '16px',
+                              fontFamily: 'Inter, sans-serif',
+                            }}
+                          />
+                        </Html>
                       </Group>
 
-                      {/* Upload Files Section */}
-                      <Group>
+                      {/* Upload Files Section - with fixed positioning */}
+                      <Group y={200}>
+                        {/* Upload Files Header */}
                         <KonvaText
-                          x={container.x + 24}
-                          y={container.y + 288}
+                          x={24}
+                          y={24}
                           text="Upload Files"
                           fontSize={18}
                           fontFamily="Inter"
                           fill="#1E293B"
                           fontStyle="600"
                         />
+
+                        {/* Upload Area */}
+                        <Html
+                          divProps={{
+                            style: {
+                              position: 'absolute',
+                              width: '352px',
+                              top: '60px',
+                              left: '24px'
+                            }
+                          }}
+                        >
+                          <div className="space-y-4">
+                            <FileUploadContainer
+                              onFilesChange={(files) => {
+                                const newFiles = files.map(file => ({
+                                  id: uuidv4(),
+                                  name: file.name,
+                                  file,
+                                  status: 'uploading' as const,
+                                  progress: 0
+                                }));
+                                
+                                setUploadedFiles(prev => [...prev, ...newFiles]);
+                                newFiles.forEach(fileEntry => {
+                                  simulateFileUpload(fileEntry.id);
+                                });
+                              }}
+                              maxFiles={5}
+                              accept={{
+                                'image/*': ['.png', '.jpg', '.jpeg'],
+                                'application/pdf': ['.pdf'],
+                                'application/msword': ['.doc'],
+                                'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx']
+                              }}
+                            />
+                          </div>
+                        </Html>
+                      </Group>
+
+                      {/* Save Input Button */}
+                      <Group>
                         <Rect
-                          x={container.x + 24}
-                          y={container.y + 336}
-                          width={container.width - 48}
-                          height={200}
-                          fill="#FFFFFF"
-                          stroke="#E0DAF3"
-                          cornerRadius={16}
-                          dash={[8, 8]}
+                          x={container.width - 120}
+                          y={560}
+                          width={96}
+                          height={32}
+                          fill="#814ADA"
+                          cornerRadius={6}
+                          shadowColor="rgba(0, 0, 0, 0.1)"
+                          shadowBlur={4}
+                          shadowOffset={{ x: 0, y: 2 }}
+                          shadowOpacity={0.5}
                         />
-                        
-                        {/* Upload Icon */}
-                        <Path
-                          x={container.x + (container.width / 2) - 12}
-                          y={container.y + 396}
-                          data="M19 7v3h-2V7h-3V5h3V2h2v3h3v2h-3zm-3 11h8v-7h2v7c0 1.1-.9 2-2 2h-8c-1.1 0-2-.9-2-2v-7h2v7z"
-                          fill="#1E293B"
-                          scaleX={1.2}
-                          scaleY={1.2}
-                        />
-
-                        {/* Combined Upload Text */}
                         <KonvaText
-                          x={container.x + 24}
-                          y={container.y + 436}
-                          width={container.width - 48}
-                          text="Upload files or drag and drop"
-                          fontSize={16}
-                          fontFamily="Inter"
-                          fill="#1E293B"
-                          align="center"
-                        />
-
-                        {/* File Type Info */}
-                        <KonvaText
-                          x={container.x + 24}
-                          y={container.y + 466}
-                          width={container.width - 48}
-                          text="PDF, images, or other documents up to 10MB"
+                          x={container.width - 120}
+                          y={560}
+                          width={96}
+                          height={32}
+                          text="Save Input"
                           fontSize={14}
                           fontFamily="Inter"
-                          fill="#6B7280"
+                          fill="#FFFFFF"
                           align="center"
+                          verticalAlign="middle"
                         />
-
-                        {/* Save Input Button - Now at the bottom */}
-                        <Group>
-                          <Rect
-                            x={container.x + container.width - 120}
-                            y={container.y + 560}
-                            width={96}
-                            height={32}
-                            fill="#814ADA"
-                            cornerRadius={6}
-                            shadowColor="rgba(0, 0, 0, 0.1)"
-                            shadowBlur={4}
-                            shadowOffset={{ x: 0, y: 2 }}
-                            shadowOpacity={0.5}
-                          />
-                          <KonvaText
-                            x={container.x + container.width - 120}
-                            y={container.y + 560}
-                            width={96}
-                            height={32}
-                            text="Save Input"
-                            fontSize={14}
-                            fontFamily="Inter"
-                            fill="#FFFFFF"
-                            align="center"
-                            verticalAlign="middle"
-                          />
-                        </Group>
                       </Group>
                     </Group>
                   )}
                   {container.type === 'design-tools' && (
                     <Group>
-                      {/* Tabs Container */}
-                      <Group>
-                        {['Site Analysis', 'Case Studies', 'Concept'].map((tab, index) => (
-                          <Group key={tab}>
-                            {/* Tab Background */}
-                            <Rect
-                              x={container.x + (index * (container.width / 3))}
-                              y={container.y + 24}
-                              width={container.width / 3}
-                              height={40}
-                              fill={index === 0 ? '#F5F3FF' : '#FFFFFF'}
-                              cornerRadius={8}
-                            />
-                            {/* Tab Text */}
-                            <KonvaText
-                              x={container.x + (index * (container.width / 3))}
-                              y={container.y + 34}
-                              width={container.width / 3}
-                              text={tab}
-                              fontSize={14}
-                              fontFamily="Inter"
-                              fill={index === 0 ? '#814ADA' : '#6B7280'}
-                              align="center"
-                              verticalAlign="middle"
-                            />
-                          </Group>
-                        ))}
-                      </Group>
-
-                      {/* Site Analysis Content */}
-                      <Group y={80}>
-                        {/* Description Input Box */}
-                        <Rect
-                          x={container.x + 24}
-                          y={container.y}
-                          width={container.width - 48}
-                          height={60}
-                          fill="#FFFFFF"
-                          stroke="#E0DAF3"
-                          cornerRadius={8}
-                        />
-                        <KonvaText
-                          x={container.x + 40}
-                          y={container.y + 16}
-                          text="Describe your site..."
-                          fontSize={14}
-                          fontFamily="Inter"
-                          fill="#9CA3AF"
-                        />
-
-                        {/* Color-coded Tags with dynamic row wrapping */}
+                      {/* Main container for design tools */}
+                      <Rect
+                        x={container.x}
+                        y={container.y}
+                        width={container.width}
+                        height={container.height}
+                        fill="#FFFFFF"
+                        stroke="#E0DAF3"
+                        strokeWidth={1}
+                        cornerRadius={8}
+                      />
+                      
+                      {/* Tabs and content container */}
+                      <Group x={container.x} y={container.y}>
+                        {/* Tabs row */}
                         <Group>
-                          {(() => {
-                            interface Tag {
-                              tag: string;
-                              color: string;
-                              textColor: string;
-                              x?: number;
-                            }
-
-                            const tags: Tag[] = [
-                              { tag: 'Enclosed', color: '#ECFDF5', textColor: '#047857' },
-                              { tag: 'Permeable', color: '#FEFCE8', textColor: '#854D0E' },
-                              { tag: 'Layered', color: '#F0F9FF', textColor: '#075985' },
-                              { tag: 'Intimate', color: '#FFF7ED', textColor: '#9A3412' },
-                              { tag: 'Ethereal', color: '#ECFDF5', textColor: '#047857' },
-                              { tag: 'Dynamic', color: '#FEFCE8', textColor: '#854D0E' },
-                              { tag: 'Serene', color: '#F0F9FF', textColor: '#075985' },
-                              { tag: 'Textured', color: '#FFF7ED', textColor: '#9A3412' }
-                            ];
-
-                            const rows: Tag[][] = [[]];
-                            let currentRow = 0;
-                            let currentX = 24;
-
-                            tags.forEach((tag) => {
-                              const tagWidth = tag.tag.length * 8 + 32;
-                              
-                              if (currentX + tagWidth > container.width - 48) {
-                                currentRow++;
-                                currentX = 24;
-                                rows[currentRow] = [];
-                              }
-                              
-                              if (!rows[currentRow]) {
-                                rows[currentRow] = [];
-                              }
-                              
-                              rows[currentRow].push({
-                                ...tag,
-                                x: currentX
-                              });
-                              
-                              currentX += tagWidth + 12;
-                            });
-
-                            return rows.map((row, rowIndex) => 
-                              row.map((item) => (
-                                <Group key={`${rowIndex}-${item.tag}`}>
-                                  <Rect
-                                    x={container.x + (item.x || 0)}
-                                    y={container.y + 80 + (rowIndex * 36)}
-                                    width={item.tag.length * 8 + 32}
-                                    height={28}
-                                    fill={item.color}
-                                    stroke={item.textColor}
-                                    strokeWidth={1}
-                                    cornerRadius={14}
-                                  />
-                                  <KonvaText
-                                    x={container.x + (item.x || 0) + 16}
-                                    y={container.y + 80 + (rowIndex * 36)}
-                                    width={item.tag.length * 8}
-                                    height={28}
-                                    text={item.tag}
-                                    fontSize={12}
-                                    fontFamily="Inter"
-                                    fill={item.textColor}
-                                    align="left"
-                                    verticalAlign="middle"
-                                  />
-                                </Group>
-                              ))
-                            );
-                          })()}
-                        </Group>
-
-                        {/* Bottom Controls Group */}
-                        <Group y={200}>
-                          {/* Abstraction Level Slider - Left Side */}
-                          <Group>
-                            {/* Slider Heading */}
-                            <KonvaText
-                              x={container.x + 24}
-                              y={container.y}
-                              text="How abstract do you want your site statement?"
-                              fontSize={14}
-                              fontFamily="Inter"
-                              fill="#4B5563"
-                              fontStyle="500"
-                            />
-
-                            {/* Purple Track Background */}
-                            <Rect
-                              x={container.x + 24}
-                              y={container.y + 36}
-                              width={300}
-                              height={4}
-                              fill="#E5E7EB"
-                              cornerRadius={2}
-                            />
-                            
-                            {/* Purple Active Track */}
-                            <Rect
-                              x={container.x + 24}
-                              y={container.y + 36}
-                              width={150}
-                              height={4}
-                              fill="#814ADA"
-                              cornerRadius={2}
-                            />
-                            
-                            {/* Purple Handle */}
-                            <Circle
-                              x={container.x + 174}
-                              y={container.y + 38}
-                              radius={12}
-                              fill="#814ADA"
-                            />
-
-                            {/* Icons and Labels */}
-                            <Group x={container.x + 24} y={container.y + 52}>
-                              <KonvaText
-                                text="✏️"
-                                fontSize={16}
-                                y={2}
+                          {['Site Analysis', 'Case Studies', 'Concept'].map((tab, index) => (
+                            <Group key={tab}>
+                              {/* Tab Background */}
+                              <Rect
+                                x={index * (container.width / 3) + (container.width / 6) - 60}
+                                y={16}
+                                width={120}
+                                height={40}
+                                fill={index === 0 ? '#F5F3FF' : '#FFFFFF'}
+                                cornerRadius={8}
+                                visible={index === 0}
                               />
+                              {/* Tab Text */}
                               <KonvaText
-                                x={24}
-                                text="Literal"
+                                x={index * (container.width / 3)}
+                                y={26}
+                                width={container.width / 3}
+                                text={tab}
                                 fontSize={14}
                                 fontFamily="Inter"
-                                fill="#6B7280"
-                              />
-                              <KonvaText
-                                x={132}
-                                text="Balanced"
-                                fontSize={14}
-                                fontFamily="Inter"
-                                fill="#6B7280"
-                              />
-                              <KonvaText
-                                x={240}
-                                text="✨"
-                                fontSize={16}
-                                y={2}
-                              />
-                              <KonvaText
-                                x={264}
-                                text="Poetic"
-                                fontSize={14}
-                                fontFamily="Inter"
-                                fill="#6B7280"
+                                fill={index === 0 ? '#814ADA' : '#6B7280'}
+                                align="center"
+                                verticalAlign="middle"
                               />
                             </Group>
-                          </Group>
+                          ))}
+                        </Group>
 
-                          {/* Generate Button - Right Side */}
-                          <Group x={container.x + container.width - 224}>
-                            <Rect
-                              x={0}
-                              y={container.y + 24}
-                              width={200}
-                              height={36}
-                              fill="#814ADA"
-                              cornerRadius={18}
-                              shadowColor="rgba(0, 0, 0, 0.1)"
-                              shadowBlur={4}
-                              shadowOffset={{ x: 0, y: 2 }}
-                              shadowOpacity={0.5}
-                            />
-                            <KonvaText
-                              x={0}
-                              y={container.y + 24}
-                              width={200}
-                              height={36}
-                              text="Generate Site Statement"
-                              fontSize={14}
-                              fontFamily="Inter"
-                              fill="#FFFFFF"
-                              align="center"
-                              verticalAlign="middle"
-                            />
-                          </Group>
+                        {/* Content area */}
+                        <Group y={72}>
+                          <Html
+                            divProps={{
+                              style: {
+                                position: 'absolute',
+                                width: `${container.width}px`,
+                                padding: '0 16px'
+                              }
+                            }}
+                          >
+                            <div className="bg-white rounded-lg p-4">
+                              <SiteAnalysisGenerator
+                                projectBrief={projectBrief || ''}
+                                onGenerated={(content) => {
+                                  const outputContainer = elements.find(
+                                    (el): el is ContainerElement => 
+                                      el.type === 'container' && 
+                                      el.content?.type === 'generated-output'
+                                  );
+
+                                  if (outputContainer) {
+                                    const updatedContainer = {
+                                      ...outputContainer,
+                                      content: {
+                                        ...outputContainer.content,
+                                        generatedContent: content
+                                      }
+                                    };
+
+                                    setElements(prev => 
+                                      prev.map(el =>
+                                        el.id === outputContainer.id ? updatedContainer : el
+                                      )
+                                    );
+                                  }
+                                }}
+                              />
+                            </div>
+                          </Html>
                         </Group>
                       </Group>
                     </Group>
@@ -2257,6 +2141,73 @@ export default function Canvas({ name, description, projectId }: Props) {
                         fill="#6B7280"
                         align="center"
                       />
+                    </Group>
+                  )}
+                  {container.type === 'site-analysis' && (
+                    <Group>
+                      <Html
+                        divProps={{
+                          style: {
+                            position: 'absolute',
+                            width: `${container.width}px`,
+                            padding: '0 24px'
+                          }
+                        }}
+                      >
+                        <SiteAnalysisGenerator
+                          projectBrief={projectBrief}
+                          onGenerated={async (content) => {
+                            try {
+                              // Process uploaded files
+                              const processedFiles = await Promise.all(
+                                uploadedFiles.map(file => processFile(file.file))
+                              );
+
+                              // Generate site analysis with DALL-E visualization
+                              const response = await generateSiteAnalysis({
+                                projectBrief,
+                                uploadedFiles: processedFiles,
+                                siteDescription: content.siteStatement,
+                                selectedTags: content.keyCharacteristics,
+                                abstractionLevel: 50, // Default to balanced
+                              });
+
+                              // Create a new image element
+                              const img = new window.Image();
+                              img.src = response.infographic;
+                              
+                              await new Promise<void>((resolve) => {
+                                img.onload = () => resolve();
+                              });
+
+                              // Add the generated image to the canvas
+                              const generatedElement = {
+                                id: uuidv4(),
+                                type: 'generated-image',
+                                x: 100,
+                                y: 100,
+                                width: img.width,
+                                height: img.height,
+                                image: img,
+                                analysis: response.analysis,
+                                canvasId: currentCanvas.id,
+                                rotation: 0
+                              };
+
+                              setElements(prev => [...prev, generatedElement]);
+                              setCanvasStack(prev => prev.map(canvas => 
+                                canvas.id === currentCanvas.id 
+                                  ? { ...canvas, elements: [...canvas.elements, generatedElement.id] }
+                                  : canvas
+                              ));
+
+                            } catch (error) {
+                              console.error('Error generating site analysis:', error);
+                              // TODO: Add error handling UI
+                            }
+                          }}
+                        />
+                      </Html>
                     </Group>
                   )}
                 </Group>
@@ -2354,6 +2305,35 @@ export default function Canvas({ name, description, projectId }: Props) {
                 ))}
               </Group>
             )}
+            {containerElement.content?.type === 'generated-content' && (
+              <Group
+                key={containerElement.id}
+                x={containerElement.x}
+                y={containerElement.y}
+                width={containerElement.width}
+                height={containerElement.height}
+              >
+                <Html
+                  divProps={{
+                    style: {
+                      position: 'absolute',
+                      width: `${containerElement.width}px`,
+                      height: `${containerElement.height}px`
+                    }
+                  }}
+                >
+                  <SiteAnalysisDisplay
+                    content={containerElement.content}
+                    onRegenerate={() => {
+                      // Handle regeneration
+                    }}
+                    onAddToCanvas={() => {
+                      // Handle adding to canvas
+                    }}
+                  />
+                </Html>
+              </Group>
+            )}
           </Group>
         );
       }
@@ -2374,7 +2354,7 @@ export default function Canvas({ name, description, projectId }: Props) {
 
     const uploadedElement: UploadedElement = {
       id: uuidv4(),
-      type: 'upload',
+      type: 'uploaded',
       x: 100,
       y: 100,
       width: img.width,
@@ -2612,8 +2592,83 @@ export default function Canvas({ name, description, projectId }: Props) {
   };
 
   // Add type guard
-  const isImageLike = (element: CanvasElement): element is (ImageElement | UploadedElement | GeneratedImageElement) => {
-    return element.type === 'image' || element.type === 'upload' || element.type === 'generated';
+  const isImageLike = (element: CanvasElement): element is ImageElement | UploadedElement | GeneratedImageElement => {
+    return element.type === 'image' || element.type === 'uploaded' || element.type === 'generated-image';
+  };
+
+  const simulateFileUpload = (fileId: string) => {
+    let progress = 0;
+    const interval = setInterval(() => {
+      progress += 10;
+      setUploadedFiles(prev => prev.map(file => 
+        file.id === fileId 
+          ? { ...file, progress, status: progress === 100 ? 'complete' : 'uploading' }
+          : file
+      ));
+
+      if (progress >= 100) {
+        clearInterval(interval);
+      }
+    }, 300);
+  };
+
+  const handleFileDelete = (fileId: string) => {
+    setUploadedFiles(prev => prev.filter(file => file.id !== fileId));
+  };
+
+  const handleGenerateSiteStatement = async () => {
+    try {
+      const imageElements = elements.filter(isImageLike);
+      if (imageElements.length === 0) {
+        showNotification('error', 'No Images', 'Please upload at least one image to generate a site analysis.');
+        return;
+      }
+
+      const imageUrls = imageElements.map(element => {
+        if ('url' in element.content) {
+          return element.content.url;
+        }
+        return null;
+      }).filter((url): url is string => url !== null);
+
+      if (imageUrls.length === 0) {
+        showNotification('error', 'Invalid Images', 'Could not process the uploaded images. Please try again.');
+        return;
+      }
+
+      const analysis = await generateSiteAnalysis(imageUrls);
+      
+      if (!analysis) {
+        showNotification('error', 'Generation Failed', 'Failed to generate site analysis. Please try again.');
+        return;
+      }
+
+      const newElement: GeneratedContentElement = {
+        id: uuidv4(),
+        type: 'generated-content',
+        position: { x: 100, y: 100 },
+        size: { width: 400, height: 600 },
+        content: {
+          siteStatement: analysis.siteStatement,
+          swot: analysis.swot,
+          keyCharacteristics: analysis.keyCharacteristics
+        }
+      };
+
+      setElements(prev => [...prev, newElement]);
+      showNotification('success', 'Analysis Generated', 'Site analysis has been generated successfully.');
+    } catch (error) {
+      console.error('Error generating site analysis:', error);
+      showNotification('error', 'Generation Error', 'An error occurred while generating the site analysis.');
+    }
+  };
+
+  const handleTagClick = (tag: string) => {
+    setSelectedTags(prev => 
+      prev.includes(tag) 
+        ? prev.filter(t => t !== tag)
+        : [...prev, tag]
+    );
   };
 
   return (

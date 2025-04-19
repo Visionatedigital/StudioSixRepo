@@ -1,16 +1,19 @@
 export type Tool = 'mouse' | 'todo' | 'text' | 'board' | 'column' | 'container' | 'note' | 'image' | 'upload' | 'draw' | 'trash' | 'prompt';
 
-export type ElementType = 
+export type ElementType =
   | 'text'
-  | 'board'
-  | 'note'
   | 'image'
-  | 'upload'
+  | 'uploaded'
   | 'prompt'
+  | 'board'
   | 'shape'
   | 'line'
+  | 'generated-image'
+  | 'comment'
   | 'container'
-  | 'generated';
+  | 'generated-content'
+  | 'todo'
+  | 'note';
 
 export interface BaseElement {
   id: string;
@@ -39,9 +42,9 @@ export interface ImageElement extends BaseElement {
 }
 
 export interface UploadedElement extends BaseElement {
-  type: 'upload';
-  file: File;
+  type: 'uploaded';
   image: HTMLImageElement;
+  file: File;
 }
 
 export interface PromptElement extends BaseElement {
@@ -79,11 +82,11 @@ export interface LineElement extends BaseElement {
 }
 
 export interface GeneratedImageElement extends BaseElement {
-  type: 'generated';
+  type: 'generated-image';
   src: string;
   image?: HTMLImageElement;
-  prompt: string;
-  showInfo: boolean;
+  width: number;
+  height: number;
 }
 
 export interface Comment {
@@ -96,7 +99,7 @@ export interface Comment {
 }
 
 export interface CommentElement extends BaseElement {
-  type: 'container';
+  type: 'comment';
   text: string;
   targetId: string;
   backgroundColor?: string;
@@ -128,19 +131,65 @@ export interface ContainerElement extends BaseElement {
   name: string;
   backgroundColor?: string;
   borderColor?: string;
+  content?: {
+    type: 'project-input' | 'design-tools' | 'generated-output' | 'template-group';
+    fields?: Array<{ type: string; label: string; placeholder?: string; accept?: string }>;
+    tools?: Array<{ id: string; name: string; icon: string }>;
+    containers?: Array<{
+      id: string;
+      type: 'project-input' | 'design-tools' | 'generated-output';
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      name: string;
+      backgroundColor: string;
+      borderColor: string;
+      borderRadius: number;
+      fields?: Array<{ type: string; label: string; placeholder?: string; accept?: string }>;
+      tools?: Array<{ id: string; name: string; icon: string }>;
+    }>;
+    generatedContent?: {
+      siteStatement: string;
+      swot: {
+        strengths: string[];
+        weaknesses: string[];
+        opportunities: string[];
+        threats: string[];
+      };
+      keyCharacteristics: string[];
+    };
+  };
+  text?: string;
+  borderRadius?: number;
 }
 
-export type CanvasElement = 
-  | TextElement 
-  | ImageElement 
-  | UploadedElement 
-  | PromptElement 
-  | BoardElement 
-  | ShapeElement 
+export interface GeneratedContentElement extends BaseElement {
+  type: 'generated-content';
+  content: {
+    siteStatement: string;
+    swot: {
+      strengths: string[];
+      weaknesses: string[];
+      opportunities: string[];
+      threats: string[];
+    };
+    keyCharacteristics: string[];
+  };
+}
+
+export type CanvasElement =
+  | TextElement
+  | ImageElement
+  | UploadedElement
+  | PromptElement
+  | BoardElement
+  | ShapeElement
   | LineElement
   | GeneratedImageElement
   | CommentElement
-  | ContainerElement;
+  | ContainerElement
+  | GeneratedContentElement;
 
 export interface CanvasData {
   id: string;
