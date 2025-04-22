@@ -8,6 +8,7 @@ import Image from 'next/image';
 import PaystackProvider from '@/components/PaystackProvider';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
+import PaymentMethodSelector from '@/components/PaymentMethodSelector';
 
 // Types
 type CurrencyCode = 'USD' | 'EUR' | 'GBP' | 'AUD' | 'CAD' | 'JPY' | 'UGX' | 'KES' | 'ZAR';
@@ -79,22 +80,22 @@ const recentTransactions = [
 const creditPackages = [
   {
     credits: 100,
-    priceUSD: 49,
-    perCreditUSD: 0.49,
+    priceUSD: 5,
+    perCreditUSD: 0.05,
     popular: false,
     icon: '/icons/100-credits-icon.svg'
   },
   {
     credits: 500,
-    priceUSD: 199,
-    perCreditUSD: 0.40,
+    priceUSD: 20,
+    perCreditUSD: 0.04,
     popular: true,
     icon: '/icons/500-credits-icon.svg'
   },
   {
     credits: 1000,
-    priceUSD: 349,
-    perCreditUSD: 0.35,
+    priceUSD: 35,
+    perCreditUSD: 0.035,
     popular: false,
     icon: '/icons/1000-credits-icon.svg'
   }
@@ -116,6 +117,8 @@ export default function WalletPage() {
   const [selectedCurrency, setSelectedCurrency] = useState<CurrencyCode>('USD');
   const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({});
   const [userLocation, setUserLocation] = useState<string | null>(null);
+  const [showPaymentSelector, setShowPaymentSelector] = useState(false);
+  const [selectedPackage, setSelectedPackage] = useState<typeof creditPackages[0] | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -204,6 +207,32 @@ export default function WalletPage() {
     return Number(converted.toFixed(2));
   };
 
+  const handlePurchaseClick = (pkg: typeof creditPackages[0]) => {
+    setSelectedPackage(pkg);
+    setShowPaymentSelector(true);
+  };
+
+  const handlePaymentMethodSelect = (method: 'card' | 'mobile' | 'west-africa') => {
+    if (!selectedPackage || !session?.user?.email) return;
+
+    switch (method) {
+      case 'card':
+        // Show Paystack payment modal
+        const paystackButton = document.getElementById('paystack-button');
+        if (paystackButton) {
+          paystackButton.click();
+        }
+        break;
+      case 'mobile':
+        toast.info('Mobile money payment coming soon!');
+        break;
+      case 'west-africa':
+        toast.info('West Africa payment coming soon!');
+        break;
+    }
+    setShowPaymentSelector(false);
+  };
+
   if (!session) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -227,9 +256,6 @@ export default function WalletPage() {
                     {loading ? '...' : credits}
                   </span>
                 </div>
-                <span className="text-sm opacity-75 mt-2">
-                  ≈ {currencies[selectedCurrency].symbol}{convertPrice(632.50)} {selectedCurrency}
-                </span>
               </div>
               <button className="px-6 py-3 bg-white text-purple-600 rounded-xl font-medium hover:bg-opacity-90 transition-colors">
                 Add Credits
@@ -289,28 +315,12 @@ export default function WalletPage() {
                       <div className="text-xl font-bold text-[#202126] mb-4">
                         {currencies[selectedCurrency].symbol}{convertPrice(pkg.priceUSD)}
                       </div>
-                      <PaystackProvider
-                        config={{
-                          email: session?.user?.email || '',
-                          amount: convertPrice(pkg.priceUSD, false),
-                          currency: selectedCurrency,
-                          metadata: {
-                            type: 'CREDITS',
-                            packageId: pkg.credits.toString(),
-                          },
-                        }}
-                        onSuccess={(response) => {
-                          toast.success('Payment successful!');
-                          router.refresh();
-                        }}
-                        onError={() => {
-                          toast.error('Payment failed. Please try again.');
-                        }}
+                      <button 
+                        onClick={() => handlePurchaseClick(pkg)}
+                        className="w-full px-4 py-2 bg-gradient-to-r from-[#814ADA] to-[#392CA0] text-white rounded-lg hover:opacity-90 transition-opacity"
                       >
-                        <button className="w-full px-4 py-2 bg-gradient-to-r from-[#814ADA] to-[#392CA0] text-white rounded-lg hover:opacity-90 transition-opacity">
-                          Purchase
-                        </button>
-                      </PaystackProvider>
+                        Purchase
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -385,6 +395,43 @@ export default function WalletPage() {
           </div>
         </div>
       </div>
+
+      {/* Payment method selector */}
+      {selectedPackage && (
+        <>
+          <PaymentMethodSelector
+            isOpen={showPaymentSelector}
+            onClose={() => setShowPaymentSelector(false)}
+            onSelect={handlePaymentMethodSelect}
+            amount={Number(convertPrice(selectedPackage.priceUSD, false))}
+            currency={currencies[selectedCurrency].symbol}
+          />
+          
+          {/* Hidden Paystack button */}
+          <div className="hidden">
+            <PaystackProvider
+              config={{
+                email: session?.user?.email || '',
+                amount: Math.round(Number(convertPrice(selectedPackage.priceUSD, false)) * 100), // Convert to cents and ensure it's a whole number
+                currency: selectedCurrency, // Use the selected currency
+                metadata: {
+                  type: 'CREDITS',
+                  packageId: selectedPackage.credits.toString(),
+                },
+              }}
+              onSuccess={(response) => {
+                toast.success('Payment successful!');
+                router.refresh();
+              }}
+              onError={() => {
+                toast.error('Payment failed. Please try again.');
+              }}
+            >
+              <button id="paystack-button">Hidden Paystack Button</button>
+            </PaystackProvider>
+          </div>
+        </>
+      )}
     </DashboardLayout>
   );
 }

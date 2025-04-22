@@ -72,8 +72,8 @@ export async function POST(request: Request) {
       },
       body: JSON.stringify({
         email: session.user.email,
-        amount: formatAmountForPaystack(amount),
-        currency,
+        amount, // Amount is already in cents
+        currency, // Use the provided currency (USD)
         reference,
         callback_url: `https://studiosix.ai/api/payments/paystack/verify`,
         metadata: {
