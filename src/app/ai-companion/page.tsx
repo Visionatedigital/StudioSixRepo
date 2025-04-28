@@ -1,5 +1,6 @@
 'use client';
 
+import { Suspense } from 'react';
 import dynamic from 'next/dynamic';
 import { useSearchParams } from 'next/navigation';
 import { useState, useEffect } from 'react';
@@ -12,7 +13,8 @@ const DynamicCanvas = dynamic(
   { ssr: false }
 );
 
-export default function AICompanionPage() {
+// Client component that uses search params
+function AICompanionContent() {
   const searchParams = useSearchParams();
   const name = searchParams.get('name');
   const description = searchParams.get('description');
@@ -55,5 +57,14 @@ export default function AICompanionPage() {
         )}
       </main>
     </div>
+  );
+}
+
+// Page component with Suspense boundary
+export default function AICompanionPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <AICompanionContent />
+    </Suspense>
   );
 } 

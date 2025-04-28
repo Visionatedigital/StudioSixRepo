@@ -378,7 +378,8 @@ export default function VideoPage() {
       <ShareModal
         isOpen={isShareModalOpen}
         onClose={() => setIsShareModalOpen(false)}
-        imageUrl={generatedVideoUrl || ''}
+        mediaUrl={generatedVideoUrl || ''}
+        mediaType="video"
       />
     </DashboardLayout>
   );

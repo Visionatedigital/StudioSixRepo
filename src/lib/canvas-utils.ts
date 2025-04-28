@@ -96,7 +96,7 @@ export const serializeCanvasElement = (element: CanvasElement) => {
   const serializedElement = { ...element };
   
   // Handle image elements
-  if ((element.type === 'upload' || element.type === 'generated') && element.image) {
+  if ((element.type === 'uploaded' || element.type === 'generated-image') && element.image) {
     if (element.image instanceof HTMLImageElement) {
       (serializedElement as any).image = {
         src: element.image.src,
@@ -124,7 +124,7 @@ export const serializeCanvasElement = (element: CanvasElement) => {
 };
 
 export const deserializeCanvasElement = async (element: any): Promise<CanvasElement> => {
-  if ((element.type === 'upload' || element.type === 'generated') && element.image) {
+  if ((element.type === 'uploaded' || element.type === 'generated-image') && element.image) {
     const img = new window.Image();
     img.src = element.image.src;
     await new Promise(resolve => img.onload = resolve);

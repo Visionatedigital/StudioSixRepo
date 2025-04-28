@@ -3,6 +3,10 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { verifyEnv } from '@/lib/env';
+import { dynamicConfig } from '../../../config';
+
+export const dynamic = dynamicConfig.dynamic;
+export const revalidate = dynamicConfig.revalidate;
 
 export async function GET(request: Request) {
   const env = verifyEnv();
@@ -67,8 +71,7 @@ export async function GET(request: Request) {
       await prisma.user.update({
         where: { id: session.user.id },
         data: {
-          subscriptionStatus: metadata.packageId === 'starter' ? 'BASIC' :
-                             metadata.packageId === 'pro' ? 'PRO' : 'ENTERPRISE',
+          subscriptionStatus: 'ACTIVE',
         },
       });
     } else if (metadata.type === 'CREDITS') {

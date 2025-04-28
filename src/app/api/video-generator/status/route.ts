@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server';
 import { RunwayML } from '@runwayml/sdk';
+import { dynamicConfig } from '../../config';
+
+export const dynamic = dynamicConfig.dynamic;
+export const revalidate = dynamicConfig.revalidate;
 
 export async function GET(request: Request) {
   try {
@@ -15,14 +19,14 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Runway API key not configured' }, { status: 500 });
     }
 
-    const client = new RunwayML();
+    const client = new RunwayML({ apiKey: RUNWAY_API_KEY });
     const task = await client.tasks.retrieve(taskId);
 
     return NextResponse.json({
       status: task.status,
-      output: task.artifacts?.[0]?.url || null,
-      error: task.error || null,
-      progress: task.progressRatio || 0
+      output: task.output || null,
+      error: null,
+      progress: 0
     });
   } catch (error) {
     console.error('Error checking task status:', error);

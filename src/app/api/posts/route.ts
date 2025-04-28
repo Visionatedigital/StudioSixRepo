@@ -2,20 +2,30 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import type { Prisma } from '@prisma/client';
+import { dynamicConfig } from '../config';
 
-type PostWithIncludes = Prisma.PostGetPayload<{
-  include: {
-    user: {
-      select: {
-        id: true;
-        name: true;
-        image: true;
-      };
-    };
-    likes: true;
+export const dynamic = dynamicConfig.dynamic;
+export const revalidate = dynamicConfig.revalidate;
+
+type PostWithIncludes = {
+  id: string;
+  imageUrl: string;
+  caption: string | null;
+  createdAt: Date;
+  userId: string;
+  shares: number;
+  user: {
+    id: string;
+    name: string | null;
+    image: string | null;
   };
-}>;
+  likes: {
+    id: string;
+    userId: string;
+    postId: string;
+    createdAt: Date;
+  }[];
+};
 
 export async function GET() {
   try {
@@ -46,7 +56,7 @@ export async function GET() {
       createdAt: post.createdAt,
       user: post.user,
       likes: post.likes.length,
-      isLiked: userId ? post.likes.some(like => like.userId === userId) : false,
+      isLiked: userId ? post.likes.some((like: { userId: string }) => like.userId === userId) : false,
       shares: post.shares,
     }));
 

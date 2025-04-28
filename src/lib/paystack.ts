@@ -1,30 +1,22 @@
-// Add type declaration for @paystack/inline-js
-declare module '@paystack/inline-js';
+import PaystackPop, { PaystackConfig, PaystackResponse } from '@paystack/inline-js';
 
-import { PaystackProps } from '@paystack/inline-js';
+// Export the initialized Paystack instance
+export const paystackPopup = new PaystackPop();
 
-export interface PaystackConfig {
-  email: string;
-  amount: string | number;
-  currency: string;
-  publicKey: string;
-  reference?: string;
-  metadata?: {
-    type?: string;
-    packageId?: string;
-  };
-  callback?: (response: any) => void;
-  onClose?: () => void;
-}
+// Re-export types
+export type { PaystackConfig, PaystackResponse };
 
-export type PaystackResponse = {
-  reference: string;
-  trans: string;
-  status: string;
-  message: string;
-  transaction: string;
-  trxref: string;
-};
+// Currency codes
+export const CURRENCY_CODES = {
+  ZAR: 'ZAR',
+  NGN: 'NGN',
+  USD: 'USD',
+  GHS: 'GHS',
+  KES: 'KES',
+} as const;
+
+export type SupportedCurrency = keyof typeof CURRENCY_CODES;
+export const DEFAULT_CURRENCY = 'ZAR' as const;
 
 // Paystack expects amount in kobo (for NGN) or cents (for other currencies)
 export function formatAmountForPaystack(amount: number, currency: string = 'ZAR'): number {
@@ -47,19 +39,8 @@ export function convertUSDToZAR(usdAmount: number): number {
   return Math.round(usdAmount * exchangeRate);
 }
 
+// Generate a unique transaction reference
 export const generateTransactionReference = () => {
   const uuid = crypto.randomUUID();
   return `TX-${uuid}`;
-};
-
-export const CURRENCY_CODES = {
-  ZAR: 'ZAR',
-  NGN: 'NGN',
-  USD: 'USD',
-  GHS: 'GHS',
-  KES: 'KES',
-} as const;
-
-export type SupportedCurrency = keyof typeof CURRENCY_CODES;
-
-export const DEFAULT_CURRENCY = 'ZAR' as const; 
+}; 

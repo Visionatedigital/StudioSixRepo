@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma';
 
 export async function GET(
   request: Request,
-  { params }: { params: { projectId: string } }
+  context: { params: { projectId: string } }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -14,7 +14,7 @@ export async function GET(
     }
 
     // Ensure projectId is properly awaited
-    const projectId = await Promise.resolve(params.projectId);
+    const projectId = await Promise.resolve(context.params.projectId);
     
     // Check if user is the owner
     const project = await prisma.project.findUnique({
@@ -58,7 +58,7 @@ export async function GET(
     
     // Filter manually for projectId in metadata
     const pendingInvitation = pendingInvitations.find(
-      notification => {
+      (notification: any) => {
         const metadata = notification.metadata as any;
         return metadata?.projectId === projectId;
       }

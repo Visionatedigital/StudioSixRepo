@@ -11,10 +11,14 @@ export interface SiteAnalysisRequest {
 export interface SiteAnalysisResponse {
   infographic: string; // base64 encoded image
   analysis: {
-    strengths: string[];
-    weaknesses: string[];
-    opportunities: string[];
-    threats: string[];
+    siteStatement: string;
+    swot: {
+      strengths: string[];
+      weaknesses: string[];
+      opportunities: string[];
+      threats: string[];
+    };
+    keyCharacteristics: string[];
   };
 }
 

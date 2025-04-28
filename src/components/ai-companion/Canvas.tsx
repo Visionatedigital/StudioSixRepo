@@ -1,9 +1,12 @@
 'use client';
 
+import './Canvas.css';
 import { useEffect, useRef, useState } from 'react';
 import { KonvaEventObject } from 'konva/lib/Node';
 import { Vector2d } from 'konva/lib/types';
-import Konva from 'konva';
+import { Stage as KonvaStage } from 'konva/lib/Stage';
+import { Stage, Layer, KonvaRect, KonvaCircle, KonvaLine, KonvaText, KonvaImage, KonvaTransformer, KonvaGroup, Path } from './KonvaComponents';
+import KonvaBase from '@/lib/konva-browser';
 import Notification from '../ui/Notification';
 import StickyNote from './StickyNote';
 import AIChat from './AIChat';
@@ -28,10 +31,10 @@ import {
   ShapeElement,
   StickyNoteElement,
   StickyNoteStyle,
-  ElementType
+  ElementType,
+  DrawingElement,
+  StickyNoteProps
 } from '@/types/canvas';
-import dynamic from 'next/dynamic';
-import { Stage, Layer, Rect, Circle, Line, Text as KonvaText, Image as KonvaImage, Transformer, Group, Path } from 'react-konva';
 import Board from './Board';
 import { v4 as uuidv4 } from 'uuid';
 import DeleteConfirmationModal from './DeleteConfirmationModal';
@@ -52,12 +55,6 @@ import { processFile } from '@/utils/imageProcessing';
 import { SiteAnalysisRequest as ServiceSiteAnalysisRequest } from '@/services/siteAnalysis';
 import TextFormatMenu from './TextFormatMenu';
 import DrawingMenu from './DrawingMenu';
-
-// Dynamically import Stage with no SSR
-const DynamicStage = dynamic(() => import('react-konva').then((mod) => mod.Stage), {
-  ssr: false,
-  loading: () => null
-});
 
 type ShapeType = 'rect' | 'circle';
 
@@ -92,14 +89,18 @@ interface DrawingLine {
 
 interface DrawingGroup {
   id: string;
-  lines: DrawingLine[];
+  elements: CanvasElement[];
   x: number;
   y: number;
   width: number;
   height: number;
-  rotation: number;
-  scaleX: number;
-  scaleY: number;
+  lines: Array<{
+    points: number[];
+    stroke: string;
+    strokeWidth: number;
+    color: string;
+    opacity: number;
+  }>;
 }
 
 interface DrawingToolbarProps {
@@ -219,6 +220,37 @@ interface SiteAnalysisResponse {
   keyCharacteristics: string[];
 }
 
+interface SiteAnalysisData {
+  siteStatement: string;
+  swot: {
+    strengths: string[];
+    weaknesses: string[];
+    opportunities: string[];
+    threats: string[];
+  };
+  keyCharacteristics: string[];
+}
+
+// Add Position type at the top with other type definitions
+type Position = {
+  x: number;
+  y: number;
+};
+
+// Update TextFormatMenu component props to handle nullable position
+interface TextFormatMenuProps {
+  fontSize: number;
+  isBold: boolean;
+  textAlign: 'left' | 'center' | 'right';
+  isLocked: boolean;
+  position: Position | null;
+  onFontSizeChange: (size: number) => void;
+  onBoldToggle: () => void;
+  onAlignChange: (align: 'left' | 'center' | 'right') => void;
+  onLockToggle: () => void;
+  onDelete: () => void;
+}
+
 export default function Canvas({ name, description, projectId }: Props) {
   const { data: session } = useSession();
   const searchParams = useSearchParams();
@@ -236,7 +268,7 @@ export default function Canvas({ name, description, projectId }: Props) {
     message: '',
   });
   const [stickyNotes, setStickyNotes] = useState<StickyNoteData[]>([]);
-  const stageRef = useRef<Konva.Stage | null>(null);
+  const stageRef = useRef<KonvaStage | null>(null);
   const transformerRef = useRef(null);
   const [isChatOpen, setIsChatOpen] = useState(true);
   const [selectedTool, setSelectedTool] = useState<Tool>('mouse');
@@ -289,7 +321,6 @@ export default function Canvas({ name, description, projectId }: Props) {
   const [siteDescription, setSiteDescription] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [abstractionLevel, setAbstractionLevel] = useState(50);
-  const [textMenuPosition, setTextMenuPosition] = useState<{ x: number; y: number } | null>(null);
   const [selectedTextElement, setSelectedTextElement] = useState<TextElement | null>(null);
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
   const [editingTextValue, setEditingTextValue] = useState('');
@@ -307,6 +338,14 @@ export default function Canvas({ name, description, projectId }: Props) {
     color: string;
   } | null>(null);
   const [selectedStickyNote, setSelectedStickyNote] = useState<StickyNoteElement | null>(null);
+  const [selectedElement, setSelectedElement] = useState<CanvasElement | null>(null);
+  const [textMenuPosition, setTextMenuPosition] = useState<Position | null>(null);
+  const [drawings, setDrawings] = useState<DrawingElement[]>([]);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const textMenuRef = useRef<HTMLDivElement>(null);
+  const ctx = canvasRef.current?.getContext('2d');
+  const [startPosition, setStartPosition] = useState<Position | null>(null);
+  const [endPosition, setEndPosition] = useState<Position | null>(null);
 
   // Get current canvas data with safety check
   const currentCanvas = canvasStack[currentCanvasIndex] || canvasStack[0];
@@ -717,7 +756,7 @@ export default function Canvas({ name, description, projectId }: Props) {
       if (!point) return;
 
       const newStickyNote: StickyNoteElement = {
-                id: uuidv4(),
+        id: uuidv4(),
         type: 'sticky-note',
         x: point.x,
         y: point.y,
@@ -726,11 +765,12 @@ export default function Canvas({ name, description, projectId }: Props) {
         rotation: 0,
         content: '',
         style: {
-          backgroundColor: '#ffff88',
+          backgroundColor: '#FFE4B5',
           textColor: '#000000',
-          fontSize: 16,
-          shadowColor: '#000000'
-        }
+          fontSize: 14,
+          shadowColor: 'rgba(0, 0, 0, 0.1)'
+        },
+        canvasId: currentCanvas.id
       };
 
       setElements(prev => [...prev, newStickyNote]);
@@ -777,17 +817,18 @@ export default function Canvas({ name, description, projectId }: Props) {
     if (tool === 'text' && isClickOnStage) {
       const newTextElement: TextElement = {
         id: uuidv4(),
-            type: 'text',
-            x: pos.x,
-            y: pos.y,
-            text: 'Double click to edit',
-            fontSize: 16,
+        type: 'text',
+        x: pos.x,
+        y: pos.y,
+        text: 'Double click to edit',
+        fontSize: 16,
         isBold: false,
         textAlign: 'left',
         fill: '#000000',
         width: 200,
         height: 30,
-        isLocked: false
+        isLocked: false,
+        canvasId: currentCanvas.id
       };
       setElements(prev => [...prev, newTextElement]);
       return;
@@ -809,7 +850,8 @@ export default function Canvas({ name, description, projectId }: Props) {
           textColor: '#000000',
           fontSize: 14,
           shadowColor: 'rgba(0, 0, 0, 0.1)'
-        }
+        },
+        canvasId: currentCanvas.id
       };
       setElements(prev => [...prev, newStickyNote]);
       return;
@@ -1034,8 +1076,9 @@ export default function Canvas({ name, description, projectId }: Props) {
     );
   };
 
-  const handleCloseNote = (id: string) => {
-    setStickyNotes(prev => prev.filter(note => note.id !== id));
+  const handleDeleteNote = (id: string) => {
+    setElements(prev => prev.filter(el => el.id !== id));
+    setSelectedId(null);
   };
 
   const handleToolSelect = (toolId: Tool, templateId?: string) => {
@@ -1291,7 +1334,7 @@ export default function Canvas({ name, description, projectId }: Props) {
     for (let x = startX; x <= endX; x += dotSpacing) {
       for (let y = startY; y <= endY; y += dotSpacing) {
         dots.push(
-          <Circle
+          <KonvaCircle
             key={`${x}-${y}`}
             x={x}
             y={y}
@@ -1395,14 +1438,18 @@ export default function Canvas({ name, description, projectId }: Props) {
     // Create a new drawing group
     const newGroup: DrawingGroup = {
       id: `group-${Date.now()}`,
-      lines: [...lines],
+      elements: [],
       x: minX,
       y: minY,
       width: maxX - minX,
       height: maxY - minY,
-      rotation: 0,
-      scaleX: 1,
-      scaleY: 1,
+      lines: lines.map(line => ({
+        points: line.points,
+        stroke: line.color,
+        strokeWidth: typeof line.width === 'string' ? parseFloat(line.width) : line.width,
+        color: line.color,
+        opacity: line.opacity || 1
+      }))
     };
 
     setDrawingGroups([...drawingGroups, newGroup]);
@@ -1706,7 +1753,7 @@ export default function Canvas({ name, description, projectId }: Props) {
         const isExplicitlySelected = selectedId === textElement.id && !isDraggingCanvas;
 
         return (
-          <Group key={textElement.id}>
+          <KonvaGroup key={textElement.id}>
             {!isEditing && (
               <KonvaText
                 id={textElement.id}
@@ -1771,7 +1818,7 @@ export default function Canvas({ name, description, projectId }: Props) {
                 </div>
               </Html>
             )}
-          </Group>
+          </KonvaGroup>
         );
       case 'image': {
         const imageElement = element as ImageElement;
@@ -1779,15 +1826,13 @@ export default function Canvas({ name, description, projectId }: Props) {
             <KonvaImage
             key={imageElement.id}
             image={imageElement.image}
-            x={imageElement.x}
-            y={imageElement.y}
+            alt={imageElement.alt}
             width={imageElement.width}
             height={imageElement.height}
-            rotation={imageElement.rotation}
-            draggable={selectedTool === 'mouse'}
-            onClick={handleCanvasClick}
-            onTransformEnd={handleTransformEnd}
-            onDragEnd={handleTransformEnd}
+            style={{
+              transform: `rotate(${imageElement.rotation}deg)`,
+              transformOrigin: 'center center',
+            }}
           />
         );
       }
@@ -1797,15 +1842,13 @@ export default function Canvas({ name, description, projectId }: Props) {
           <KonvaImage
             key={uploadImage.id}
             image={uploadImage.image}
-            x={uploadImage.x}
-            y={uploadImage.y}
+            alt={uploadImage.alt}
             width={uploadImage.width}
             height={uploadImage.height}
-            rotation={uploadImage.rotation}
-            draggable={selectedTool === 'mouse'}
-            onClick={handleCanvasClick}
-            onTransformEnd={handleTransformEnd}
-            onDragEnd={handleTransformEnd}
+            style={{
+              transform: `rotate(${uploadImage.rotation}deg)`,
+              transformOrigin: 'center center',
+            }}
           />
         );
       }
@@ -1815,15 +1858,13 @@ export default function Canvas({ name, description, projectId }: Props) {
           <KonvaImage
             key={genImage.id}
             image={genImage.image}
-            x={genImage.x}
-            y={genImage.y}
+            alt={genImage.alt}
             width={genImage.width}
             height={genImage.height}
-            rotation={genImage.rotation}
-            draggable={selectedTool === 'mouse'}
-            onClick={handleCanvasClick}
-            onTransformEnd={handleTransformEnd}
-            onDragEnd={handleTransformEnd}
+            style={{
+              transform: `rotate(${genImage.rotation}deg)`,
+              transformOrigin: 'center center',
+            }}
           />
         );
       }
@@ -1833,7 +1874,7 @@ export default function Canvas({ name, description, projectId }: Props) {
         
         if (isTemplateGroup && containerElement.content?.containers) {
           return (
-            <Group
+            <KonvaGroup
               key={containerElement.id}
               x={containerElement.x}
               y={containerElement.y}
@@ -1844,7 +1885,7 @@ export default function Canvas({ name, description, projectId }: Props) {
               onDragEnd={handleTransformEnd}
             >
               {containerElement.content.containers.map(container => (
-                  <Rect
+                  <KonvaRect
                   key={container.id}
                     x={container.x}
                     y={container.y}
@@ -1856,7 +1897,7 @@ export default function Canvas({ name, description, projectId }: Props) {
                   cornerRadius={container.borderRadius}
                 />
                           ))}
-                        </Group>
+                        </KonvaGroup>
           );
         }
         return null;
@@ -1869,11 +1910,17 @@ export default function Canvas({ name, description, projectId }: Props) {
             id={stickyNote.id}
             x={stickyNote.x}
             y={stickyNote.y}
-            content={stickyNote.content}
-            style={stickyNote.style}
-            onUpdate={(id, content, style) => handleStickyNoteUpdate(id, content, style)}
-            onDelete={handleDeleteElement}
-            onMove={(id, x, y) => handleElementMove(id, x, y)}
+            text={stickyNote.content}
+            style={{
+              backgroundColor: stickyNote.style.backgroundColor || '#FFE4B5',
+              textColor: stickyNote.style.textColor || '#000000',
+              fontSize: typeof stickyNote.style.fontSize === 'string' ? parseInt(stickyNote.style.fontSize) : (stickyNote.style.fontSize || 14),
+              shadowColor: 'rgba(0, 0, 0, 0.1)'
+            }}
+            onUpdate={handleUpdateNote}
+            onDelete={handleDeleteNote}
+            onMove={handleMoveNote}
+            scale={scale}
             isSelected={selectedId === stickyNote.id}
             onSelect={(id) => setSelectedId(id)}
           />
@@ -2221,35 +2268,13 @@ export default function Canvas({ name, description, projectId }: Props) {
   };
 
   const handleTagClick = (tag: string) => {
-    setSelectedTags(prev => 
-      prev.includes(tag) 
-        ? prev.filter(t => t !== tag)
-        : [...prev, tag]
-    );
-  };
-
-  // Add this new function to handle text element selection
-  const handleTextElementSelect = (element: TextElement, e: KonvaEventObject<MouseEvent>) => {
-    e.cancelBubble = true;
-    setSelectedId(element.id);
-    setSelectedTextElement(element);
-    setIsExplicitlySelected(true);
-
-    // Get the stage and its scale
-    const stage = stageRef.current;
-    if (!stage) return;
-
-    // Calculate the center point of the text element
-    const centerX = element.x + (element.width || 0) / 2;
-    const menuY = element.y - 30; // Position menu closer to the text
-
-    // Set the menu position
-    setTextMenuPosition({
-      x: centerX,
-      y: menuY
+    setSelectedTags((prev: string[]) => {
+      const isSelected = prev.includes(tag);
+      return isSelected ? prev.filter((t: string) => t !== tag) : [...prev, tag];
     });
   };
 
+  // Add this new function to handle text element selection
   // Add text formatting handlers
   const handleFontSizeChange = (size: number) => {
     if (!selectedTextElement) return;
@@ -2313,12 +2338,19 @@ export default function Canvas({ name, description, projectId }: Props) {
     );
   };
 
-  const handleStickyNoteUpdate = (id: string, content: string, style: any) => {
-    setStickyNotes(prev => 
-      prev.map(note => 
-        note.id === id ? { ...note, content, style } : note
-      )
-    );
+  const handleStickyNoteUpdate = (id: string, content: string, style: StickyNoteStyle) => {
+    setElements(prev => prev.map(el => 
+      el.id === id && el.type === 'sticky-note' 
+        ? { 
+            ...el, 
+            content,
+            style: {
+              ...style,
+              fontSize: typeof style.fontSize === 'string' ? parseInt(style.fontSize, 10) : (style.fontSize || 14)
+            }
+          } 
+        : el
+    ));
   };
 
   const handleDeleteElement = (id: string) => {
@@ -2347,8 +2379,10 @@ export default function Canvas({ name, description, projectId }: Props) {
       style: {
         backgroundColor: '#FFE4B5',
         textColor: '#000000',
-        fontSize: 14
-      }
+        fontSize: 14,
+        shadowColor: 'rgba(0, 0, 0, 0.1)'
+      },
+      canvasId: currentCanvas.id
     };
     setElements(prev => [...prev, newNote]);
   };
@@ -2360,18 +2394,23 @@ export default function Canvas({ name, description, projectId }: Props) {
   };
 
   const handleTextEditComplete = (element: TextElement) => {
-    setElements(prev => prev.map(el => 
-      el.id === element.id 
-        ? { ...el, text: editingTextValue } as TextElement
-        : el
-    ));
+    if (!editingTextValue.trim()) {
+      handleDeleteTextElement(element.id);
+    } else {
+      const updatedElement = {
+        ...element,
+        text: editingTextValue
+      };
+      handleElementChange(element.id, updatedElement);
+    }
     setEditingTextId(null);
+    setEditingTextValue('');
   };
 
   const handleDeleteTextElement = (elementId: string) => {
-    setElements(prevElements => prevElements.filter(el => el.id !== elementId));
+    setElements(prev => prev.filter(el => el.id !== elementId));
+    setSelectedId(null);
     setSelectedTextElement(null);
-    setTextMenuPosition(null);
   };
 
   const handleDrawingSelect = (drawing: DrawingElement, e: KonvaEventObject<MouseEvent>) => {
@@ -2406,17 +2445,125 @@ export default function Canvas({ name, description, projectId }: Props) {
     ));
   };
 
-  const handleStickyNoteStyleChange = (id: string, style: StickyNoteStyle) => {
-    setElements(prev => prev.map(el => 
-      el.id === id && el.type === 'sticky-note' 
-        ? { ...el, style } 
-        : el
-    ));
+  // Fix the sticky note style handling
+  const handleStickyNoteStyleChange = (id: string, style: Partial<StickyNoteStyle>) => {
+    setElements(prev => prev.map(el => {
+      if (el.id === id && el.type === 'sticky-note') {
+        const currentStyle = el.style;
+        let newFontSize = currentStyle.fontSize;
+        if (style.fontSize !== undefined) {
+          const parsedSize = typeof style.fontSize === 'string' 
+            ? parseInt(style.fontSize, 10) 
+            : style.fontSize;
+          newFontSize = isNaN(parsedSize) ? currentStyle.fontSize : Math.max(1, parsedSize);
+        }
+
+        return {
+          ...el,
+          style: {
+            ...currentStyle,
+            ...style,
+            fontSize: newFontSize
+          }
+        } as CanvasElement; // Explicitly cast to CanvasElement
+      }
+      return el;
+    }));
   };
 
   const handleStickyNoteDelete = (id: string) => {
     setElements(prev => prev.filter(el => el.id !== id));
     setSelectedStickyNote(null);
+  };
+
+  // Replace Konva namespace usage with KonvaBase
+  const stage = new KonvaBase.Stage({
+    container: 'container',
+    width: window.innerWidth,
+    height: window.innerHeight,
+  });
+
+  const handleTextElementSelect = (element: TextElement, e: KonvaEventObject<MouseEvent>) => {
+    e.cancelBubble = true;
+    setSelectedId(element.id);
+    setSelectedTextElement(element);
+
+    // Get the stage and its scale
+    const stage = stageRef.current;
+    if (!stage) return;
+
+    // Calculate the center point of the text element
+    const centerX = element.x + (element.width || 0) / 2;
+    const menuY = element.y - 30; // Position menu closer to the text
+
+    // Set the menu position
+    setTextMenuPosition({
+      x: centerX,
+      y: menuY
+    });
+  };
+
+  const handleSiteAnalysisData = (data: SiteAnalysisData) => {
+    // Handle site analysis data
+    const { siteStatement, swot, keyCharacteristics } = data;
+    // ... rest of the function
+  };
+
+  // When creating a new sticky note
+  const createStickyNote = (x: number, y: number): StickyNoteElement => ({
+    id: crypto.randomUUID(),
+    type: 'sticky-note',
+    x,
+    y,
+    width: 200,
+    height: 200,
+    content: '',
+    canvasId: 'main',
+    style: {
+      backgroundColor: '#FFE4B5',
+      textColor: '#000000',
+      fontSize: 14,
+      shadowColor: 'rgba(0, 0, 0, 0.1)'
+    }
+  });
+
+  // Position handling with proper type safety
+  const getMousePosition = (event: MouseEvent): { x: number; y: number } => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    return {
+      x: event.clientX - (rect?.left ?? 0),
+      y: event.clientY - (rect?.top ?? 0)
+    };
+  };
+
+  // Remove duplicate handleMouseMove declarations and keep only the one we defined earlier
+  // ... existing code ...
+
+  // Define DrawingGroup type
+  interface DrawingGroup {
+    id: string;
+    elements: CanvasElement[];
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    lines: Array<{
+      points: number[];
+      stroke: string;
+      strokeWidth: number;
+      color: string;
+      opacity: number;
+    }>;
+  }
+
+  // Update the drawing group section with proper types
+  const handleDrawingGroupDragEnd = (group: DrawingGroup, e: KonvaEventObject<DragEvent>) => {
+    e.cancelBubble = true;
+    setDrawingGroups((prev: DrawingGroup[]) => 
+      prev.map((g: DrawingGroup) => 
+        g.id === group.id ? { ...g, x: e.target.x(), y: e.target.y() } : g
+      )
+    );
   };
 
   return (
@@ -2447,7 +2594,7 @@ export default function Canvas({ name, description, projectId }: Props) {
         ))}
 
         {/* Rest of your canvas content */}
-        <DynamicStage
+        <Stage
           width={dimensions.width}
           height={dimensions.height}
           onMouseDown={handleCanvasClick}
@@ -2469,13 +2616,13 @@ export default function Canvas({ name, description, projectId }: Props) {
         >
           <Layer>
             {/* Remove the white background rect and let the grid span everything */}
-            <Group>
+            <KonvaGroup>
               {renderGrid()}
-            </Group>
+            </KonvaGroup>
 
             {/* Drawing Groups Layer */}
             {drawingGroups.map((group) => (
-              <Group
+              <KonvaGroup
                 key={group.id}
                 id={group.id}
                 x={group.x}
@@ -2515,7 +2662,7 @@ export default function Canvas({ name, description, projectId }: Props) {
               >
                 {/* Selection indicator */}
                 {selectedGroupId === group.id && (
-                  <Rect
+                  <KonvaRect
                     x={-5}
                     y={-5}
                     width={group.width + 10}
@@ -2528,23 +2675,23 @@ export default function Canvas({ name, description, projectId }: Props) {
                 
                 {/* Drawing lines */}
                 {group.lines.map((line, index) => (
-                  <Line
+                  <KonvaLine
                     key={index}
                     points={line.points}
-                    stroke={line.color}
-                    strokeWidth={line.width}
+                    stroke={line.stroke}
+                    strokeWidth={line.strokeWidth}
                     lineCap="round"
                     lineJoin="round"
                     opacity={line.opacity}
                   />
                 ))}
-              </Group>
+              </KonvaGroup>
             ))}
 
             {/* Current Drawing Layer */}
-            <Group>
+            <KonvaGroup>
               {lines.map((line, index) => (
-                <Line
+                <KonvaLine
                   key={`line-${index}`}
                   points={line.points}
                   stroke={line.color}
@@ -2556,7 +2703,7 @@ export default function Canvas({ name, description, projectId }: Props) {
                 />
               ))}
               {currentLine && (
-                <Line
+                <KonvaLine
                   points={currentLine.points}
                   stroke={currentLine.color}
                   strokeWidth={currentLine.width}
@@ -2566,11 +2713,11 @@ export default function Canvas({ name, description, projectId }: Props) {
                   globalCompositeOperation="source-over"
                 />
               )}
-            </Group>
+            </KonvaGroup>
 
             {/* Elements Layer */}
             {visibleElements.map((el) => (
-              <Group
+              <KonvaGroup
                 key={el.id}
                 id={el.id}
                 draggable={tool === 'mouse'}
@@ -2581,12 +2728,12 @@ export default function Canvas({ name, description, projectId }: Props) {
                 listening={true}
               >
                 {renderElement(el)}
-              </Group>
+              </KonvaGroup>
             ))}
 
             {/* Transformer Layer */}
             {selectedTextElement && textMenuPosition && isExplicitlySelected && (
-                  <Transformer
+                  <KonvaTransformer
                     ref={transformerRef}
                     boundBoxFunc={(oldBox, newBox) => {
                       const minSize = 5;
@@ -2600,7 +2747,7 @@ export default function Canvas({ name, description, projectId }: Props) {
             )}
 
             {selectionBox && (
-              <Rect
+              <KonvaRect
                 x={Math.min(selectionBox.startX, selectionBox.endX)}
                 y={Math.min(selectionBox.startY, selectionBox.endY)}
                 width={Math.abs(selectionBox.endX - selectionBox.startX)}
@@ -2611,7 +2758,7 @@ export default function Canvas({ name, description, projectId }: Props) {
               />
             )}
           </Layer>
-        </DynamicStage>
+        </Stage>
       </div>
 
       {/* Tools Panel */}
@@ -2633,13 +2780,23 @@ export default function Canvas({ name, description, projectId }: Props) {
         {stickyNotes.map((note) => (
           <div key={note.id} className="pointer-events-auto absolute" style={{ zIndex: 101 }}>
             <StickyNote
+              key={note.id}
               id={note.id}
               x={note.x}
               y={note.y}
+              text={note.content}
+              style={{
+                backgroundColor: note.style.backgroundColor || '#FFE4B5',
+                textColor: note.style.color || '#000000',
+                fontSize: typeof note.style.fontSize === 'string' ? parseInt(note.style.fontSize) : (note.style.fontSize || 14),
+                shadowColor: 'rgba(0, 0, 0, 0.1)'
+              }}
               onUpdate={handleUpdateNote}
-              onClose={handleCloseNote}
+              onDelete={handleDeleteNote}
               onMove={handleMoveNote}
               scale={scale}
+              isSelected={selectedId === note.id}
+              onSelect={(id) => setSelectedId(id)}
             />
           </div>
         ))}
@@ -2690,7 +2847,7 @@ export default function Canvas({ name, description, projectId }: Props) {
       {/* Prompt Elements Layer */}
       <div 
         className="absolute inset-0 pointer-events-none"
-        style={{
+                  style={{
           transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
           transformOrigin: '0 0',
           width: dimensions.width - (isChatOpen ? 400 : 0),
@@ -2717,7 +2874,7 @@ export default function Canvas({ name, description, projectId }: Props) {
                   (e.target as HTMLElement).closest('button')) {
                 return; // Don't handle drag if clicking interactive elements
               }
-              e.preventDefault();
+                        e.preventDefault();
               e.stopPropagation();
               handlePromptDrag(e, prompt.id);
             }}
@@ -2754,7 +2911,7 @@ export default function Canvas({ name, description, projectId }: Props) {
                           <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
                         </svg>
                       </button>
-                    </div>
+                </div>
                   </div>
                   <div className="bg-gray-50 rounded-lg p-3">
                     <div className="flex items-center gap-2 mb-2">
@@ -2865,7 +3022,7 @@ export default function Canvas({ name, description, projectId }: Props) {
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        style={{
+            style={{
           pointerEvents: isDragging ? 'auto' : 'none',
           zIndex: 1000
         }}
@@ -2878,18 +3035,18 @@ export default function Canvas({ name, description, projectId }: Props) {
       </div>
 
       {/* Add the TextFormatMenu */}
-      {textMenuPosition && selectedTextElement && isExplicitlySelected && (
+      {selectedTextElement && textMenuPosition && (
         <TextFormatMenu
+          fontSize={selectedTextElement.fontSize}
+          isBold={selectedTextElement.fontStyle === 'bold'}
+          textAlign={selectedTextElement.align || 'left'} // Provide default value
+          isLocked={selectedTextElement.isLocked || false} // Provide default value
+          position={textMenuPosition}
           onFontSizeChange={handleFontSizeChange}
           onBoldToggle={handleBoldToggle}
           onAlignChange={handleAlignChange}
           onLockToggle={handleLockToggle}
           onDelete={() => handleDeleteTextElement(selectedTextElement.id)}
-          fontSize={selectedTextElement.fontSize}
-          isBold={selectedTextElement.fontStyle === 'bold'}
-          textAlign={selectedTextElement.align}
-          isLocked={selectedTextElement.isLocked}
-          position={textMenuPosition}
         />
       )}
       {selectedDrawing && (
@@ -2901,7 +3058,7 @@ export default function Canvas({ name, description, projectId }: Props) {
               group.id === selectedDrawing.id
                 ? {
                     ...group,
-                    lines: group.lines.map(line => ({ ...line, color }))
+                    lines: group.lines.map(line => ({ ...line, stroke: color }))
                   }
                 : group
             ));
@@ -2918,7 +3075,7 @@ export default function Canvas({ name, description, projectId }: Props) {
       {elements.map(element => {
         if (element.type === 'sticky-note') {
           return (
-            <Group
+            <KonvaGroup
               key={element.id}
               x={element.x}
               y={element.y}
@@ -2934,7 +3091,7 @@ export default function Canvas({ name, description, projectId }: Props) {
                 ));
               }}
             >
-              <Rect
+                  <KonvaRect
                 width={element.width}
                 height={element.height}
                 fill={element.style.backgroundColor}
@@ -2943,7 +3100,7 @@ export default function Canvas({ name, description, projectId }: Props) {
                 shadowOffset={{ x: 2, y: 2 }}
                 cornerRadius={10}
               />
-              <Text
+              <KonvaText
                 text={element.content}
                 width={element.width - 20}
                 height={element.height - 20}
@@ -2953,7 +3110,7 @@ export default function Canvas({ name, description, projectId }: Props) {
                 fontSize={element.style.fontSize}
                 padding={10}
               />
-            </Group>
+                        </KonvaGroup>
           );
         }
         return null;
@@ -2961,24 +3118,39 @@ export default function Canvas({ name, description, projectId }: Props) {
 
       {/* Render sticky note menu */}
       {selectedStickyNote && (
-        <StickyNoteMenu
+        <StickyNote
           id={selectedStickyNote.id}
           x={selectedStickyNote.x}
           y={selectedStickyNote.y}
-          content={selectedStickyNote.content}
+          text={selectedStickyNote.content}
           style={selectedStickyNote.style}
-          onUpdate={(id, content, style) => {
-            handleStickyNoteContentChange(id, content);
+          onUpdate={(id: string, text: string, style: Partial<StickyNoteStyle>) => {
+            handleStickyNoteContentChange(id, text);
             handleStickyNoteStyleChange(id, style);
           }}
           onDelete={handleStickyNoteDelete}
-          onMove={(id, x, y) => {
+          onMove={(id: string, x: number, y: number) => {
             setElements(prev => prev.map(el => 
               el.id === id ? { ...el, x, y } : el
             ));
           }}
           isSelected={true}
           onSelect={() => {}}
+          scale={scale}
+        />
+      )}
+      {textMenuPosition && selectedTextElement && isExplicitlySelected && (
+        <TextFormatMenu
+          fontSize={selectedTextElement.fontSize}
+          isBold={selectedTextElement.fontStyle === 'bold'}
+          textAlign={selectedTextElement.align || 'left'}
+          isLocked={selectedTextElement.isLocked || false}
+          position={textMenuPosition}
+          onFontSizeChange={handleFontSizeChange}
+          onBoldToggle={handleBoldToggle}
+          onAlignChange={handleAlignChange}
+          onLockToggle={handleLockToggle}
+          onDelete={() => handleDeleteTextElement(selectedTextElement.id)}
         />
       )}
     </div>

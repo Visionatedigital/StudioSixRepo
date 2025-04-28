@@ -1,6 +1,7 @@
 import { db } from '../db';
 import { caseStudies } from '../db/schema';
-import { eq, and, or, ilike } from 'drizzle-orm';
+import { eq, and, or, ilike, gt, lt } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import OpenAI from 'openai';
 
 const openai = new OpenAI();
@@ -75,8 +76,8 @@ export class CaseStudyRecommender {
       const maxArea = context.area * 1.2;
       conditions.push(
         and(
-          eq(caseStudies.metadata['area'].gt(minArea)),
-          eq(caseStudies.metadata['area'].lt(maxArea))
+          gt(sql`${caseStudies.characteristics}->>'area'`, minArea),
+          lt(sql`${caseStudies.characteristics}->>'area'`, maxArea)
         )
       );
     }
@@ -90,7 +91,7 @@ export class CaseStudyRecommender {
       conditions.push(
         or(
           ...context.siteConstraints.map(constraint =>
-            ilike(caseStudies.characteristics['siteConstraints'], `%${constraint}%`)
+            sql`${caseStudies.characteristics}->>'siteConstraints' LIKE ${`%${constraint}%`}`
           )
         )
       );
@@ -100,7 +101,7 @@ export class CaseStudyRecommender {
       conditions.push(
         or(
           ...context.programmaticRequirements.map(req =>
-            ilike(caseStudies.characteristics['programmaticRequirements'], `%${req}%`)
+            sql`${caseStudies.characteristics}->>'programmaticRequirements' LIKE ${`%${req}%`}`
           )
         )
       );

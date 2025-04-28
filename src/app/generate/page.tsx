@@ -821,7 +821,7 @@ export default function GeneratePage() {
       <ShareModal
         isOpen={isShareModalOpen}
         onClose={() => setIsShareModalOpen(false)}
-        imageUrl={generatedImage ? `data:image/png;base64,${generatedImage}` : ''}
+        mediaUrl={generatedImage ? `data:image/png;base64,${generatedImage}` : ''}
       />
 
       <style jsx global>{`

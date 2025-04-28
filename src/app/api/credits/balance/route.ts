@@ -2,8 +2,12 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { PrismaClient } from '@prisma/client';
 import { authOptions } from '@/lib/auth';
+import { dynamicConfig } from '../../config';
 
 const prisma = new PrismaClient();
+
+export const dynamic = dynamicConfig.dynamic;
+export const revalidate = dynamicConfig.revalidate;
 
 export async function GET() {
   try {

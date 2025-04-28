@@ -2,6 +2,21 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { dynamicConfig } from '../config';
+
+export const dynamic = dynamicConfig.dynamic;
+export const revalidate = dynamicConfig.revalidate;
+
+type UserProfile = {
+  id: string;
+  name: string | null;
+  email: string;
+  image: string | null;
+  bannerImage: string | null;
+  credits: number;
+  createdAt: Date;
+  verified: boolean;
+};
 
 // Array of available profile icons
 const profileIcons = [
@@ -56,7 +71,7 @@ export async function GET() {
 
     // Get follower and following counts for each user
     const profilesWithCounts = await Promise.all(
-      recommendedProfiles.map(async (profile) => {
+      recommendedProfiles.map(async (profile: UserProfile) => {
         const [followersCount, followingCount] = await Promise.all([
           prisma.follow.count({
             where: {

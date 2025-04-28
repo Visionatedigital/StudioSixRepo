@@ -87,7 +87,11 @@ Style: Clean, abstract diagram style using simple shapes, dotted lines, and arro
       n: 1,
     });
 
-    return response.data[0]?.url ?? null;
+    if (!response.data || response.data.length === 0) {
+      return null;
+    }
+
+    return response.data[0].url ?? null;
   } catch (error) {
     console.error('Error generating image:', error);
     return null;

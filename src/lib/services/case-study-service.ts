@@ -3,7 +3,8 @@ import { CaseStudyRecommender } from './case-study-recommender';
 import { ArchDailyScraper } from '../scraper/archdaily';
 import { db } from '../db';
 import { caseStudies } from '../db/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, gt, lt } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import OpenAI from 'openai';
 import { ProjectContext, CaseStudyReference } from '../types/case-study';
 
@@ -68,7 +69,7 @@ export class CaseStudyService {
   private async scrapeAdditionalProjects(context: ProjectContext): Promise<CaseStudyReference[]> {
     try {
       // Get project URLs from ArchDaily
-      const projectUrls = await this.scraper.scrapeProjectList(1);
+      const projectUrls = await this.scraper.scrapeProjectList();
       
       // Scrape first 5 projects
       const scrapedProjects = await Promise.all(
@@ -126,8 +127,8 @@ export class CaseStudyService {
       const maxArea = context.area * 1.2;
       conditions.push(
         and(
-          eq(caseStudies.metadata['area'].gt(minArea)),
-          eq(caseStudies.metadata['area'].lt(maxArea))
+          gt(sql`${caseStudies.characteristics}->>'area'`, minArea),
+          lt(sql`${caseStudies.characteristics}->>'area'`, maxArea)
         )
       );
     }

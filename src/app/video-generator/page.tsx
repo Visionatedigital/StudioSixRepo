@@ -13,7 +13,7 @@ export default function VideoGeneratorPage() {
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
   return (
-    <DashboardLayout>
+    <DashboardLayout currentPage="Video Generator">
       <div className="flex flex-col space-y-8 p-8">
         {/* ... existing code ... */}
         

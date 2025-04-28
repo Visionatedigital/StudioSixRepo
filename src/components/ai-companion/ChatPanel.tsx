@@ -69,17 +69,15 @@ export default function ChatPanel({ isOpen, onClose }: ChatPanelProps) {
         <div className="flex items-center justify-between p-4 border-b">
           <div className="flex items-center space-x-2">
             <span className="w-5 h-5 text-purple-600">
-              <FiMessageSquare />
+              <FiMessageSquare className="w-full h-full" />
             </span>
             <h2 className="text-lg font-semibold">Design Assistant</h2>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-full"
+            className="p-1 hover:bg-gray-100 rounded-full transition-colors"
           >
-            <span className="w-5 h-5">
-              <FiX />
-            </span>
+            <FiX className="w-5 h-5" />
           </button>
         </div>
 
@@ -102,11 +100,11 @@ export default function ChatPanel({ isOpen, onClose }: ChatPanelProps) {
                 <div className="flex items-center space-x-2 mb-1">
                   {message.role === 'user' ? (
                     <span className="w-4 h-4">
-                      <FiUser />
+                      <FiUser className="w-4 h-4" />
                     </span>
                   ) : (
                     <span className="w-4 h-4">
-                      <FiMessageSquare />
+                      <FiMessageSquare className="w-4 h-4" />
                     </span>
                   )}
                   <span className="text-sm font-medium">
@@ -147,9 +145,7 @@ export default function ChatPanel({ isOpen, onClose }: ChatPanelProps) {
               disabled={isLoading || !input.trim()}
               className="p-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <span className="w-5 h-5">
-                <FiSend />
-              </span>
+              <FiSend className="w-5 h-5" />
             </button>
           </div>
         </form>

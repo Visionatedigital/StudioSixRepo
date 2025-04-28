@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     }
 
     // If no exact matches, try searching for key terms
-    const keyTerms = query.toLowerCase().split(/\s+/).filter(term => 
+    const keyTerms = query.toLowerCase().split(/\s+/).filter((term: string) => 
       term.length > 3 && !['the', 'and', 'for', 'about', 'more', 'tell', 'me'].includes(term)
     );
 

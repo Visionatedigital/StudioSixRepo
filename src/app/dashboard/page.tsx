@@ -1,49 +1,32 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
+import { toast } from 'react-hot-toast';
+import DashboardBanner from '@/app/dashboard/components/DashboardBanner';
+import CommunityGallery from '@/app/dashboard/components/CommunityGallery';
 import DashboardLayout from '@/components/DashboardLayout';
-import DashboardBanner from './components/DashboardBanner';
-import CommunityGallery from './components/CommunityGallery';
-import { toast } from 'sonner';
 
-export default function DashboardPage() {
+// Client component that uses search params
+function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { data: session, update } = useSession();
+  const sessionRefreshed = searchParams.get('session_refreshed');
+  const paymentStatus = searchParams.get('payment_status');
 
   useEffect(() => {
-    const sessionRefresh = searchParams.get('session_refresh');
-    const success = searchParams.get('success');
-    const error = searchParams.get('error');
-
-    if (sessionRefresh === 'true') {
-      // Update the session to reflect the new subscription status
-      update();
-      
-      // Show success message if payment was completed
-      if (success === 'payment_completed') {
-        toast.success('Payment successful! Your account has been updated.');
-      }
-      
-      // Remove the query parameters from the URL
-      const newUrl = new URL(window.location.href);
-      newUrl.searchParams.delete('session_refresh');
-      newUrl.searchParams.delete('success');
-      router.replace(newUrl.pathname + newUrl.search);
+    if (sessionRefreshed === 'true') {
+      toast.success('Session refreshed successfully');
     }
-
-    if (error) {
-      // Show error message
-      toast.error(`Payment error: ${error.replace(/_/g, ' ')}`);
-      
-      // Remove the error parameter from the URL
-      const newUrl = new URL(window.location.href);
-      newUrl.searchParams.delete('error');
-      router.replace(newUrl.pathname + newUrl.search);
+    if (paymentStatus === 'success') {
+      toast.success('Payment successful!');
     }
-  }, [searchParams, update, router]);
+    if (paymentStatus === 'cancelled') {
+      toast.error('Payment cancelled.');
+    }
+  }, [sessionRefreshed, paymentStatus]);
 
   return (
     <DashboardLayout currentPage="Dashboard">
@@ -60,5 +43,14 @@ export default function DashboardPage() {
         </section>
       </div>
     </DashboardLayout>
+  );
+}
+
+// Page component with Suspense boundary
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <DashboardContent />
+    </Suspense>
   );
 } 

@@ -1,16 +1,18 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { ChevronRightIcon, ChevronLeftIcon, DocumentTextIcon } from '@heroicons/react/24/outline';
 import Tab from './ProjectContextTab';
-import FileUpload from './FileUpload';
+import FileUploadContainer from './FileUploadContainer';
+
+type TabType = 'site-plan' | 'location' | 'brief' | 'references';
 
 interface ProjectContextPanelProps {
   onContextUpdate?: (context: any) => void;
+  onFileUpload?: (file: File, tabId: TabType) => Promise<void>;
+  onDataUpdate?: (data: any, tabId: TabType) => void;
   onCreateNote: (position: { x: number; y: number }) => void;
 }
-
-type TabType = 'site-plan' | 'location' | 'brief' | 'references';
 
 interface TabData {
   id: TabType;

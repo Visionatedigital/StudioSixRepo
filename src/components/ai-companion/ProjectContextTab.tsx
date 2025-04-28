@@ -1,12 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import FileUpload from './FileUpload';
+import FileUploadContainer from './FileUploadContainer';
+
+type TabType = 'site-plan' | 'location' | 'brief' | 'references';
 
 interface TabProps {
-  id: 'site-plan' | 'location' | 'brief' | 'references';
-  onFileUpload: (file: File, tabId: string) => void;
-  onContextUpdate: (data: any, tabId: string) => void;
+  id: TabType;
+  onFileUpload: (file: File, tabId: TabType) => void;
+  onContextUpdate: (data: any, tabId: TabType) => void;
 }
 
 export default function Tab({ id, onFileUpload, onContextUpdate }: TabProps) {
@@ -46,11 +48,13 @@ export default function Tab({ id, onFileUpload, onContextUpdate }: TabProps) {
       case 'site-plan':
         return (
           <div className="space-y-4">
-            <FileUpload
-              onUpload={(file) => onFileUpload(file, id)}
-              accept="image/*,.pdf,.dwg"
-              label="Upload Site Plan"
-              description="Drag and drop your site plan file here, or click to browse. Supports images, PDFs, and DWG files."
+            <FileUploadContainer
+              onFilesChange={(files) => files.forEach(file => onFileUpload(file, id))}
+              accept={{
+                'image/*': ['.jpg', '.jpeg', '.png', '.gif'],
+                'application/pdf': ['.pdf'],
+                'application/dwg': ['.dwg']
+              }}
             />
           </div>
         );
@@ -94,11 +98,11 @@ export default function Tab({ id, onFileUpload, onContextUpdate }: TabProps) {
                 placeholder="Add any additional location details..."
               />
             </div>
-            <FileUpload
-              onUpload={(file) => onFileUpload(file, id)}
-              accept="image/*"
-              label="Upload Location Photos"
-              description="Add supporting photos of the site location"
+            <FileUploadContainer
+              onFilesChange={(files) => files.forEach(file => onFileUpload(file, id))}
+              accept={{
+                'image/*': ['.jpg', '.jpeg', '.png', '.gif']
+              }}
             />
           </div>
         );
@@ -106,11 +110,13 @@ export default function Tab({ id, onFileUpload, onContextUpdate }: TabProps) {
       case 'brief':
         return (
           <div className="space-y-4">
-            <FileUpload
-              onUpload={(file) => onFileUpload(file, id)}
-              accept=".pdf,.docx,.txt"
-              label="Upload Project Brief"
-              description="Upload your project brief document"
+            <FileUploadContainer
+              onFilesChange={(files) => files.forEach(file => onFileUpload(file, id))}
+              accept={{
+                'application/pdf': ['.pdf'],
+                'application/msword': ['.docx'],
+                'text/plain': ['.txt']
+              }}
             />
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -130,11 +136,12 @@ export default function Tab({ id, onFileUpload, onContextUpdate }: TabProps) {
       case 'references':
         return (
           <div className="space-y-4">
-            <FileUpload
-              onUpload={(file) => onFileUpload(file, id)}
-              accept="image/*,.pdf"
-              label="Upload References"
-              description="Upload case studies, mood boards, or reference images"
+            <FileUploadContainer
+              onFilesChange={(files) => files.forEach(file => onFileUpload(file, id))}
+              accept={{
+                'image/*': ['.jpg', '.jpeg', '.png', '.gif'],
+                'application/pdf': ['.pdf']
+              }}
             />
             <div>
               <div className="flex justify-between items-center mb-2">

@@ -1,4 +1,4 @@
-export type Tool = 'mouse' | 'todo' | 'text' | 'board' | 'column' | 'container' | 'note' | 'image' | 'upload' | 'draw' | 'trash' | 'prompt';
+export type Tool = 'mouse' | 'todo' | 'text' | 'board' | 'column' | 'container' | 'note' | 'image' | 'upload' | 'draw' | 'trash' | 'prompt' | 'sticky-note';
 
 export type ElementType =
   | 'text'
@@ -11,7 +11,9 @@ export type ElementType =
   | 'generated-image'
   | 'comment'
   | 'container'
-  | 'generated-content';
+  | 'generated-content'
+  | 'sticky-note'
+  | 'drawing';
 
 export interface BaseElement {
   id: string;
@@ -35,18 +37,22 @@ export interface TextElement extends BaseElement {
   textAlign?: 'left' | 'center' | 'right';
   isBold?: boolean;
   isLocked?: boolean;
+  fontStyle?: string;
+  align?: 'left' | 'center' | 'right';
 }
 
 export interface ImageElement extends BaseElement {
   type: 'image';
   src: string;
   image?: HTMLImageElement;
+  alt?: string;
 }
 
 export interface UploadedElement extends BaseElement {
   type: 'uploaded';
   file: File;
   image: HTMLImageElement;
+  alt?: string;
 }
 
 export interface PromptElement extends BaseElement {
@@ -89,6 +95,7 @@ export interface GeneratedImageElement extends BaseElement {
   image?: HTMLImageElement;
   prompt: string;
   showInfo: boolean;
+  alt?: string;
 }
 
 export interface Comment {
@@ -133,6 +140,23 @@ export interface ContainerElement extends BaseElement {
   name: string;
   backgroundColor?: string;
   borderColor?: string;
+  content?: {
+    type: 'project-input' | 'design-tools' | 'generated-output' | 'template-group';
+    fields?: Array<{ type: string; label: string; placeholder?: string; accept?: string }>;
+    tools?: Array<{ id: string; name: string; icon: string }>;
+    containers?: Array<{
+      id: string;
+      type: 'project-input' | 'design-tools' | 'generated-output';
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      name: string;
+      backgroundColor: string;
+      borderColor: string;
+      borderRadius: number;
+    }>;
+  };
 }
 
 export interface GeneratedContentElement extends BaseElement {
@@ -219,17 +243,36 @@ export type StickyNoteStyle = {
   shadowColor: string;
 };
 
-export type StickyNoteElement = {
-  id: string;
+export interface StickyNoteElement extends BaseElement {
   type: 'sticky-note';
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  rotation: number;
   content: string;
   style: StickyNoteStyle;
-};
+}
+
+export interface DrawingElement extends BaseElement {
+  type: 'drawing';
+  lines: Array<{
+    points: number[];
+    color: string;
+    width: number;
+    tool: 'pencil' | 'marker' | 'eraser';
+    opacity: number;
+  }>;
+  stroke: string;
+}
+
+export interface StickyNoteProps {
+  id: string;
+  x: number;
+  y: number;
+  content: string;
+  style: StickyNoteStyle;
+  onUpdate: (id: string, content: string, style: StickyNoteStyle) => void;
+  onDelete: (id: string) => void;
+  onMove: (id: string, x: number, y: number) => void;
+  isSelected: boolean;
+  onSelect: (id: string) => void;
+}
 
 export type CanvasElement =
   | TextElement
@@ -243,7 +286,8 @@ export type CanvasElement =
   | CommentElement
   | ContainerElement
   | GeneratedContentElement
-  | StickyNoteElement;
+  | StickyNoteElement
+  | DrawingElement;
 
 export interface CanvasData {
   id: string;

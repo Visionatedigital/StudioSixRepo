@@ -11,33 +11,23 @@ import {
   TrashIcon,
   PencilIcon,
 } from '@heroicons/react/24/outline';
-import { StickyNoteStyle } from './StickyNoteColorPalette';
+import { StickyNoteStyle } from '@/types/canvas';
 
-interface StickyNoteProps {
+export interface StickyNoteProps {
   id: string;
   x: number;
   y: number;
+  text: string;
   style: StickyNoteStyle;
-  onUpdate: (id: string, content: string, style: StickyNoteStyle) => void;
-  onClose: (id: string) => void;
+  onUpdate: (id: string, text: string, style: StickyNoteStyle) => void;
+  onDelete: (id: string) => void;
   onMove: (id: string, x: number, y: number) => void;
+  isSelected: boolean;
+  onSelect: (id: string) => void;
   scale: number;
-  isSelected?: boolean;
-  onSelect?: (id: string) => void;
 }
 
-export default function StickyNote({ 
-  id, 
-  x, 
-  y, 
-  style,
-  onUpdate, 
-  onClose, 
-  onMove, 
-  scale,
-  isSelected,
-  onSelect 
-}: StickyNoteProps) {
+export default function StickyNote({ id, x, y, text, style, onUpdate, onDelete, onMove, isSelected, onSelect, scale }: StickyNoteProps) {
   const [content, setContent] = useState('');
   const [position, setPosition] = useState<{ x: number; y: number }>({ x, y });
   const [isDragging, setIsDragging] = useState(false);
@@ -54,7 +44,7 @@ export default function StickyNote({
     e.preventDefault();
     setIsDragging(true);
     dragStart.current = { x: e.clientX, y: e.clientY };
-    onSelect?.(id);
+    onSelect(id);
   };
 
   useEffect(() => {
@@ -105,7 +95,7 @@ export default function StickyNote({
         border: isSelected ? '2px solid #814ADA' : 'none'
       }}
       onMouseDown={handleDragStart}
-      onClick={() => onSelect?.(id)}
+      onClick={() => onSelect(id)}
     >
       <textarea
         value={content}
@@ -116,7 +106,7 @@ export default function StickyNote({
         className="w-full h-full resize-none bg-transparent border-none focus:outline-none"
         style={{
           color: style.textColor,
-          fontSize: '14px',
+          fontSize: `${style.fontSize}px`,
           fontFamily: 'sans-serif',
           cursor: 'text',
           position: 'relative',
@@ -141,7 +131,7 @@ export default function StickyNote({
             className="p-1 hover:bg-gray-100 rounded"
             onClick={(e) => {
               e.stopPropagation();
-              onClose(id);
+              onDelete(id);
             }}
           >
             <TrashIcon className="w-4 h-4 text-gray-600" />

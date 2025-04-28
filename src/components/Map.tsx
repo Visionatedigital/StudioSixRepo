@@ -95,97 +95,157 @@ interface MapProps {
     transportation?: Array<string>;
   }) => void;
   onSearchStart?: () => void;
+  center?: [number, number];
+  zoom?: number;
+  style?: string;
 }
 
-export default function Map({ onLocationSelect, onAnalysisComplete, onSiteInfoUpdate, onSearchStart }: MapProps) {
+// Helper function to calculate distance between coordinates
+const getDistance = (coords1: [number, number], coords2: [number, number]): number => {
+  const R = 6371e3; // Earth's radius in meters
+  const φ1 = coords1[1] * Math.PI/180;
+  const φ2 = coords2[1] * Math.PI/180;
+  const Δφ = (coords2[1] - coords1[1]) * Math.PI/180;
+  const Δλ = (coords2[0] - coords1[0]) * Math.PI/180;
+
+  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ/2) * Math.sin(Δλ/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+  return R * c;
+};
+
+const Map: React.FC<MapProps> = ({
+  onLocationSelect,
+  onAnalysisComplete,
+  onSiteInfoUpdate,
+  onSearchStart,
+  center = [-0.127758, 51.507351],
+  zoom = 10,
+  style = 'mapbox://styles/mapbox/streets-v12'
+}) => {
   const mapContainer = useRef<HTMLDivElement>(null);
+  const map = useRef<mapboxgl.Map | null>(null);
   const marker = useRef<mapboxgl.Marker | null>(null);
-  const [lng, setLng] = useState(-70.9);
-  const [lat, setLat] = useState(42.35);
-  const [zoom, setZoom] = useState(15);
+  const [lng, setLng] = useState(center[0]);
+  const [lat, setLat] = useState(center[1]);
+  const [mapZoom, setMapZoom] = useState(zoom);
   const [activeLayers, setActiveLayers] = useState<string[]>([]);
   const [selectedStyle, setSelectedStyle] = useState('streets-v12');
+  const geolocateControlRef = useRef<mapboxgl.GeolocateControl | null>(null);
 
   useEffect(() => {
-    if (!mapContainer.current || mapInstance) return;
+    if (!mapContainer.current) return;
 
-    console.log('=== Map Initialization ===');
-    console.log('Container:', mapContainer.current);
-    console.log('Style:', `mapbox://styles/mapbox/${selectedStyle}`);
-    console.log('Initial center:', [lng, lat]);
-    console.log('Initial zoom:', zoom);
-
-    // Initialize map
-    mapInstance = new mapboxgl.Map({
-      container: mapContainer.current,
-      style: `mapbox://styles/mapbox/${selectedStyle}`,
-      center: [lng, lat],
-      zoom: zoom,
-      pitch: 45,
-      bearing: 0,
-      antialias: true
-    });
-
-    // Track if map is fully loaded
-    let isMapLoaded = false;
-
-    // Debug map load events
-    mapInstance.on('load', () => {
-      console.log('=== Map Load Event ===');
-      isMapLoaded = true;
-      console.log('Map center:', mapInstance?.getCenter());
-      console.log('Map zoom:', mapInstance?.getZoom());
-      console.log('Map pitch:', mapInstance?.getPitch());
-      console.log('Map bearing:', mapInstance?.getBearing());
-    });
-
-    // Debug style load events
-    mapInstance.on('style.load', () => {
-      console.log('=== Style Load Event ===');
-      console.log('Map center:', mapInstance?.getCenter());
-      console.log('Map zoom:', mapInstance?.getZoom());
-      console.log('Map pitch:', mapInstance?.getPitch());
-      console.log('Map bearing:', mapInstance?.getBearing());
-    });
-
-    // Debug move events
-    mapInstance.on('move', () => {
-      console.log('=== Map Move Event ===');
-      console.log('Map center:', mapInstance?.getCenter());
-      console.log('Map zoom:', mapInstance?.getZoom());
-      console.log('Map pitch:', mapInstance?.getPitch());
-      console.log('Map bearing:', mapInstance?.getBearing());
-    });
-
-    // Debug moveend events
-    mapInstance.on('moveend', () => {
-      console.log('=== Map Move End Event ===');
-      console.log('Map center:', mapInstance?.getCenter());
-      console.log('Map zoom:', mapInstance?.getZoom());
-      console.log('Map pitch:', mapInstance?.getPitch());
-      console.log('Map bearing:', mapInstance?.getBearing());
-    });
-
-    // Add controls first
-    console.log('=== Adding Controls ===');
-    mapInstance.addControl(new mapboxgl.NavigationControl(), 'top-right');
+    mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || '';
     
-    // Add geolocation control
-    const geolocateControl = new mapboxgl.GeolocateControl({
-      positionOptions: {
-        enableHighAccuracy: true
-      },
-      trackUserLocation: true,
-      showUserHeading: true,
-      showAccuracyCircle: true,
-      fitBoundsOptions: {
-        maxZoom: 15,
-        duration: 2000
-      }
-    });
+    if (!map.current) {
+      map.current = new mapboxgl.Map({
+        container: mapContainer.current,
+        style: style,
+        center: [lng, lat],
+        zoom: mapZoom,
+        pitch: 45,
+        bearing: -17.6,
+        antialias: true
+      });
 
-    // Add geolocation control to the map
-    mapInstance?.addControl(geolocateControl, 'top-right');
+      // Add navigation control
+      map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
+
+      // Add geolocation control
+      geolocateControlRef.current = new mapboxgl.GeolocateControl({
+        positionOptions: {
+          enableHighAccuracy: true
+        },
+        trackUserLocation: true,
+        showUserHeading: true
+      });
+      map.current.addControl(geolocateControlRef.current, 'top-right');
+
+      map.current.on('load', () => {
+        if (!map.current) return;
+
+        // Add terrain source
+        map.current.addSource('mapbox-dem', {
+          'type': 'raster-dem',
+          'url': 'mapbox://mapbox.mapbox-terrain-dem-v1',
+          'tileSize': 512,
+          'maxzoom': 14
+        });
+
+        // Add hillshade layer
+        map.current.addLayer({
+          'id': 'hillshading',
+          'source': 'mapbox-dem',
+          'type': 'hillshade',
+          'paint': {
+            'hillshade-exaggeration': 0.5
+          }
+        });
+
+        // Add 3D terrain
+        map.current.setTerrain({ 'source': 'mapbox-dem', 'exaggeration': 1.5 });
+
+        // Add building layer
+        map.current.addLayer({
+          'id': 'add-3d-buildings',
+          'source': 'composite',
+          'source-layer': 'building',
+          'type': 'fill-extrusion',
+          'minzoom': 15,
+          'paint': {
+            'fill-extrusion-color': '#aaa',
+            'fill-extrusion-height': [
+              'interpolate',
+              ['linear'],
+              ['zoom'],
+              15,
+              0,
+              15.05,
+              ['get', 'height']
+            ],
+            'fill-extrusion-base': [
+              'interpolate',
+              ['linear'],
+              ['zoom'],
+              15,
+              0,
+              15.05,
+              ['get', 'min_height']
+            ],
+            'fill-extrusion-opacity': 0.6
+          }
+        } as mapboxgl.FillExtrusionLayer);
+
+        // Add land use layer
+        map.current.addLayer({
+          'id': 'land-use',
+          'source': 'composite',
+          'source-layer': 'landuse',
+          'type': 'fill',
+          'filter': ['in', 'class', 'park', 'wood', 'grass', 'forest'],
+          'paint': {
+            'fill-color': '#90EE90',
+            'fill-opacity': 0.4
+          }
+        } as mapboxgl.FillLayer);
+      });
+
+      map.current.on('move', () => {
+        if (!map.current) return;
+        setLng(Number(map.current.getCenter().lng.toFixed(4)));
+        setLat(Number(map.current.getCenter().lat.toFixed(4)));
+        setMapZoom(Number(map.current.getZoom().toFixed(2)));
+      });
+    }
+
+    // Initialize marker
+    marker.current = new mapboxgl.Marker({
+      draggable: true,
+      color: '#844BDC'
+    });
 
     // Add search control
     const geocoder = new MapboxGeocoder({
@@ -205,125 +265,7 @@ export default function Map({ onLocationSelect, onAnalysisComplete, onSiteInfoUp
     });
 
     // Add geocoder to the map
-    mapInstance?.addControl(geocoder, 'top-right');
-
-    // Initialize marker
-    marker.current = new mapboxgl.Marker({
-      draggable: true,
-      color: '#844BDC'
-    });
-
-    // Wait for style to load before adding layers
-    mapInstance.on('style.load', () => {
-      console.log('Map style loaded');
-      
-      // Add terrain source
-      mapInstance.addSource('mapbox-dem', {
-        'type': 'raster-dem',
-        'url': 'mapbox://mapbox.mapbox-terrain-dem-v1',
-        'tileSize': 512,
-        'maxzoom': 14
-      });
-
-      // Add hillshade layer
-      if (!mapInstance.getLayer('hillshading')) {
-        mapInstance.addLayer({
-          'id': 'hillshading',
-          'source': 'mapbox-dem',
-          'type': 'hillshade',
-          'layout': {
-            'visibility': 'none'
-          },
-          'paint': {
-            'hillshade-illumination-anchor': 'viewport',
-            'hillshade-exaggeration': 0.5
-          }
-        });
-      }
-
-      // Enable terrain
-      mapInstance.setTerrain({ 'source': 'mapbox-dem', 'exaggeration': 1.5 });
-
-      // Add sky layer
-      if (!mapInstance.getLayer('sky')) {
-        mapInstance.addLayer({
-          'id': 'sky',
-          'type': 'sky',
-          'paint': {
-            'sky-type': 'atmosphere',
-            'sky-atmosphere-sun': [0.0, 90.0],
-            'sky-atmosphere-sun-intensity': 15
-          }
-        });
-      }
-
-      // Add 3D buildings
-      if (!mapInstance.getLayer('3d-buildings')) {
-        mapInstance.addLayer({
-          'id': '3d-buildings',
-          'source': 'composite',
-          'source-layer': 'building',
-          'filter': ['==', 'extrude', 'true'],
-          'type': 'fill-extrusion',
-          'minzoom': 15,
-          'paint': {
-            'fill-extrusion-color': '#aaa',
-            'fill-extrusion-height': ['get', 'height'],
-            'fill-extrusion-base': ['get', 'min_height'],
-            'fill-extrusion-opacity': 0.6
-          }
-        });
-      }
-
-      // Add environmental layers
-      Object.values(environmentalLayers).forEach(layer => {
-        if (!mapInstance.getLayer(layer.id)) {
-          mapInstance.addLayer({
-            id: layer.id,
-            source: layer.source,
-            'source-layer': layer['source-layer'],
-            type: layer.type as any,
-            filter: layer.filter,
-            paint: layer.paint,
-            layout: { visibility: 'none' }
-          });
-        }
-      });
-    });
-
-    // Helper function to handle navigation
-    const navigateToLocation = (map: mapboxgl.Map, coords: [number, number]) => {
-      console.log('Starting navigation to:', coords);
-      
-      // First, ensure we're at the right zoom level
-      map.setZoom(15);
-      
-      // Then move to the location
-      map.flyTo({
-        center: coords,
-        zoom: 15,
-        pitch: 45,
-        bearing: 0,
-        duration: 2000,
-        essential: true
-      });
-    };
-
-    // Helper function to calculate distance between coordinates
-    function getDistance(coords1: number[], coords2: number[]) {
-      const R = 6371e3; // Earth's radius in meters
-      const φ1 = coords1[1] * Math.PI/180;
-      const φ2 = coords2[1] * Math.PI/180;
-      const Δφ = (coords2[1] - coords1[1]) * Math.PI/180;
-      const Δλ = (coords2[0] - coords1[0]) * Math.PI/180;
-
-      const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-                Math.cos(φ1) * Math.cos(φ2) *
-                Math.sin(Δλ/2) * Math.sin(Δλ/2);
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-
-      return R * c;
-    }
+    map.current?.addControl(geocoder, 'top-right');
 
     // Handle search results
     geocoder.on('result', (e) => {
@@ -436,17 +378,25 @@ export default function Map({ onLocationSelect, onAnalysisComplete, onSiteInfoUp
     });
 
     // Handle geolocation events
-    geolocateControl.on('geolocate', (e) => {
-      console.log('=== Geolocation Event ===');
-      const { coords } = e as GeolocationPosition;
-      console.log('Geolocation coordinates:', coords);
-      
-      // Update location
-      onLocationSelect?.({ lng: coords.longitude, lat: coords.latitude });
-    });
+    if (geolocateControlRef.current) {
+      geolocateControlRef.current.on('geolocate', (e: { coords: { longitude: number; latitude: number } }) => {
+        if (onLocationSelect) {
+          onLocationSelect({
+            lng: e.coords.longitude,
+            lat: e.coords.latitude
+          });
+        }
+      });
+
+      geolocateControlRef.current.on('trackuserlocationstart', () => {
+        if (onSearchStart) {
+          onSearchStart();
+        }
+      });
+    }
 
     // Handle geolocation errors
-    geolocateControl.on('error', (e) => {
+    geolocateControlRef.current?.on('error', (e) => {
       console.error('=== Geolocation Error ===');
       console.error('Error code:', e.code);
       console.error('Error message:', e.message);
@@ -456,11 +406,11 @@ export default function Map({ onLocationSelect, onAnalysisComplete, onSiteInfoUp
     });
 
     // Handle geolocation tracking state changes
-    geolocateControl.on('trackuserlocationstart', () => {
+    geolocateControlRef.current?.on('trackuserlocationstart', () => {
       console.log('Started tracking user location');
     });
 
-    geolocateControl.on('trackuserlocationend', () => {
+    geolocateControlRef.current?.on('trackuserlocationend', () => {
       console.log('Stopped tracking user location');
     });
 
@@ -470,22 +420,25 @@ export default function Map({ onLocationSelect, onAnalysisComplete, onSiteInfoUp
       onSearchStart?.();
     });
 
-    // Cleanup
     return () => {
       if (marker.current) {
         marker.current.remove();
         marker.current = null;
       }
+      if (map.current) {
+        map.current.remove();
+        map.current = null;
+      }
     };
-  }, [onLocationSelect, onAnalysisComplete, onSiteInfoUpdate, selectedStyle, onSearchStart]);
+  }, [onLocationSelect, onAnalysisComplete, onSiteInfoUpdate, style, onSearchStart]);
 
   // Function to toggle layer visibility
   const toggleLayer = (layerId: string) => {
-    if (mapInstance) {
-      const visibility = mapInstance.getLayoutProperty(layerId, 'visibility');
+    if (map.current) {
+      const visibility = map.current.getLayoutProperty(layerId, 'visibility');
       const newVisibility = visibility === 'visible' ? 'none' : 'visible';
       
-      mapInstance.setLayoutProperty(layerId, 'visibility', newVisibility);
+      map.current.setLayoutProperty(layerId, 'visibility', newVisibility);
       
       setActiveLayers(prev => 
         newVisibility === 'visible'
@@ -497,19 +450,19 @@ export default function Map({ onLocationSelect, onAnalysisComplete, onSiteInfoUp
 
   // Function to switch map styles
   const switchMapStyle = (style: string) => {
-    if (mapInstance) {
-      mapInstance.setStyle(`mapbox://styles/mapbox/${style}`);
+    if (map.current) {
+      map.current.setStyle(`mapbox://styles/mapbox/${style}`);
       setSelectedStyle(style);
     }
   };
 
   // Function to toggle terrain
   const toggleTerrain = (enabled: boolean) => {
-    if (mapInstance) {
+    if (map.current) {
       if (enabled) {
-        mapInstance.setTerrain({ 'source': 'mapbox-dem', 'exaggeration': 1.5 });
+        map.current.setTerrain({ 'source': 'mapbox-dem', 'exaggeration': 1.5 });
       } else {
-        mapInstance.setTerrain(null);
+        map.current.setTerrain(null);
       }
     }
   };
@@ -602,6 +555,11 @@ export default function Map({ onLocationSelect, onAnalysisComplete, onSiteInfoUp
           </div>
         </div>
       </div>
+      <div className="absolute bottom-2 left-2 bg-white/80 px-4 py-2 rounded-lg text-sm">
+        Longitude: {lng} | Latitude: {lat} | Zoom: {mapZoom}
+      </div>
     </div>
   );
-} 
+};
+
+export default Map; 

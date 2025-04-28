@@ -13,10 +13,10 @@ const nextConfig = {
     if (!isServer) {
       config.resolve.fallback = {
         ...config.resolve.fallback,
-        canvas: false,
         fs: false,
         net: false,
         tls: false,
+        canvas: false,
       };
     }
 
@@ -24,6 +24,7 @@ const nextConfig = {
     config.externals = config.externals || [];
     if (isServer) {
       config.externals.push('bcrypt');
+      config.externals.push('canvas');
     }
 
     config.module.rules.push({
@@ -31,17 +32,20 @@ const nextConfig = {
       type: 'asset/resource'
     });
 
+    // Properly handle canvas-related modules
+    if (!isServer) {
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        'konva/lib/index-node': 'konva/lib/index',
+      };
+    }
+
     config.externals.push({
       'utf-8-validate': 'commonjs utf-8-validate',
       'bufferutil': 'commonjs bufferutil',
     });
 
     return config;
-  },
-  experimental: {
-    serverActions: {
-      allowedOrigins: ['localhost:3000']
-    }
   },
   async headers() {
     return [

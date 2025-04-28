@@ -56,7 +56,7 @@ export async function POST(req: Request) {
     const analysis = parseAnalysis(completion.choices[0].message.content || "");
     
     return NextResponse.json({
-      infographic: imageResponse.data[0].url,
+      infographic: imageResponse.data?.[0]?.url ?? null,
       analysis
     });
 

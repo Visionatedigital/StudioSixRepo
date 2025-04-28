@@ -3,6 +3,10 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { NextRequest } from 'next/server';
+import { dynamicConfig } from '../../config';
+
+export const dynamic = dynamicConfig.dynamic;
+export const revalidate = dynamicConfig.revalidate;
 
 // GET /api/projects/shared - Fetch projects shared with the user
 export async function GET(request: NextRequest) {

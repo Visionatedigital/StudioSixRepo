@@ -36,22 +36,13 @@ const FilePreview: React.FC<FilePreviewProps> = ({ file, onDelete }) => {
       onMouseLeave={() => setIsHovered(false)}
     >
       {/* Preview or Icon */}
-      {getPreviewUrl() ? (
+      {getPreviewUrl() && (
         <Image
-          src={getPreviewUrl()}
+          src={getPreviewUrl() as string}
           alt={file.name}
           fill
           className="object-cover"
         />
-      ) : (
-        <div className="w-full h-full flex items-center justify-center bg-gray-100">
-          <Image
-            src={getFileIcon()}
-            alt={file.type}
-            width={32}
-            height={32}
-          />
-        </div>
       )}
 
       {/* Hover Overlay */}

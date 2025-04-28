@@ -64,7 +64,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ 
       analysis: parsedAnalysis,
-      infographic: imageResponse.data[0].url
+      infographic: imageResponse.data?.[0]?.url || ''
     });
 
   } catch (error) {

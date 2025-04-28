@@ -2,119 +2,125 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { Prisma, PrismaClient } from '@prisma/client';
+import { dynamicConfig } from '../config';
 
-export async function GET(req: Request) {
+export const dynamic = dynamicConfig.dynamic;
+export const revalidate = dynamicConfig.revalidate;
+
+type MessageWithUsers = {
+  id: string;
+  content: string;
+  senderId: string;
+  receiverId: string;
+  read: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  sender: {
+    id: string;
+    name: string | null;
+    email: string;
+    image: string | null;
+  };
+  receiver: {
+    id: string;
+    name: string | null;
+    email: string;
+    image: string | null;
+  };
+};
+
+interface Conversation {
+  id: string;
+  updatedAt: Date;
+  messages: MessageWithUsers[];
+  otherUser: {
+    id: string;
+    name: string | null;
+    email: string;
+    image: string | null;
+  };
+}
+
+export async function GET() {
   try {
     const session = await getServerSession(authOptions);
-    
-    if (!session?.user?.id) {
+
+    if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { searchParams } = new URL(req.url);
-    const userId = searchParams.get('userId');
-
-    if (userId) {
-      // Get messages between current user and specified user
-      const messages = await prisma.message.findMany({
+    const conversations = await prisma.$transaction(async (tx: Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>) => {
+      // Get all messages where the user is either sender or receiver
+      const interactedUsers = await tx.message.findMany({
         where: {
           OR: [
-            { senderId: session.user.id, receiverId: userId },
-            { senderId: userId, receiverId: session.user.id }
+            { senderId: session.user.id },
+            { receiverId: session.user.id }
           ]
         },
-        orderBy: {
-          createdAt: 'asc'
-        },
         include: {
-          sender: {
-            select: {
-              name: true,
-              image: true,
-              verified: true
-            }
-          }
+          sender: true,
+          receiver: true
+        },
+        orderBy: {
+          createdAt: 'desc'
         }
       });
 
-      return NextResponse.json({ messages });
-    } else {
-      // Get all conversations (latest message from each conversation)
-      const conversations = await prisma.$transaction(async (tx) => {
-        // Get all users the current user has interacted with
-        const interactedUsers = await tx.message.findMany({
+      if (!interactedUsers.length) {
+        return [];
+      }
+
+      // Get unique user IDs (excluding current user)
+      const userIds = Array.from(new Set(
+        interactedUsers.flatMap((msg: MessageWithUsers) => [msg.senderId, msg.receiverId])
+      )).filter(id => id !== session.user.id);
+
+      // Get latest message and user details for each conversation
+      const conversationPromises = userIds.map(async (userId) => {
+        const messages = await tx.message.findMany({
           where: {
             OR: [
-              { senderId: session.user.id },
-              { receiverId: session.user.id }
+              { AND: [{ senderId: session.user.id }, { receiverId: userId }] },
+              { AND: [{ senderId: userId }, { receiverId: session.user.id }] }
             ]
           },
-          select: {
-            senderId: true,
-            receiverId: true
+          include: {
+            sender: true,
+            receiver: true
           },
-          distinct: ['senderId', 'receiverId']
+          orderBy: {
+            createdAt: 'desc'
+          },
+          take: 50
         });
 
-        // Get unique user IDs (excluding current user)
-        const userIds = [...new Set(
-          interactedUsers.flatMap(msg => [msg.senderId, msg.receiverId])
-        )].filter(id => id !== session.user.id);
+        if (!messages.length) {
+          return null;
+        }
 
-        // Get latest message and user details for each conversation
-        const conversationPromises = userIds.map(async (userId) => {
-          const latestMessage = await tx.message.findFirst({
-            where: {
-              OR: [
-                { senderId: session.user.id, receiverId: userId },
-                { senderId: userId, receiverId: session.user.id }
-              ]
-            },
-            orderBy: {
-              createdAt: 'desc'
-            }
-          });
+        const otherUser = messages[0].senderId === session.user.id
+          ? messages[0].receiver
+          : messages[0].sender;
 
-          const unreadCount = await tx.message.count({
-            where: {
-              senderId: userId,
-              receiverId: session.user.id,
-              read: false
-            }
-          });
-
-          const user = await tx.user.findUnique({
-            where: { id: userId },
-            select: {
-              id: true,
-              name: true,
-              image: true,
-              verified: true
-            }
-          });
-
-          if (!latestMessage || !user) return null;
-
-          return {
-            id: userId,
-            userId: userId,
-            userName: user.name || 'Unknown User',
-            userImage: user.image || '/profile-icons/Profile-icon-01.svg',
-            verified: user.verified,
-            lastMessage: latestMessage.content,
-            unreadCount,
-            updatedAt: latestMessage.createdAt
-          };
-        });
-
-        const conversations = (await Promise.all(conversationPromises)).filter(Boolean);
-        return conversations.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+        return {
+          id: userId,
+          updatedAt: messages[0].createdAt,
+          messages,
+          otherUser
+        };
       });
 
-      return NextResponse.json({ conversations });
-    }
+      const conversations = (await Promise.all(conversationPromises)).filter(Boolean) as Conversation[];
+      return conversations
+        .filter((conv): conv is Conversation => Boolean(conv && conv.updatedAt))
+        .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+    });
+
+    return NextResponse.json({ conversations });
   } catch (error) {
-    console.error('Error fetching messages:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error('Error fetching conversations:', error);
+    return NextResponse.json({ error: 'Failed to fetch conversations' }, { status: 500 });
   }
 } 

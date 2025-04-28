@@ -159,7 +159,7 @@ export default function AIChat({ onClose, canvasElements, onAddToCanvas, project
       let imageUrl = null;
       
       // Handle different element types and image data structures
-      if (selectedElement.type === 'image' || selectedElement.type === 'upload' || selectedElement.type === 'generated') {
+      if (selectedElement.type === 'image' || selectedElement.type === 'uploaded' || selectedElement.type === 'generated-image') {
         // Try different possible locations for the image data
         imageUrl = selectedElement.src || 
                   selectedElement.image?.src || 
@@ -359,7 +359,7 @@ export default function AIChat({ onClose, canvasElements, onAddToCanvas, project
         console.log('Selected element:', selectedElement);
         
         // Handle different element types
-        if (selectedElement.type === 'image' || selectedElement.type === 'upload' || selectedElement.type === 'generated') {
+        if (selectedElement.type === 'image' || selectedElement.type === 'uploaded' || selectedElement.type === 'generated-image') {
           const imageElement = selectedElement as ImageElement;
           elementToSend = {
             ...imageElement,
