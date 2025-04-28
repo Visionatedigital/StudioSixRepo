@@ -106,8 +106,20 @@ export const authOptions: NextAuthOptions = {
           credits: dbUser.credits,
           level: dbUser.level,
           verified: dbUser.verified,
+          email_verified: dbUser.emailVerified,
           subscriptionStatus: dbUser.subscriptionStatus
         };
+      }
+
+      // Check if we need to update email verification status
+      if (token.email) {
+        const user = await prisma.user.findUnique({
+          where: { email: token.email },
+          select: { emailVerified: true }
+        });
+        if (user?.emailVerified) {
+          token.email_verified = user.emailVerified;
+        }
       }
 
       // On subsequent requests, token already has the user info

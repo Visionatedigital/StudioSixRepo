@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import { withAuth } from 'next-auth/middleware';
+import { NextRequestWithAuth } from 'next-auth/middleware';
 
 export default withAuth(
   async function middleware(req) {
@@ -32,6 +34,10 @@ export default withAuth(
       '/api/status',         // API status endpoint
       '/sign-in',            // Sign in page
       '/auth/signin',        // Alternative sign in path
+      '/api/video-generator/test', // Video generator test endpoint
+      '/api/video-generator/test/status', // Video generator status endpoint
+      '/sign-up',            // Sign up page
+      '/verify-email',       // Verify email page
     ];
     
     // Check if the request is for a static asset
@@ -60,6 +66,18 @@ export default withAuth(
     // Allow access to public pages
     if (isPublicPage) {
       return NextResponse.next();
+    }
+
+    // Check if email is verified
+    if (token && !token.email_verified) {
+      // If trying to access protected routes, redirect to verify-email page
+      if (!isPublicPage) {
+        const verifyEmailUrl = new URL('/verify-email', req.url);
+        if (token.email) {
+          verifyEmailUrl.searchParams.set('email', token.email as string);
+        }
+        return NextResponse.redirect(verifyEmailUrl);
+      }
     }
 
     // Redirect unauthenticated users to sign-in

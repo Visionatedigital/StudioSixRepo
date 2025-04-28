@@ -33,6 +33,38 @@ const tools = [
     description: 'Design breathtaking landscapes with intelligent assistance',
     image: '/Banner Images/Landscape.jpeg',
     href: '/generate/landscape'
+  },
+  {
+    id: 'site-analysis',
+    title: 'Site Analysis AI',
+    description: 'Analyze site conditions and generate comprehensive reports',
+    image: '/Banner Images/Site Analysis.jpg',
+    href: '/generate/site-analysis',
+    iconPath: '/icons/site-analysis.svg'
+  },
+  {
+    id: 'case-studies',
+    title: 'Case Studies',
+    description: 'Explore curated architectural case studies for inspiration',
+    image: '/Banner Images/Case Studies.png',
+    href: '/case-studies',
+    iconPath: '/icons/case-studies.svg'
+  },
+  {
+    id: 'concept',
+    title: 'Concept Generator AI',
+    description: 'Generate innovative architectural concepts and ideas',
+    image: '/Banner Images/Concept.jpg',
+    href: '/generate/concept',
+    iconPath: '/icons/concept.svg'
+  },
+  {
+    id: 'floor-plan',
+    title: 'Floor Plan AI',
+    description: 'Analyze and optimize floor plans with AI assistance',
+    image: '/Banner Images/Floor Plan.jpg',
+    href: '/generate/floor-plan',
+    iconPath: '/icons/floor-plan.svg'
   }
 ];
 
@@ -40,10 +72,11 @@ export default function DashboardBanner() {
   const [currentSlide, setCurrentSlide] = useState(0);
 
   useEffect(() => {
-    const timer = setInterval(() => {
+    const interval = setInterval(() => {
       setCurrentSlide((prev) => (prev + 1) % tools.length);
     }, 5000);
-    return () => clearInterval(timer);
+
+    return () => clearInterval(interval);
   }, []);
 
   const nextSlide = () => {
@@ -59,56 +92,51 @@ export default function DashboardBanner() {
   };
 
   return (
-    <div className="space-y-8">
-      {/* Main Heading */}
-      <div className="text-center space-y-2">
-        <h1 className="text-4xl font-bold text-[#1B1464]">
-          Make ideas truly extraordinary
-        </h1>
-        <p className="text-lg text-[#6D758F]">
-          Transform concepts into remarkable creations with innovation
-        </p>
-      </div>
-
-      {/* Carousel */}
-      <div className="relative h-[500px] rounded-2xl overflow-hidden group">
-        {/* Slides */}
-        <div 
-          className="h-full transition-transform duration-500 ease-out flex"
+    <div className="space-y-6">
+      {/* Banner Carousel */}
+      <div className="relative h-[400px] rounded-2xl overflow-hidden group">
+        <div
+          className="absolute inset-0 transition-transform duration-500 ease-in-out"
           style={{ transform: `translateX(-${currentSlide * 100}%)` }}
         >
           {tools.map((tool) => (
-            <div key={tool.id} className="w-full h-full flex-shrink-0 relative">
+            <div
+              key={tool.id}
+              className="absolute top-0 left-0 w-full h-full"
+              style={{ left: `${tools.indexOf(tool) * 100}%` }}
+            >
               <Image
                 src={tool.image}
                 alt={tool.title}
                 fill
-                className="object-cover animate-kenburns"
-                priority
+                className="object-cover object-top"
+                priority={tools.indexOf(tool) === currentSlide}
               />
-              <div className="absolute inset-0 bg-gradient-to-r from-black/60 to-transparent" />
-              <div className="absolute bottom-0 left-0 p-12 text-white max-w-2xl">
-                <h2 className="text-5xl font-bold mb-4">{tool.title}</h2>
-                <p className="text-xl text-white/90 mb-8">{tool.description}</p>
-                <Link 
-                  href={tool.href}
-                  className="inline-flex items-center gap-2 bg-white text-[#1B1464] hover:bg-white/90 px-8 py-4 rounded-lg font-medium text-lg transition-colors"
-                >
-                  Try Now
-                  <Icon name="arrow-right" size={24} />
-                </Link>
+              <div className="absolute inset-0 bg-gradient-to-r from-black/60 to-transparent">
+                <div className="absolute bottom-12 left-12 text-white max-w-lg">
+                  <h2 className="text-4xl font-bold mb-4">{tool.title}</h2>
+                  <p className="text-lg text-white/90 mb-8">{tool.description}</p>
+                  <Link
+                    href={tool.href}
+                    className="inline-flex items-center px-6 py-3 bg-white text-[#1B1464] rounded-xl hover:bg-white/90 transition-colors font-medium"
+                  >
+                    Try Now
+                    <Icon name="arrow-right" size={20} className="ml-2" />
+                  </Link>
+                </div>
               </div>
             </div>
           ))}
         </div>
 
-        {/* Navigation Arrows */}
+        {/* Navigation Buttons */}
         <button
           onClick={prevSlide}
           className="absolute left-6 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/20 p-3 rounded-full backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity"
         >
           <Icon name="chevron-left" size={32} className="text-white" />
         </button>
+
         <button
           onClick={nextSlide}
           className="absolute right-6 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/20 p-3 rounded-full backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity"
@@ -134,14 +162,25 @@ export default function DashboardBanner() {
 
       {/* Quick Action Buttons */}
       <div className="grid grid-cols-4 gap-6">
-        {tools.map((tool) => (
+        {tools.slice(0, 8).map((tool) => (
           <Link
             key={tool.id}
             href={tool.href}
             className="flex items-center gap-3 px-4 py-3 bg-white rounded-xl border border-[#E0DAF3] hover:border-[#844BDC] transition-all hover:shadow-lg group"
           >
             <div className="w-10 h-10 rounded-xl bg-[#844BDC]/10 flex items-center justify-center group-hover:bg-[#844BDC]/20 transition-colors">
-              <Icon name={tool.id} size={22} className="text-[#844BDC]" />
+              {tool.iconPath ? (
+                <div className="w-[22px] h-[22px] relative">
+                  <Image
+                    src={tool.iconPath}
+                    alt=""
+                    fill
+                    className="text-[#844BDC]"
+                  />
+                </div>
+              ) : (
+                <Icon name={tool.id} size={22} className="text-[#844BDC]" />
+              )}
             </div>
             <div>
               <h3 className="font-medium text-base text-[#1B1464] group-hover:text-[#844BDC] transition-colors">

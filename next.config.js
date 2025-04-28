@@ -39,7 +39,9 @@ const nextConfig = {
     return config;
   },
   experimental: {
-    serverActions: true,
+    serverActions: {
+      allowedOrigins: ['localhost:3000']
+    }
   },
   async headers() {
     return [
@@ -62,7 +64,6 @@ const nextConfig = {
       },
     ];
   },
-  allowedDevOrigins: ['localhost:3000'],
   output: 'standalone',
   poweredByHeader: false,
   compress: true,

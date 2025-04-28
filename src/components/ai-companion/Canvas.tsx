@@ -25,7 +25,10 @@ import {
   GeneratedImageElement,
   ImageElement,
   ContainerElement,
-  ShapeElement
+  ShapeElement,
+  StickyNoteElement,
+  StickyNoteStyle,
+  ElementType
 } from '@/types/canvas';
 import dynamic from 'next/dynamic';
 import { Stage, Layer, Rect, Circle, Line, Text as KonvaText, Image as KonvaImage, Transformer, Group, Path } from 'react-konva';
@@ -46,6 +49,9 @@ import { Html } from 'react-konva-utils';
 import FileUploadContainer from './FileUploadContainer';
 import { generateSiteAnalysis } from '@/services/siteAnalysis';
 import { processFile } from '@/utils/imageProcessing';
+import { SiteAnalysisRequest as ServiceSiteAnalysisRequest } from '@/services/siteAnalysis';
+import TextFormatMenu from './TextFormatMenu';
+import DrawingMenu from './DrawingMenu';
 
 // Dynamically import Stage with no SSR
 const DynamicStage = dynamic(() => import('react-konva').then((mod) => mod.Stage), {
@@ -80,6 +86,8 @@ interface DrawingLine {
   points: number[];
   color: string;
   width: number;
+  tool: 'pencil' | 'marker' | 'eraser';
+  opacity: number;
 }
 
 interface DrawingGroup {
@@ -191,6 +199,26 @@ interface GeneratedContentElement extends BaseElement {
   };
 }
 
+// Add these interfaces at the top with other interfaces
+interface SiteAnalysisRequest {
+  projectBrief: string;
+  uploadedFiles: File[];
+  siteDescription: string;
+  selectedTags: string[];
+  abstractionLevel: number;
+}
+
+interface SiteAnalysisResponse {
+  siteStatement: string;
+  swot: {
+    strengths: string[];
+    weaknesses: string[];
+    opportunities: string[];
+    threats: string[];
+  };
+  keyCharacteristics: string[];
+}
+
 export default function Canvas({ name, description, projectId }: Props) {
   const { data: session } = useSession();
   const searchParams = useSearchParams();
@@ -261,6 +289,24 @@ export default function Canvas({ name, description, projectId }: Props) {
   const [siteDescription, setSiteDescription] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [abstractionLevel, setAbstractionLevel] = useState(50);
+  const [textMenuPosition, setTextMenuPosition] = useState<{ x: number; y: number } | null>(null);
+  const [selectedTextElement, setSelectedTextElement] = useState<TextElement | null>(null);
+  const [editingTextId, setEditingTextId] = useState<string | null>(null);
+  const [editingTextValue, setEditingTextValue] = useState('');
+  const [isExplicitlySelected, setIsExplicitlySelected] = useState(false);
+  const [selectionBox, setSelectionBox] = useState<{
+    isSelecting: boolean;
+    startX: number;
+    startY: number;
+    endX: number;
+    endY: number;
+  } | null>(null);
+  const [selectedDrawing, setSelectedDrawing] = useState<{
+    id: string;
+    position: { x: number; y: number };
+    color: string;
+  } | null>(null);
+  const [selectedStickyNote, setSelectedStickyNote] = useState<StickyNoteElement | null>(null);
 
   // Get current canvas data with safety check
   const currentCanvas = canvasStack[currentCanvasIndex] || canvasStack[0];
@@ -433,6 +479,14 @@ export default function Canvas({ name, description, projectId }: Props) {
     const point = stage.getPointerPosition();
     if (!point) return;
 
+    // Update selection box if active
+    if (selectionBox?.isSelecting) {
+      const transform = stage.getAbsoluteTransform().copy().invert();
+      const pos = transform.point(point);
+      setSelectionBox(prev => prev ? { ...prev, endX: pos.x, endY: pos.y } : null);
+      return;
+    }
+
     if (socket && projectId) {
       socket.emit('cursor-move', {
         x: point.x,
@@ -441,7 +495,7 @@ export default function Canvas({ name, description, projectId }: Props) {
       });
     }
 
-    if (tool === 'mouse' && isDraggingCanvas) {
+    if (tool === 'mouse' && isDraggingCanvas && e.evt.button !== 2) { // Only allow dragging if not right-click
       const newPosition = {
         x: e.evt.clientX - mouseStartPos.x,
         y: e.evt.clientY - mouseStartPos.y
@@ -451,7 +505,6 @@ export default function Canvas({ name, description, projectId }: Props) {
     }
     
     if (isDrawing && currentLine) {
-      // Update the current line with new points
       const newPoints = [...currentLine.points, point.x, point.y];
       const updatedLine = {
       ...currentLine,
@@ -459,10 +512,13 @@ export default function Canvas({ name, description, projectId }: Props) {
       };
       setCurrentLine(updatedLine);
       
-      // Update the line in the lines array
       setLines(prev => {
         const newLines = [...prev];
+        if (newLines.length > 0) {
         newLines[newLines.length - 1] = updatedLine;
+        } else {
+          newLines.push(updatedLine);
+        }
         return newLines;
       });
     }
@@ -479,7 +535,7 @@ export default function Canvas({ name, description, projectId }: Props) {
           const serializedElement = { ...element };
           
           // Handle image elements
-          if ((element.type === 'upload' || element.type === 'generated') && element.image) {
+          if ((element.type === 'uploaded' || element.type === 'generated-image') && 'image' in element) {
             if (element.image instanceof HTMLImageElement) {
               (serializedElement as any).image = {
                 src: element.image.src,
@@ -638,6 +694,57 @@ export default function Canvas({ name, description, projectId }: Props) {
   };
 
   const handleCanvasClick = (e: KonvaEventObject<MouseEvent>) => {
+    // Clear selection box on right click
+    if (e.evt.button === 2) {
+      setSelectionBox(null);
+      return;
+    }
+
+    // Handle drawing tools
+    if (drawingMode) {
+      if (e.target === e.target.getStage()) {
+        setCurrentLine(null);
+      }
+      return;
+    }
+
+    // Handle sticky note creation
+    if (selectedTool === 'sticky-note') {
+      const stage = e.target.getStage();
+      if (!stage) return;
+
+      const point = stage.getPointerPosition();
+      if (!point) return;
+
+      const newStickyNote: StickyNoteElement = {
+                id: uuidv4(),
+        type: 'sticky-note',
+        x: point.x,
+        y: point.y,
+        width: 200,
+        height: 200,
+        rotation: 0,
+        content: '',
+        style: {
+          backgroundColor: '#ffff88',
+          textColor: '#000000',
+          fontSize: 16,
+          shadowColor: '#000000'
+        }
+      };
+
+      setElements(prev => [...prev, newStickyNote]);
+      setSelectedStickyNote(newStickyNote);
+        return;
+    }
+
+    // Clear text menu when clicking on stage
+    if (e.target === e.target.getStage()) {
+      setSelectedTextElement(null);
+      setSelectedStickyNote(null);
+      return;
+    }
+
     // Early return if no stage ref
     if (!stageRef.current) return;
 
@@ -653,266 +760,157 @@ export default function Canvas({ name, description, projectId }: Props) {
     const transform = clickedStage.getAbsoluteTransform().copy().invert();
     const pos = transform.point(pointerPos);
 
-    // Handle mouse tool dragging
-    if (tool === 'mouse' && isClickOnStage) {
-      setIsDraggingCanvas(true);
-      clickedStage.container().style.cursor = 'grabbing';
-      setMouseStartPos({ x: e.evt.clientX - position.x, y: e.evt.clientY - position.y });
-      return;
-    }
-
-    // Handle container creation
-    if (tool === 'container' && isClickOnStage) {
-      const template = getContainerTemplate(selectedTemplateId || '');
-      
-      if (selectedTemplateId === 'concept-development' && 'layout' in template) {
-        // Get the click position from the stage
-        const pointerPos = stageRef.current?.getPointerPosition();
-        if (!pointerPos) return;
-
-        // Convert to stage coordinates
-        const transform = stageRef.current?.getAbsoluteTransform().copy().invert();
-        if (!transform) return;
-        const pos = transform.point(pointerPos);
-
-        // Create a single container group
-        const mainContainerId = uuidv4();
-        const mainContainer: CommentElement = {
-          id: mainContainerId,
-          type: 'container',
-          x: pos.x - (template.width / 2),
-          y: pos.y - (template.height / 2),
-          width: template.width,
-          height: template.height,
-          text: template.name,
-          targetId: '',
-          canvasId: currentCanvas.id,
-          rotation: 0,
-          backgroundColor: 'transparent',
-          borderColor: 'transparent',
-          content: {
-            type: 'template-group',
-            containers: [
-              {
-                id: uuidv4(),
-                type: 'project-input',
-                x: template.layout.projectInput.x,
-                y: template.layout.projectInput.y,
-                width: template.layout.projectInput.width,
-                height: template.layout.projectInput.height,
-                name: template.layout.projectInput.name,
-                backgroundColor: template.layout.projectInput.backgroundColor,
-                borderColor: template.layout.projectInput.borderColor,
-                borderRadius: template.layout.projectInput.borderRadius,
-                fields: [
-                  { type: 'text-area', label: 'Project Brief', placeholder: 'Enter your project brief or requirements...' },
-                  { type: 'file-upload', label: 'Site Images & Documents', accept: 'image/*,.pdf' }
-                ]
-              },
-              {
-                id: uuidv4(),
-                type: 'design-tools',
-                x: template.layout.designTools.x,
-                y: template.layout.designTools.y,
-                width: template.layout.designTools.width,
-                height: template.layout.designTools.height,
-                name: template.layout.designTools.name,
-                backgroundColor: template.layout.designTools.backgroundColor,
-                borderColor: template.layout.designTools.borderColor,
-                borderRadius: template.layout.designTools.borderRadius,
-                tools: [
-                  { id: 'floor-plan', name: '2D Floor Plan', icon: '📐' },
-                  { id: '3d-sketch', name: '3D Sketch', icon: '🎨' },
-                  { id: 'site-analysis', name: 'Site Analysis', icon: '📊' }
-                ]
-              },
-              {
-                id: uuidv4(),
-                type: 'generated-output',
-                x: template.layout.generatedOutput.x,
-                y: template.layout.generatedOutput.y,
-                width: template.layout.generatedOutput.width,
-                height: template.layout.generatedOutput.height,
-                name: '',
-                backgroundColor: '#FFFFFF',
-                borderColor: '#E5E7EB',
-                borderRadius: 8
-              }
-            ]
-          }
-        };
-
-        // Add the container group to elements and canvas stack
-        setElements(prev => [...prev, mainContainer]);
-        setCanvasStack(prev => prev.map(canvas => 
-          canvas.id === currentCanvas.id 
-            ? { ...canvas, elements: [...canvas.elements, mainContainer.id] }
-            : canvas
-        ));
-
-        setTool('mouse');
-        setSelectedTool('mouse');
-        setSelectedTemplateId(null);
-        return;
-      } else {
-        // Handle other templates as before
-      const containerId = uuidv4();
-      const newContainer: CommentElement = {
-        id: containerId,
-        type: 'container',
-        x: pos.x,
-        y: pos.y,
-          width: template.width || 300,
-          height: template.height || 200,
-          text: template.name || 'Container',
-        targetId: '',
-        canvasId: currentCanvas.id,
-        rotation: 0,
-          backgroundColor: template.backgroundColor || '#FFFFFF',
-          borderColor: template.borderColor || '#E5E7EB'
-      };
-      
-      setElements(prev => [...prev, newContainer]);
-      setCanvasStack(prev => prev.map(canvas => 
-        canvas.id === currentCanvas.id 
-          ? { ...canvas, elements: [...canvas.elements, newContainer.id] }
-          : canvas
-      ));
-      
-      setSelectedId(containerId);
-      }
-      
-      setTool('mouse');
-      setSelectedTool('mouse');
-      setSelectedTemplateId(null);
-      return;
-    }
-
-    // Handle board creation
-    if (tool === 'board' && isClickOnStage) {
-      console.log('Creating new board at position:', pos);
-      const boardId = uuidv4();
-      const newBoard: BoardElement = {
-        id: boardId,
-        type: 'board',
-        x: pos.x,
-        y: pos.y,
-        width: 300,  // Increased default width
-        height: 200, // Increased default height
-        name: 'New Board',
-        canvasId: currentCanvas.id,
-        elements: [],
-        rotation: 0,  // Add rotation property
-        draggable: true,  // Make it draggable
-        resizable: true   // Make it resizable
-      };
-      
-      console.log('New board data:', newBoard);
-      
-      setElements(prev => {
-        const updated = [...prev, newBoard];
-        console.log('Updated elements:', updated);
-        return updated;
+    // Handle right-click for selection box
+    if (e.evt.button === 2 && isClickOnStage) { // 2 is right mouse button
+      setSelectionBox({
+        isSelecting: true,
+        startX: pos.x,
+        startY: pos.y,
+        endX: pos.x,
+        endY: pos.y
       });
-      
-      setCanvasStack(prev => {
-        const updated = prev.map(canvas => 
-          canvas.id === currentCanvas.id 
-            ? { ...canvas, elements: [...canvas.elements, newBoard.id] }
-            : canvas
-        );
-        console.log('Updated canvas stack:', updated);
-        return updated;
-      });
-      
-      setSelectedId(boardId); // Select the board immediately after creation
-      setTool('mouse'); // Switch back to mouse tool
-      setSelectedTool('mouse');
+      setIsDraggingCanvas(false); // Prevent canvas dragging
       return;
     }
 
-    // Handle other tools
-    if (isClickOnStage) {
-      switch (tool) {
-        case 'draw':
-          setIsDrawing(true);
-          const newLine = {
-            points: [pos.x, pos.y],
-            color: strokeColor,
-            width: strokeWidth,
-          };
-          setCurrentLine(newLine);
-          setLines(prev => [...prev, newLine]);
-          break;
-
-        case 'todo':
-          const newSticky: TextElement = {
-            id: Date.now().toString(),
+    // Handle text tool
+    if (tool === 'text' && isClickOnStage) {
+      const newTextElement: TextElement = {
+        id: uuidv4(),
             type: 'text',
             x: pos.x,
             y: pos.y,
             text: 'Double click to edit',
             fontSize: 16,
-            fill: '#F59E0B',
-            width: 150,
-            height: 150,
-            backgroundColor: '#FEF3C7',
-            rotation: 0,
-            isSticky: true,
-            canvasId: currentCanvas.id
-          };
-          setElements(prev => [...prev, newSticky]);
-          setCanvasStack(prev => prev.map(canvas => 
-            canvas.id === currentCanvas.id 
-              ? { ...canvas, elements: [...canvas.elements, newSticky.id] }
-              : canvas
-          ));
-          break;
+        isBold: false,
+        textAlign: 'left',
+        fill: '#000000',
+        width: 200,
+        height: 30,
+        isLocked: false
+      };
+      setElements(prev => [...prev, newTextElement]);
+      return;
+    }
 
-        case 'text':
-          const textElement: TextElement = {
-            id: Date.now().toString(),
-            type: 'text',
+    // Handle sticky note tool
+    if (tool === 'note' && isClickOnStage) {
+      const newStickyNote: StickyNoteElement = {
+        id: uuidv4(),
+        type: 'sticky-note',
             x: pos.x,
             y: pos.y,
-            text: 'Double click to edit',
-            fontSize: 16,
-            fill: '#000000',
             width: 200,
-            height: 30,
-            canvasId: currentCanvas.id
-          };
-          setElements(prev => [...prev, textElement]);
-          setCanvasStack(prev => prev.map(canvas => 
-            canvas.id === currentCanvas.id 
-              ? { ...canvas, elements: [...canvas.elements, textElement.id] }
-              : canvas
-          ));
-          break;
-
-        default:
-          setSelectedId(null);
-          break;
-      }
+        height: 200,
+        rotation: 0,
+        content: '',
+        style: {
+          backgroundColor: '#FFE4B5',
+          textColor: '#000000',
+          fontSize: 14,
+          shadowColor: 'rgba(0, 0, 0, 0.1)'
+        }
+      };
+      setElements(prev => [...prev, newStickyNote]);
       return;
     }
 
-    // Handle element selection
-    const elementId = e.target.parent?.attrs?.id || e.target.attrs?.id;
-    const element = elements.find(el => el.id === elementId);
+    // Handle drawing tool
+    if (tool === 'draw' && isClickOnStage) {
+      setIsDrawing(true);
+      setCurrentLine({
+        points: [pos.x, pos.y],
+        color: strokeColor,
+        width: strokeWidth,
+        tool: 'pencil',
+        opacity: 1
+      });
+      return;
+    }
 
-    if (element) {
-      if (tool === 'trash') {
-        setElements(prev => prev.filter(el => el.id !== elementId));
+    // If clicking on stage (not an element), clear text menu and selection
+    if (isClickOnStage) {
+      setTextMenuPosition(null);
+      setSelectedTextElement(null);
+      setSelectedGroupId(null);
+      setSelectedDrawing(null);
+      setIsExplicitlySelected(false);
+      return;
+    }
+
+    // Handle drawing selection when using mouse tool
+    if (tool === 'mouse') {
+      // Check if clicking on a drawing group
+      const clickedGroup = drawingGroups.find(group => {
+        const groupX = group.x;
+        const groupY = group.y;
+        const groupWidth = group.width;
+        const groupHeight = group.height;
+        
+        return pos.x >= groupX && 
+               pos.x <= groupX + groupWidth && 
+               pos.y >= groupY && 
+               pos.y <= groupY + groupHeight;
+      });
+
+      if (clickedGroup) {
+        setSelectedGroupId(clickedGroup.id);
         setSelectedId(null);
-      } else {
-        setSelectedId(elementId);
+        setIsExplicitlySelected(true);
+        
+        // Set the selected drawing and show the menu
+        setSelectedDrawing({
+          id: clickedGroup.id,
+          position: { x: pointerPos.x, y: pointerPos.y },
+          color: clickedGroup.lines[0]?.color || strokeColor
+        });
+        return;
       }
     }
   };
 
   const handleMouseUp = (e: KonvaEventObject<MouseEvent>) => {
     const stage = e.target.getStage();
+    
+    // Handle selection box completion
+    if (selectionBox?.isSelecting) {
+      const transform = stage?.getAbsoluteTransform().copy().invert();
+      const point = stage?.getPointerPosition();
+      if (transform && point) {
+        const pos = transform.point(point);
+        setSelectionBox(prev => {
+          if (!prev) return null;
+          
+          // Calculate selection box bounds
+          const x = Math.min(prev.startX, pos.x);
+          const y = Math.min(prev.startY, pos.y);
+          const width = Math.abs(pos.x - prev.startX);
+          const height = Math.abs(pos.y - prev.startY);
+          
+          // Find elements within the selection box
+          const selectedElements = elements.filter(element => {
+            const elementX = element.x;
+            const elementY = element.y;
+            const elementWidth = element.width || 0;
+            const elementHeight = element.height || 0;
+            
+            return elementX >= x &&
+                   elementX + elementWidth <= x + width &&
+                   elementY >= y &&
+                   elementY + elementHeight <= y + height;
+          });
+          
+          // Update selected elements
+          if (selectedElements.length > 0) {
+            setSelectedId(selectedElements[0].id);
+            setIsExplicitlySelected(true);
+          }
+          
+          return null;
+        });
+      }
+      return;
+    }
     
     if (tool === 'mouse') {
       setIsDraggingCanvas(false);
@@ -922,11 +920,10 @@ export default function Canvas({ name, description, projectId }: Props) {
     }
 
     if (isDrawing && currentLine) {
-      // Reset drawing state
+      setLines(prev => [...prev, currentLine]);
       setCurrentLine(null);
       setIsDrawing(false);
 
-      // If not in drawing mode, switch back to mouse tool
       if (!drawingMode) {
         setTool('mouse');
         setSelectedTool('mouse');
@@ -987,7 +984,13 @@ export default function Canvas({ name, description, projectId }: Props) {
 
   const handleDragStart = (e: KonvaEventObject<DragEvent>) => {
     const id = e.target.id();
+    const element = elements.find(el => el.id === id);
+    
+    // Only set selectedId if the element is not a text element
+    if (element?.type !== 'text') {
     setSelectedId(id);
+      setIsExplicitlySelected(false);
+    }
   };
 
   const handleTransformEnd = (e: KonvaEventObject<Event>) => {
@@ -1579,7 +1582,7 @@ export default function Canvas({ name, description, projectId }: Props) {
             // Create a new element with the loaded image
             const newElement: UploadedElement = {
           id: `uploaded-${Date.now()}`,
-              type: 'upload',
+              type: 'uploaded',
               x: x - img.width / 2,
               y: y - img.height / 2,
               width: img.width,
@@ -1627,7 +1630,7 @@ export default function Canvas({ name, description, projectId }: Props) {
     const target = e.target;
     const element = elements.find(el => el.id === target.id() || el.id === target.parent?.id());
     
-    if (element && (element.type === 'upload' || element.type === 'generated')) {
+    if (element && (element.type === 'uploaded' || element.type === 'generated-image')) {
       console.log('Hovering over element:', element.id);
       setElements(prev => prev.map(el => {
         if (el.id === element.id) {
@@ -1644,7 +1647,7 @@ export default function Canvas({ name, description, projectId }: Props) {
     const target = e.target;
     const element = elements.find(el => el.id === target.id() || el.id === target.parent?.id());
     
-    if (element && (element.type === 'upload' || element.type === 'generated')) {
+    if (element && (element.type === 'uploaded' || element.type === 'generated-image')) {
       console.log('Leaving element:', element.id);
       setElements(prev => prev.map(el => {
         if (el.id === element.id) {
@@ -1697,144 +1700,130 @@ export default function Canvas({ name, description, projectId }: Props) {
   // Update the renderElement function to handle the new container types
   const renderElement = (element: CanvasElement) => {
     switch (element.type) {
-      case 'board': {
-        const boardElement = element as BoardElement;
-        const isSelected = selectedId === boardElement.id;
-        const shapeRef = useRef<Konva.Group>(null);
-        const trRef = useRef<Konva.Transformer>(null);
-
-        useEffect(() => {
-          if (isSelected && shapeRef.current && trRef.current) {
-            trRef.current.nodes([shapeRef.current]);
-            trRef.current.getLayer()?.batchDraw();
-          }
-        }, [isSelected]);
+      case 'text':
+        const textElement = element as TextElement;
+        const isEditing = editingTextId === textElement.id;
+        const isExplicitlySelected = selectedId === textElement.id && !isDraggingCanvas;
 
         return (
-          <>
-            <Group
-              key={boardElement.id}
-              id={boardElement.id}
-              x={boardElement.x}
-              y={boardElement.y}
-              width={boardElement.width}
-              height={boardElement.height}
-              draggable={tool === 'mouse'}
-              ref={shapeRef}
-              onClick={() => setSelectedId(boardElement.id)}
-              onDragStart={handleDragStart}
-              onDragEnd={(e) => {
-                const node = e.target;
-                setElements(prev => prev.map(el => 
-                  el.id === node.id() 
-                    ? { ...el, x: node.x(), y: node.y() }
-                    : el
-                ));
-              }}
-              onTransformEnd={(e) => {
-                const node = e.target;
-                const scaleX = node.scaleX();
-                const scaleY = node.scaleY();
-                
-                node.scaleX(1);
-                node.scaleY(1);
-                
-                setElements(prev => prev.map(el => 
-                  el.id === node.id() 
-                    ? {
-                        ...el,
-                        x: node.x(),
-                        y: node.y(),
-                        width: Math.max(node.width() * scaleX, 100),
-                        height: Math.max(node.height() * scaleY, 100),
-                        rotation: node.rotation()
-                      }
-                    : el
-                ));
-              }}
-            >
-              <Board
-                id={boardElement.id}
-                x={0}
-                y={0}
-                width={boardElement.width}
-                height={boardElement.height}
-                name={boardElement.name}
-                isSelected={isSelected}
-                onNameChange={(newName) => handleBoardNameChange(boardElement.id, newName)}
-                onDelete={() => setBoardToDelete({ id: boardElement.id, name: boardElement.name })}
-                activeTool={tool}
-                onSelect={() => setSelectedId(boardElement.id)}
-                onChange={(attrs) => handleElementChange(boardElement.id, attrs)}
-                onDoubleClick={() => handleBoardDoubleClick(boardElement)}
-              />
-            </Group>
-            {isSelected && (
-              <Transformer
-                ref={trRef}
-                boundBoxFunc={(oldBox, newBox) => {
-                  const minWidth = 100;
-                  const minHeight = 100;
-                  if (newBox.width < minWidth || newBox.height < minHeight) {
-                    return oldBox;
-                  }
-                  return newBox;
-                }}
-                enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
-                rotateEnabled={true}
-                keepRatio={false}
-                padding={5}
-                anchorSize={10}
-                anchorCornerRadius={5}
-                borderStroke="#814ADA"
-                anchorStroke="#814ADA"
-                anchorFill="#fff"
+          <Group key={textElement.id}>
+            {!isEditing && (
+              <KonvaText
+                id={textElement.id}
+                x={textElement.x}
+                y={textElement.y}
+                text={textElement.text}
+                fontSize={textElement.fontSize || 16}
+                fontStyle={textElement.isBold ? 'bold' : 'normal'}
+                align={textElement.textAlign || 'left'}
+                fill={textElement.fill || '#000000'}
+                width={textElement.width}
+                height={textElement.height}
+                draggable={selectedTool === 'mouse' && !textElement.isLocked}
+                onClick={(e) => handleTextElementSelect(textElement, e)}
+                onDblClick={(e) => handleTextDoubleClick(textElement, e)}
               />
             )}
-          </>
+            {isEditing && (
+              <Html>
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: textElement.x,
+                    top: textElement.y,
+                    width: textElement.width,
+                    height: textElement.height,
+                    padding: '4px',
+                    background: 'transparent',
+                    border: 'none',
+                    outline: 'none',
+                    fontSize: `${textElement.fontSize || 16}px`,
+                    fontFamily: 'Inter',
+                    fontWeight: textElement.isBold ? 'bold' : 'normal',
+                    textAlign: textElement.textAlign || 'left',
+                    color: textElement.fill || '#000000',
+                    resize: 'none',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <textarea
+                    value={editingTextValue}
+                    onChange={(e) => setEditingTextValue(e.target.value)}
+                    onBlur={() => handleTextEditComplete(textElement)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleTextEditComplete(textElement);
+                      }
+                    }}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      background: 'transparent',
+                      border: 'none',
+                      outline: 'none',
+                      resize: 'none',
+                      overflow: 'hidden',
+                      padding: '4px',
+                    }}
+                    autoFocus
+                  />
+                </div>
+              </Html>
+            )}
+          </Group>
         );
-      }
-      case 'text': {
-        const textElement = element as TextElement;
-        return (
-          <KonvaText
-            text={textElement.text}
-            x={textElement.x}
-            y={textElement.y}
-            width={textElement.width}
-            height={textElement.height}
-            fontSize={textElement.fontSize}
-            fill={textElement.fill}
-            backgroundColor={textElement.backgroundColor}
-            isSticky={textElement.isSticky}
-          />
-        );
-      }
-      case 'generated': {
-        const genImage = element as GeneratedImageElement;
-        const image = genImage.image || new window.Image();
-        if (!genImage.image) {
-          image.src = genImage.src;
-        }
+      case 'image': {
+        const imageElement = element as ImageElement;
         return (
             <KonvaImage
-            image={image}
-            x={genImage.x}
-            y={genImage.y}
-            width={genImage.width}
-            height={genImage.height}
+            key={imageElement.id}
+            image={imageElement.image}
+            x={imageElement.x}
+            y={imageElement.y}
+            width={imageElement.width}
+            height={imageElement.height}
+            rotation={imageElement.rotation}
+            draggable={selectedTool === 'mouse'}
+            onClick={handleCanvasClick}
+            onTransformEnd={handleTransformEnd}
+            onDragEnd={handleTransformEnd}
           />
         );
       }
-      case 'upload': {
+      case 'uploaded': {
         const uploadImage = element as UploadedElement;
         return (
           <KonvaImage
+            key={uploadImage.id}
             image={uploadImage.image}
             x={uploadImage.x}
             y={uploadImage.y}
             width={uploadImage.width}
             height={uploadImage.height}
+            rotation={uploadImage.rotation}
+            draggable={selectedTool === 'mouse'}
+            onClick={handleCanvasClick}
+            onTransformEnd={handleTransformEnd}
+            onDragEnd={handleTransformEnd}
+          />
+        );
+      }
+      case 'generated-image': {
+        const genImage = element as GeneratedImageElement;
+        return (
+          <KonvaImage
+            key={genImage.id}
+            image={genImage.image}
+            x={genImage.x}
+            y={genImage.y}
+            width={genImage.width}
+            height={genImage.height}
+            rotation={genImage.rotation}
+            draggable={selectedTool === 'mouse'}
+            onClick={handleCanvasClick}
+            onTransformEnd={handleTransformEnd}
+            onDragEnd={handleTransformEnd}
           />
         );
       }
@@ -1845,496 +1834,49 @@ export default function Canvas({ name, description, projectId }: Props) {
         if (isTemplateGroup && containerElement.content?.containers) {
           return (
             <Group
+              key={containerElement.id}
               x={containerElement.x}
               y={containerElement.y}
-              width={containerElement.width}
-              height={containerElement.height}
-              draggable={tool === 'mouse'}
-              onClick={() => setSelectedId(containerElement.id)}
-              onDragStart={handleDragStart}
-              onDragEnd={(e) => {
-                const node = e.target;
-                setElements(prev => prev.map(el => 
-                  el.id === containerElement.id 
-                    ? { ...el, x: node.x(), y: node.y() }
-                    : el
-                ));
-              }}
+              rotation={containerElement.rotation}
+              draggable={selectedTool === 'mouse'}
+              onClick={handleCanvasClick}
+              onTransformEnd={handleTransformEnd}
+              onDragEnd={handleTransformEnd}
             >
-              {containerElement.content.containers.map((container) => (
-                <Group key={container.id}>
-                  {/* Drop Shadow Effect */}
+              {containerElement.content.containers.map(container => (
                   <Rect
-                    x={container.x + 4}
-                    y={container.y + 4}
-                    width={container.width}
-                    height={container.height}
-                    fill="#000000"
-                    opacity={0.04}
-                    cornerRadius={16}
-                    shadowBlur={10}
-                    shadowColor="rgba(0, 0, 0, 0.1)"
-                    shadowOffset={{ x: 0, y: 2 }}
-                    shadowOpacity={0.5}
-                  />
-                  {/* Main Container */}
-                  <Rect
+                  key={container.id}
                     x={container.x}
                     y={container.y}
                     width={container.width}
                     height={container.height}
-                    fill="#FFFFFF"
-                    stroke="#E0DAF3"
-                    strokeWidth={2}
-                    cornerRadius={16}
-                    shadowBlur={8}
-                    shadowColor="rgba(0, 0, 0, 0.06)"
-                    shadowOffset={{ x: 0, y: 1 }}
-                    shadowOpacity={0.3}
-                  />
-                  {container.name && (
-                    <KonvaText
-                      x={container.x + 16}
-                      y={container.y + 16}
-                      text={container.name}
-                      fontSize={18}
-                      fontFamily="Inter"
-                      fill="#1E293B"
-                      width={container.width - 32}
-                      height={30}
-                      wrap="word"
-                      align="left"
-                    />
-                  )}
-                  {container.type === 'project-input' && container.fields && (
-                    <Group>
-                      {/* Project Brief Section */}
-                      <Group>
-                        {/* Project Brief Header */}
-                        <KonvaText
-                          x={24}
-                          y={24}
-                          text="Project Brief"
-                          fontSize={18}
-                          fontFamily="Inter"
-                          fill="#1E293B"
-                          fontStyle="600"
-                        />
-
-                        {/* Project Brief Input Box */}
-                        <Html
-                          divProps={{
-                            style: {
-                              position: 'absolute',
-                              width: '352px',
-                              top: '60px',
-                              left: '24px'
-                            }
-                          }}
-                        >
-                          <textarea
-                            value={projectBrief}
-                            onChange={(e) => setProjectBrief(e.target.value)}
-                            placeholder="Enter your project brief or requirements..."
-                            className="w-full h-[120px] p-4 bg-white border border-[#E0DAF3] rounded-2xl resize-none text-gray-600 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                            style={{
-                              fontSize: '16px',
-                              fontFamily: 'Inter, sans-serif',
-                            }}
-                          />
-                        </Html>
-                      </Group>
-
-                      {/* Upload Files Section - with fixed positioning */}
-                      <Group y={200}>
-                        {/* Upload Files Header */}
-                        <KonvaText
-                          x={24}
-                          y={24}
-                          text="Upload Files"
-                          fontSize={18}
-                          fontFamily="Inter"
-                          fill="#1E293B"
-                          fontStyle="600"
-                        />
-
-                        {/* Upload Area */}
-                        <Html
-                          divProps={{
-                            style: {
-                              position: 'absolute',
-                              width: '352px',
-                              top: '60px',
-                              left: '24px'
-                            }
-                          }}
-                        >
-                          <div className="space-y-4">
-                            <FileUploadContainer
-                              onFilesChange={(files) => {
-                                const newFiles = files.map(file => ({
-                                  id: uuidv4(),
-                                  name: file.name,
-                                  file,
-                                  status: 'uploading' as const,
-                                  progress: 0
-                                }));
-                                
-                                setUploadedFiles(prev => [...prev, ...newFiles]);
-                                newFiles.forEach(fileEntry => {
-                                  simulateFileUpload(fileEntry.id);
-                                });
-                              }}
-                              maxFiles={5}
-                              accept={{
-                                'image/*': ['.png', '.jpg', '.jpeg'],
-                                'application/pdf': ['.pdf'],
-                                'application/msword': ['.doc'],
-                                'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx']
-                              }}
-                            />
-                          </div>
-                        </Html>
-                      </Group>
-
-                      {/* Save Input Button */}
-                      <Group>
-                        <Rect
-                          x={container.width - 120}
-                          y={560}
-                          width={96}
-                          height={32}
-                          fill="#814ADA"
-                          cornerRadius={6}
-                          shadowColor="rgba(0, 0, 0, 0.1)"
-                          shadowBlur={4}
-                          shadowOffset={{ x: 0, y: 2 }}
-                          shadowOpacity={0.5}
-                        />
-                        <KonvaText
-                          x={container.width - 120}
-                          y={560}
-                          width={96}
-                          height={32}
-                          text="Save Input"
-                          fontSize={14}
-                          fontFamily="Inter"
-                          fill="#FFFFFF"
-                          align="center"
-                          verticalAlign="middle"
-                        />
-                      </Group>
-                    </Group>
-                  )}
-                  {container.type === 'design-tools' && (
-                    <Group>
-                      {/* Main container for design tools */}
-                      <Rect
-                        x={container.x}
-                        y={container.y}
-                        width={container.width}
-                        height={container.height}
-                        fill="#FFFFFF"
-                        stroke="#E0DAF3"
+                  fill={container.backgroundColor}
+                  stroke={container.borderColor}
                         strokeWidth={1}
-                        cornerRadius={8}
-                      />
-                      
-                      {/* Tabs and content container */}
-                      <Group x={container.x} y={container.y}>
-                        {/* Tabs row */}
-                        <Group>
-                          {['Site Analysis', 'Case Studies', 'Concept'].map((tab, index) => (
-                            <Group key={tab}>
-                              {/* Tab Background */}
-                              <Rect
-                                x={index * (container.width / 3) + (container.width / 6) - 60}
-                                y={16}
-                                width={120}
-                                height={40}
-                                fill={index === 0 ? '#F5F3FF' : '#FFFFFF'}
-                                cornerRadius={8}
-                                visible={index === 0}
-                              />
-                              {/* Tab Text */}
-                              <KonvaText
-                                x={index * (container.width / 3)}
-                                y={26}
-                                width={container.width / 3}
-                                text={tab}
-                                fontSize={14}
-                                fontFamily="Inter"
-                                fill={index === 0 ? '#814ADA' : '#6B7280'}
-                                align="center"
-                                verticalAlign="middle"
-                              />
-                            </Group>
+                  cornerRadius={container.borderRadius}
+                />
                           ))}
                         </Group>
-
-                        {/* Content area */}
-                        <Group y={72}>
-                          <Html
-                            divProps={{
-                              style: {
-                                position: 'absolute',
-                                width: `${container.width}px`,
-                                padding: '0 16px'
-                              }
-                            }}
-                          >
-                            <div className="bg-white rounded-lg p-4">
-                              <SiteAnalysisGenerator
-                                projectBrief={projectBrief || ''}
-                                onGenerated={(content) => {
-                                  const outputContainer = elements.find(
-                                    (el): el is ContainerElement => 
-                                      el.type === 'container' && 
-                                      el.content?.type === 'generated-output'
-                                  );
-
-                                  if (outputContainer) {
-                                    const updatedContainer = {
-                                      ...outputContainer,
-                                      content: {
-                                        ...outputContainer.content,
-                                        generatedContent: content
-                                      }
-                                    };
-
-                                    setElements(prev => 
-                                      prev.map(el =>
-                                        el.id === outputContainer.id ? updatedContainer : el
-                                      )
-                                    );
-                                  }
-                                }}
-                              />
-                            </div>
-                          </Html>
-                        </Group>
-                      </Group>
-                    </Group>
-                  )}
-                  {container.type === 'generated-output' && (
-                    <Group>
-                      {/* Dotted Frame */}
-                      <Rect
-                        x={container.x + 24}
-                        y={container.y + 24}
-                        width={container.width - 48}
-                        height={container.height - 48}
-                        stroke="#9CA3AF"
-                        strokeWidth={2}
-                        dash={[6, 6]}
-                        cornerRadius={8}
-                      />
-                      
-                      {/* Placeholder Text */}
-                      <KonvaText
-                        x={container.x + 24}
-                        y={container.y + (container.height - 48) / 2}
-                        width={container.width - 48}
-                        text="Generated content will appear here"
-                        fontSize={14}
-                        fontFamily="Inter"
-                        fill="#6B7280"
-                        align="center"
-                      />
-                    </Group>
-                  )}
-                  {container.type === 'site-analysis' && (
-                    <Group>
-                      <Html
-                        divProps={{
-                          style: {
-                            position: 'absolute',
-                            width: `${container.width}px`,
-                            padding: '0 24px'
-                          }
-                        }}
-                      >
-                        <SiteAnalysisGenerator
-                          projectBrief={projectBrief}
-                          onGenerated={async (content) => {
-                            try {
-                              // Process uploaded files
-                              const processedFiles = await Promise.all(
-                                uploadedFiles.map(file => processFile(file.file))
-                              );
-
-                              // Generate site analysis with DALL-E visualization
-                              const response = await generateSiteAnalysis({
-                                projectBrief,
-                                uploadedFiles: processedFiles,
-                                siteDescription: content.siteStatement,
-                                selectedTags: content.keyCharacteristics,
-                                abstractionLevel: 50, // Default to balanced
-                              });
-
-                              // Create a new image element
-                              const img = new window.Image();
-                              img.src = response.infographic;
-                              
-                              await new Promise<void>((resolve) => {
-                                img.onload = () => resolve();
-                              });
-
-                              // Add the generated image to the canvas
-                              const generatedElement = {
-                                id: uuidv4(),
-                                type: 'generated-image',
-                                x: 100,
-                                y: 100,
-                                width: img.width,
-                                height: img.height,
-                                image: img,
-                                analysis: response.analysis,
-                                canvasId: currentCanvas.id,
-                                rotation: 0
-                              };
-
-                              setElements(prev => [...prev, generatedElement]);
-                              setCanvasStack(prev => prev.map(canvas => 
-                                canvas.id === currentCanvas.id 
-                                  ? { ...canvas, elements: [...canvas.elements, generatedElement.id] }
-                                  : canvas
-                              ));
-
-                            } catch (error) {
-                              console.error('Error generating site analysis:', error);
-                              // TODO: Add error handling UI
-                            }
-                          }}
-                        />
-                      </Html>
-                    </Group>
-                  )}
-                </Group>
-              ))}
-            </Group>
           );
         }
+        return null;
+      }
+      case 'sticky-note': {
+        const stickyNote = element as StickyNoteElement;
         return (
-          <Group>
-            <Rect
-              x={0}
-              y={0}
-              width={containerElement.width}
-              height={containerElement.height}
-              fill={containerElement.backgroundColor || '#FFFFFF'}
-              stroke={containerElement.borderColor || '#E5E7EB'}
-              strokeWidth={2}
-              cornerRadius={containerElement.borderRadius || 8}
-            />
-            <KonvaText
-              x={16}
-              y={16}
-              text={containerElement.text}
-              fontSize={18}
-              fontFamily="Inter"
-              fill="#4A1D96" // Dark purple for headings
-              width={containerElement.width - 32}
-              height={30}
-              wrap="word"
-              align="left"
-            />
-            {containerElement.content?.type === 'project-input' && (
-              <Group y={56}>
-                {containerElement.content.fields?.map((field, index) => (
-                  <Group key={field.label} y={index * 120}>
-                    <KonvaText
-                      x={16}
-                      y={0}
-                      text={field.label}
-                      fontSize={14}
-                      fontFamily="Inter"
-                      fill="#4A1D96"
-                      width={containerElement.width - 32}
-                    />
-                    <Rect
-                      x={16}
-                      y={24}
-                      width={containerElement.width - 32}
-                      height={field.type === 'text-area' ? 100 : 80}
-                      fill="#F9FAFB"
-                      stroke="#E5E7EB"
-                      cornerRadius={6}
-                    />
-                    <KonvaText
-                      x={24}
-                      y={40}
-                      text={field.placeholder || ''}
-                      fontSize={14}
-                      fontFamily="Inter"
-                      fill="#9CA3AF"
-                      width={containerElement.width - 48}
-                    />
-                  </Group>
-                ))}
-              </Group>
-            )}
-            {containerElement.content?.type === 'design-tools' && (
-              <Group>
-                {containerElement.content.tools?.map((tool, index) => (
-                  <Group key={tool.id} x={16 + (index * (containerElement.width - 32) / 3)} y={0}>
-                    <Rect
-                      width={(containerElement.width - 64) / 3}
-                      height={80}
-                      fill="#FFFFFF"
-                      stroke="#814ADA"
-                      cornerRadius={6}
-                    />
-                    <KonvaText
-                      y={20}
-                      text={tool.icon}
-                      fontSize={24}
-                      width={(containerElement.width - 64) / 3}
-                      align="center"
-                    />
-                    <KonvaText
-                      y={50}
-                      text={tool.name}
-                      fontSize={14}
-                      fontFamily="Inter"
-                      fill="#814ADA"
-                      width={(containerElement.width - 64) / 3}
-                      align="center"
-                    />
-                  </Group>
-                ))}
-              </Group>
-            )}
-            {containerElement.content?.type === 'generated-content' && (
-              <Group
-                key={containerElement.id}
-                x={containerElement.x}
-                y={containerElement.y}
-                width={containerElement.width}
-                height={containerElement.height}
-              >
-                <Html
-                  divProps={{
-                    style: {
-                      position: 'absolute',
-                      width: `${containerElement.width}px`,
-                      height: `${containerElement.height}px`
-                    }
-                  }}
-                >
-                  <SiteAnalysisDisplay
-                    content={containerElement.content}
-                    onRegenerate={() => {
-                      // Handle regeneration
-                    }}
-                    onAddToCanvas={() => {
-                      // Handle adding to canvas
-                    }}
-                  />
-                </Html>
-              </Group>
-            )}
-          </Group>
+          <StickyNote
+            key={stickyNote.id}
+            id={stickyNote.id}
+            x={stickyNote.x}
+            y={stickyNote.y}
+            content={stickyNote.content}
+            style={stickyNote.style}
+            onUpdate={(id, content, style) => handleStickyNoteUpdate(id, content, style)}
+            onDelete={handleDeleteElement}
+            onMove={(id, x, y) => handleElementMove(id, x, y)}
+            isSelected={selectedId === stickyNote.id}
+            onSelect={(id) => setSelectedId(id)}
+          />
         );
       }
       default:
@@ -2569,7 +2111,7 @@ export default function Canvas({ name, description, projectId }: Props) {
     img.onload = () => {
       const newElement: GeneratedImageElement = {
         id: uuidv4(),
-        type: 'generated',
+        type: 'generated-image',
         x: Math.random() * (dimensions.width - 200),
         y: Math.random() * (dimensions.height - 200),
         width: img.width,
@@ -2625,8 +2167,11 @@ export default function Canvas({ name, description, projectId }: Props) {
       }
 
       const imageUrls = imageElements.map(element => {
-        if ('url' in element.content) {
-          return element.content.url;
+        if (element.type === 'uploaded' && element.file) {
+          return URL.createObjectURL(element.file);
+        }
+        if (element.type === 'generated-image' && element.src) {
+          return element.src;
         }
         return null;
       }).filter((url): url is string => url !== null);
@@ -2636,7 +2181,15 @@ export default function Canvas({ name, description, projectId }: Props) {
         return;
       }
 
-      const analysis = await generateSiteAnalysis(imageUrls);
+      const analysisRequest: ServiceSiteAnalysisRequest = {
+        projectBrief,
+        uploadedFiles: [],
+        siteDescription,
+        selectedTags,
+        abstractionLevel
+      };
+
+      const analysis = await generateSiteAnalysis(analysisRequest);
       
       if (!analysis) {
         showNotification('error', 'Generation Failed', 'Failed to generate site analysis. Please try again.');
@@ -2646,13 +2199,17 @@ export default function Canvas({ name, description, projectId }: Props) {
       const newElement: GeneratedContentElement = {
         id: uuidv4(),
         type: 'generated-content',
-        position: { x: 100, y: 100 },
-        size: { width: 400, height: 600 },
+        x: 100,
+        y: 100,
+        width: 400,
+        height: 600,
         content: {
-          siteStatement: analysis.siteStatement,
-          swot: analysis.swot,
-          keyCharacteristics: analysis.keyCharacteristics
-        }
+          siteStatement: analysis.analysis.siteStatement,
+          swot: analysis.analysis.swot,
+          keyCharacteristics: analysis.analysis.keyCharacteristics
+        },
+        canvasId: currentCanvas.id,
+        rotation: 0
       };
 
       setElements(prev => [...prev, newElement]);
@@ -2669,6 +2226,197 @@ export default function Canvas({ name, description, projectId }: Props) {
         ? prev.filter(t => t !== tag)
         : [...prev, tag]
     );
+  };
+
+  // Add this new function to handle text element selection
+  const handleTextElementSelect = (element: TextElement, e: KonvaEventObject<MouseEvent>) => {
+    e.cancelBubble = true;
+    setSelectedId(element.id);
+    setSelectedTextElement(element);
+    setIsExplicitlySelected(true);
+
+    // Get the stage and its scale
+    const stage = stageRef.current;
+    if (!stage) return;
+
+    // Calculate the center point of the text element
+    const centerX = element.x + (element.width || 0) / 2;
+    const menuY = element.y - 30; // Position menu closer to the text
+
+    // Set the menu position
+    setTextMenuPosition({
+      x: centerX,
+      y: menuY
+    });
+  };
+
+  // Add text formatting handlers
+  const handleFontSizeChange = (size: number) => {
+    if (!selectedTextElement) return;
+    
+    setElements(prev => prev.map(el => 
+      el.id === selectedTextElement.id 
+        ? { ...el, fontSize: size } as TextElement
+        : el
+    ));
+  };
+
+  const handleBoldToggle = () => {
+    if (!selectedTextElement) return;
+    
+    setElements(prev => prev.map(el => 
+      el.id === selectedTextElement.id 
+        ? { ...el, isBold: !selectedTextElement.isBold } as TextElement
+        : el
+    ));
+  };
+
+  const handleAlignChange = (align: 'left' | 'center' | 'right') => {
+    if (!selectedTextElement) return;
+    
+    setElements(prev => prev.map(el => 
+      el.id === selectedTextElement.id 
+        ? { ...el, textAlign: align } as TextElement
+        : el
+    ));
+  };
+
+  const handleLockToggle = () => {
+    if (!selectedTextElement) return;
+    
+    setElements(prev => prev.map(el => 
+      el.id === selectedTextElement.id 
+        ? { ...el, isLocked: !selectedTextElement.isLocked } as TextElement
+        : el
+    ));
+  };
+
+  // Add this right before the return statement
+  useEffect(() => {
+    if (!selectedId) {
+      setTextMenuPosition(null);
+      setSelectedTextElement(null);
+    }
+  }, [selectedId]);
+
+  const handleElementDragEnd = (id: string, e: KonvaEventObject<DragEvent>) => {
+    const node = e.target;
+    const newX = node.x();
+    const newY = node.y();
+    
+    setElements(prevElements => 
+      prevElements.map(el => 
+        el.id === id 
+          ? { ...el, x: newX, y: newY }
+          : el
+      )
+    );
+  };
+
+  const handleStickyNoteUpdate = (id: string, content: string, style: any) => {
+    setStickyNotes(prev => 
+      prev.map(note => 
+        note.id === id ? { ...note, content, style } : note
+      )
+    );
+  };
+
+  const handleDeleteElement = (id: string) => {
+    setElements(prev => prev.filter(el => el.id !== id));
+    setSelectedId(null);
+    setTextMenuPosition(null);
+    setSelectedTextElement(null);
+  };
+
+  const handleElementMove = (id: string, x: number, y: number) => {
+    setElements(prev => prev.map(el => 
+      el.id === id ? { ...el, x, y } : el
+    ));
+  };
+
+  const handleAddStickyNote = (position: { x: number; y: number }) => {
+    const newNote: StickyNoteElement = {
+      id: uuidv4(),
+      type: 'sticky-note',
+      x: position.x,
+      y: position.y,
+      width: 200,
+      height: 200,
+      rotation: 0,
+      content: '',
+      style: {
+        backgroundColor: '#FFE4B5',
+        textColor: '#000000',
+        fontSize: 14
+      }
+    };
+    setElements(prev => [...prev, newNote]);
+  };
+
+  const handleTextDoubleClick = (element: TextElement, e: KonvaEventObject<MouseEvent>) => {
+    e.cancelBubble = true;
+    setEditingTextId(element.id);
+    setEditingTextValue(element.text);
+  };
+
+  const handleTextEditComplete = (element: TextElement) => {
+    setElements(prev => prev.map(el => 
+      el.id === element.id 
+        ? { ...el, text: editingTextValue } as TextElement
+        : el
+    ));
+    setEditingTextId(null);
+  };
+
+  const handleDeleteTextElement = (elementId: string) => {
+    setElements(prevElements => prevElements.filter(el => el.id !== elementId));
+    setSelectedTextElement(null);
+    setTextMenuPosition(null);
+  };
+
+  const handleDrawingSelect = (drawing: DrawingElement, e: KonvaEventObject<MouseEvent>) => {
+    e.cancelBubble = true;
+    setSelectedDrawing({
+      id: drawing.id,
+      position: { x: e.evt.clientX, y: e.evt.clientY },
+      color: drawing.stroke,
+    });
+  };
+
+  const handleDrawingColorChange = (color: string) => {
+    if (selectedDrawing) {
+      setDrawings(drawings.map(drawing => 
+        drawing.id === selectedDrawing.id ? { ...drawing, stroke: color } : drawing
+      ));
+    }
+  };
+
+  const handleDrawingDelete = () => {
+    if (selectedDrawing) {
+      setDrawings(drawings.filter(drawing => drawing.id !== selectedDrawing.id));
+      setSelectedDrawing(null);
+    }
+  };
+
+  const handleStickyNoteContentChange = (id: string, content: string) => {
+    setElements(prev => prev.map(el => 
+      el.id === id && el.type === 'sticky-note' 
+        ? { ...el, content } 
+        : el
+    ));
+  };
+
+  const handleStickyNoteStyleChange = (id: string, style: StickyNoteStyle) => {
+    setElements(prev => prev.map(el => 
+      el.id === id && el.type === 'sticky-note' 
+        ? { ...el, style } 
+        : el
+    ));
+  };
+
+  const handleStickyNoteDelete = (id: string) => {
+    setElements(prev => prev.filter(el => el.id !== id));
+    setSelectedStickyNote(null);
   };
 
   return (
@@ -2734,46 +2482,79 @@ export default function Canvas({ name, description, projectId }: Props) {
                 y={group.y}
                 width={group.width}
                 height={group.height}
-                rotation={group.rotation}
-                scaleX={group.scaleX}
-                scaleY={group.scaleY}
-                draggable={true}
-                onClick={handleGroupSelect}
-                onTransformEnd={handleGroupTransformEnd}
-              >
-                {group.lines.map((line, i) => (
-                  <Line
-                    key={i}
-                    points={line.points.map((point, index) => {
-                      return index % 2 === 0 
-                        ? point - group.x 
-                        : point - group.y;
-                    })}
-                    stroke={line.color}
-                    strokeWidth={line.width}
-                    tension={0.5}
-                    lineCap="round"
-                    lineJoin="round"
-                    globalCompositeOperation="source-over"
-                  />
-                ))}
-                {selectedGroupId === group.id && (
-                  <Transformer
-                    ref={transformerRef}
-                    boundBoxFunc={(oldBox, newBox) => {
-                      const minSize = 5;
-                      if (newBox.width < minSize || newBox.height < minSize) {
-                        return oldBox;
+                draggable={tool === 'mouse'}
+                onClick={(e) => {
+                  if (tool === 'mouse') {
+                    e.cancelBubble = true;
+                    setSelectedGroupId(group.id);
+                    setSelectedId(null);
+                    setIsExplicitlySelected(true);
+                    
+                    // Set the selected drawing and show the menu
+                    const stage = stageRef.current;
+                    if (stage) {
+                      const pointerPos = stage.getPointerPosition();
+                      if (pointerPos) {
+                        setSelectedDrawing({
+                          id: group.id,
+                          position: { x: pointerPos.x, y: pointerPos.y },
+                          color: group.lines[0]?.color || strokeColor
+                        });
                       }
-                      return newBox;
-                    }}
+                    }
+                  }
+                }}
+                onDragEnd={(e) => {
+                  const node = e.target;
+                  setDrawingGroups(prev => prev.map(g => 
+                    g.id === group.id 
+                      ? { ...g, x: node.x(), y: node.y() }
+                      : g
+                  ));
+                }}
+              >
+                {/* Selection indicator */}
+                {selectedGroupId === group.id && (
+                  <Rect
+                    x={-5}
+                    y={-5}
+                    width={group.width + 10}
+                    height={group.height + 10}
+                    stroke="#4F46E5"
+                    strokeWidth={2}
+                    dash={[5, 5]}
                   />
                 )}
+                
+                {/* Drawing lines */}
+                {group.lines.map((line, index) => (
+                  <Line
+                    key={index}
+                    points={line.points}
+                    stroke={line.color}
+                    strokeWidth={line.width}
+                    lineCap="round"
+                    lineJoin="round"
+                    opacity={line.opacity}
+                  />
+                ))}
               </Group>
             ))}
 
             {/* Current Drawing Layer */}
             <Group>
+              {lines.map((line, index) => (
+                <Line
+                  key={`line-${index}`}
+                  points={line.points}
+                  stroke={line.color}
+                  strokeWidth={line.width}
+                  tension={0.5}
+                  lineCap="round"
+                  lineJoin="round"
+                  globalCompositeOperation="source-over"
+                />
+              ))}
               {currentLine && (
                 <Line
                   points={currentLine.points}
@@ -2800,7 +2581,11 @@ export default function Canvas({ name, description, projectId }: Props) {
                 listening={true}
               >
                 {renderElement(el)}
-                {selectedId === el.id && (
+              </Group>
+            ))}
+
+            {/* Transformer Layer */}
+            {selectedTextElement && textMenuPosition && isExplicitlySelected && (
                   <Transformer
                     ref={transformerRef}
                     boundBoxFunc={(oldBox, newBox) => {
@@ -2810,10 +2595,21 @@ export default function Canvas({ name, description, projectId }: Props) {
                       }
                       return newBox;
                     }}
-                  />
-                )}
-              </Group>
-            ))}
+                node={stageRef.current?.findOne(`#${selectedTextElement.id}`)}
+              />
+            )}
+
+            {selectionBox && (
+              <Rect
+                x={Math.min(selectionBox.startX, selectionBox.endX)}
+                y={Math.min(selectionBox.startY, selectionBox.endY)}
+                width={Math.abs(selectionBox.endX - selectionBox.startX)}
+                height={Math.abs(selectionBox.endY - selectionBox.startY)}
+                fill="rgba(0, 0, 255, 0.1)"
+                stroke="blue"
+                strokeWidth={1}
+              />
+            )}
           </Layer>
         </DynamicStage>
       </div>
@@ -3080,6 +2876,111 @@ export default function Canvas({ name, description, projectId }: Props) {
           </div>
         )}
       </div>
+
+      {/* Add the TextFormatMenu */}
+      {textMenuPosition && selectedTextElement && isExplicitlySelected && (
+        <TextFormatMenu
+          onFontSizeChange={handleFontSizeChange}
+          onBoldToggle={handleBoldToggle}
+          onAlignChange={handleAlignChange}
+          onLockToggle={handleLockToggle}
+          onDelete={() => handleDeleteTextElement(selectedTextElement.id)}
+          fontSize={selectedTextElement.fontSize}
+          isBold={selectedTextElement.fontStyle === 'bold'}
+          textAlign={selectedTextElement.align}
+          isLocked={selectedTextElement.isLocked}
+          position={textMenuPosition}
+        />
+      )}
+      {selectedDrawing && (
+        <DrawingMenu
+          position={selectedDrawing.position}
+          currentColor={selectedDrawing.color}
+          onColorChange={(color) => {
+            setDrawingGroups(prev => prev.map(group => 
+              group.id === selectedDrawing.id
+                ? {
+                    ...group,
+                    lines: group.lines.map(line => ({ ...line, color }))
+                  }
+                : group
+            ));
+          }}
+          onDelete={() => {
+            setDrawingGroups(prev => prev.filter(group => group.id !== selectedDrawing.id));
+            setSelectedDrawing(null);
+            setSelectedGroupId(null);
+          }}
+        />
+      )}
+
+      {/* Render sticky notes */}
+      {elements.map(element => {
+        if (element.type === 'sticky-note') {
+          return (
+            <Group
+              key={element.id}
+              x={element.x}
+              y={element.y}
+              rotation={element.rotation}
+              onClick={() => setSelectedStickyNote(element)}
+              draggable
+              onDragEnd={(e) => {
+                const node = e.target;
+                setElements(prev => prev.map(el => 
+                  el.id === element.id 
+                    ? { ...el, x: node.x(), y: node.y() } 
+                    : el
+                ));
+              }}
+            >
+              <Rect
+                width={element.width}
+                height={element.height}
+                fill={element.style.backgroundColor}
+                shadowColor={element.style.shadowColor}
+                shadowBlur={10}
+                shadowOffset={{ x: 2, y: 2 }}
+                cornerRadius={10}
+              />
+              <Text
+                text={element.content}
+                width={element.width - 20}
+                height={element.height - 20}
+                x={10}
+                y={10}
+                fill={element.style.textColor}
+                fontSize={element.style.fontSize}
+                padding={10}
+              />
+            </Group>
+          );
+        }
+        return null;
+      })}
+
+      {/* Render sticky note menu */}
+      {selectedStickyNote && (
+        <StickyNoteMenu
+          id={selectedStickyNote.id}
+          x={selectedStickyNote.x}
+          y={selectedStickyNote.y}
+          content={selectedStickyNote.content}
+          style={selectedStickyNote.style}
+          onUpdate={(id, content, style) => {
+            handleStickyNoteContentChange(id, content);
+            handleStickyNoteStyleChange(id, style);
+          }}
+          onDelete={handleStickyNoteDelete}
+          onMove={(id, x, y) => {
+            setElements(prev => prev.map(el => 
+              el.id === id ? { ...el, x, y } : el
+            ));
+          }}
+          isSelected={true}
+          onSelect={() => {}}
+        />
+      )}
     </div>
   );
 } 

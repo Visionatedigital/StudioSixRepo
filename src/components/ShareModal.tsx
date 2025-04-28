@@ -15,10 +15,11 @@ import {
 interface ShareModalProps {
   isOpen: boolean;
   onClose: () => void;
-  imageUrl: string;
+  mediaUrl: string;
+  mediaType?: 'image' | 'video';
 }
 
-export default function ShareModal({ isOpen, onClose, imageUrl }: ShareModalProps) {
+export default function ShareModal({ isOpen, onClose, mediaUrl, mediaType = 'image' }: ShareModalProps) {
   const { data: session } = useSession();
   const [caption, setCaption] = useState('');
   const [isCopied, setIsCopied] = useState(false);
@@ -44,7 +45,8 @@ export default function ShareModal({ isOpen, onClose, imageUrl }: ShareModalProp
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          imageUrl,
+          mediaUrl,
+          mediaType,
           caption,
           userId: session.user.id
         }),
@@ -66,7 +68,7 @@ export default function ShareModal({ isOpen, onClose, imageUrl }: ShareModalProp
 
   const handleCopyLink = async () => {
     try {
-      await navigator.clipboard.writeText(imageUrl);
+      await navigator.clipboard.writeText(mediaUrl);
       setIsCopied(true);
       setTimeout(() => setIsCopied(false), 2000);
     } catch (error) {
@@ -108,7 +110,7 @@ export default function ShareModal({ isOpen, onClose, imageUrl }: ShareModalProp
               <Dialog.Panel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 shadow-xl transition-all">
                 <div className="flex items-center justify-between mb-4">
                   <Dialog.Title className="text-lg font-medium">
-                    Share post
+                    Share {mediaType}
                   </Dialog.Title>
                   <button
                     onClick={onClose}
@@ -157,7 +159,7 @@ export default function ShareModal({ isOpen, onClose, imageUrl }: ShareModalProp
                     <div className="flex items-center gap-2">
                       <input
                         type="text"
-                        value={imageUrl}
+                        value={mediaUrl}
                         readOnly
                         className="flex-grow px-3 py-2 text-sm border border-gray-300 rounded-lg bg-gray-50"
                       />

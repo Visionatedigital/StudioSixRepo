@@ -3,6 +3,7 @@
 import Image from 'next/image';
 import { useState } from 'react';
 import clsx from 'clsx';
+import DrawingToolsTray from './DrawingToolsTray';
 
 interface ContainerTemplate {
   id: string;
@@ -20,7 +21,7 @@ interface ToolDefinition {
 }
 
 interface ToolsPanelProps {
-  onToolSelect: (toolId: Tool, templateId?: string) => void;
+  onToolSelect: (toolId: Tool, templateId?: string, drawingTool?: 'pencil' | 'marker' | 'eraser') => void;
   selectedTool: Tool;
 }
 
@@ -55,29 +56,54 @@ function ContainerSubmenu({ onSelect, onClose }: {
 
 export default function ToolsPanel({ onToolSelect, selectedTool }: ToolsPanelProps) {
   const [showContainerSubmenu, setShowContainerSubmenu] = useState(false);
+  const [selectedDrawingTool, setSelectedDrawingTool] = useState<'pencil' | 'marker' | 'eraser'>('pencil');
+  const [selectedColor, setSelectedColor] = useState('#000000');
+  const [strokeWidth, setStrokeWidth] = useState(2);
 
   const handleContainerSelect = (templateId: string) => {
     onToolSelect('container', templateId);
     setShowContainerSubmenu(false);
   };
 
+  const handleDrawingToolSelect = (tool: 'pencil' | 'marker' | 'eraser') => {
+    setSelectedDrawingTool(tool);
+    onToolSelect('draw', undefined, tool);
+  };
+
+  const handleColorSelect = (color: string) => {
+    setSelectedColor(color);
+    // Here you would also update the canvas stroke color
+  };
+
+  const handleStrokeWidthChange = (width: number) => {
+    setStrokeWidth(width);
+    // Here you would also update the canvas stroke width
+  };
+
   const tools: ToolDefinition[] = [
+    {
+      id: 'text',
+      name: 'Text',
+      icon: '/icons/text-icon.svg',
+      activeIcon: '/icons/text-white-icon.svg'
+    },
     {
       id: 'draw',
       name: 'Draw',
-      icon: '/icons/edit-icon.svg'
+      icon: '/icons/edit-pen-icon.svg',
+      activeIcon: '/icons/edit-pen-icon-white.svg'
+    },
+    {
+      id: 'note',
+      name: 'Note',
+      icon: '/icons/sticky-note-icon.svg',
+      activeIcon: '/icons/sticky-note-white-icon.svg'
     },
     {
       id: 'prompt',
       name: 'Imagine',
       icon: '/icons/visualize-icon.svg',
       activeIcon: '/icons/visualize-white-icon.svg'
-    },
-    {
-      id: 'text',
-      name: 'Text',
-      icon: '/icons/text-icon.svg',
-      activeIcon: '/icons/text-white-icon.svg'
     },
     {
       id: 'board',
@@ -89,12 +115,6 @@ export default function ToolsPanel({ onToolSelect, selectedTool }: ToolsPanelPro
       name: 'Template',
       icon: '/icons/container-icon.svg',
       activeIcon: '/icons/container-white-icon.svg'
-    },
-    {
-      id: 'note',
-      name: 'Note',
-      icon: '/icons/sticky-note-icon.svg',
-      activeIcon: '/icons/sticky-note-white-icon.svg'
     },
     {
       id: 'image',
@@ -114,44 +134,62 @@ export default function ToolsPanel({ onToolSelect, selectedTool }: ToolsPanelPro
   ];
 
   return (
-    <div className="fixed left-0 bg-white shadow-lg rounded-lg p-2.5 flex flex-col gap-2 w-[68px]" style={{ top: '50%', transform: 'translateY(-50%)' }}>
-      {tools.map((tool) => (
-        <button
-          key={tool.id}
-          onClick={() => {
-            if (tool.id === 'container') {
-              setShowContainerSubmenu(!showContainerSubmenu);
-            } else {
-              onToolSelect(tool.id);
-              setShowContainerSubmenu(false);
-            }
-          }}
-          className={clsx(
-            'p-2.5 rounded-lg transition-colors relative group flex flex-col items-center gap-0.5 aspect-square',
-            selectedTool === tool.id
-              ? 'bg-gradient-to-r from-[#814ADA] to-[#4130A7] text-white'
-              : 'hover:bg-gray-50'
-          )}
-          title={tool.name}
-        >
-          <div className="w-6 h-6 relative">
-            <Image
-              src={selectedTool === tool.id && tool.activeIcon ? tool.activeIcon : tool.icon}
-              alt={tool.name}
-              fill
-              className="object-contain"
-            />
-          </div>
-          <span className="text-xs font-medium leading-tight text-center">{tool.name}</span>
-        </button>
-      ))}
-      
-      {showContainerSubmenu && (
-        <ContainerSubmenu
-          onSelect={handleContainerSelect}
-          onClose={() => setShowContainerSubmenu(false)}
+    <>
+      <div className="fixed left-0 bg-white shadow-lg rounded-lg p-2 flex flex-col gap-2 w-[68px]" style={{ top: '50%', transform: 'translateY(-50%)' }}>
+        {tools.map((tool) => (
+          <button
+            key={tool.id}
+            onClick={() => {
+              if (tool.id === 'container') {
+                setShowContainerSubmenu(!showContainerSubmenu);
+              } else {
+                onToolSelect(tool.id);
+                setShowContainerSubmenu(false);
+              }
+            }}
+            className={clsx(
+              'w-12 h-12 rounded-lg transition-colors relative group flex items-center justify-center',
+              selectedTool === tool.id
+                ? 'bg-gradient-to-r from-[#814ADA] to-[#4130A7]'
+                : 'hover:bg-gray-50'
+            )}
+            title={tool.name}
+          >
+            <div className="w-8 h-8 relative">
+              <Image
+                src={selectedTool === tool.id && tool.activeIcon ? tool.activeIcon : tool.icon}
+                alt={tool.name}
+                fill
+                className="object-contain"
+              />
+            </div>
+            
+            {/* Tooltip */}
+            <div className="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-xs rounded pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+              {tool.name}
+            </div>
+          </button>
+        ))}
+        
+        {showContainerSubmenu && (
+          <ContainerSubmenu
+            onSelect={handleContainerSelect}
+            onClose={() => setShowContainerSubmenu(false)}
+          />
+        )}
+      </div>
+
+      {/* Drawing Tools Tray */}
+      {selectedTool === 'draw' && (
+        <DrawingToolsTray
+          selectedTool={selectedDrawingTool}
+          selectedColor={selectedColor}
+          strokeWidth={strokeWidth}
+          onToolSelect={handleDrawingToolSelect}
+          onColorSelect={handleColorSelect}
+          onStrokeWidthChange={handleStrokeWidthChange}
         />
       )}
-    </div>
+    </>
   );
 } 

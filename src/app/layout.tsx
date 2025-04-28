@@ -1,47 +1,47 @@
 import './globals.css'
-import { Inter, Poppins, Lato, Cabin, Roboto, Caveat, Short_Stack } from 'next/font/google'
+import { Inter, Poppins, Lato, Cabin, Roboto, Caveat } from 'next/font/google'
 import type { Metadata } from 'next'
 import { Providers } from './providers'
 import ClientScrollProvider from '@/components/ClientScrollProvider'
 import AuthProvider from '@/components/AuthProvider'
 
+// Load Google Fonts
 const inter = Inter({
   subsets: ['latin'],
-  display: 'swap',
-  variable: '--font-inter'
+  variable: '--font-inter',
 })
-const poppins = Poppins({ 
+
+const poppins = Poppins({
   weight: ['400', '500', '600', '700'],
   subsets: ['latin'],
-  variable: '--font-poppins'
+  variable: '--font-poppins',
 })
+
 const lato = Lato({
   weight: ['400', '700'],
   subsets: ['latin'],
-  variable: '--font-lato'
+  variable: '--font-lato',
 })
+
 const cabin = Cabin({
   weight: ['400', '700'],
   subsets: ['latin'],
-  variable: '--font-cabin'
+  variable: '--font-cabin',
 })
+
 const roboto = Roboto({
-  weight: ["400", "500", "700"],
-  subsets: ["latin"],
-  display: "swap",
-  variable: "--font-roboto",
+  weight: ['400', '500', '700'],
+  subsets: ['latin'],
+  variable: '--font-roboto',
 })
+
 const caveat = Caveat({
   subsets: ['latin'],
-  display: 'swap',
   variable: '--font-caveat',
-});
-const shortStack = Short_Stack({
-  weight: ['400'],
-  subsets: ['latin'],
-  display: 'swap',
-  variable: '--font-short-stack',
-});
+})
+
+// Note: ShortStack is not available in Google Fonts, so we'll need to handle it differently
+// For now, we'll remove it from the layout
 
 export const metadata: Metadata = {
   title: 'StudioSix - AI Design Assistant',
@@ -54,7 +54,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} ${poppins.variable} ${lato.variable} ${cabin.variable} ${roboto.variable} ${caveat.variable} ${shortStack.variable}`}>
+    <html lang="en" className={`${inter.variable} ${poppins.variable} ${lato.variable} ${cabin.variable} ${roboto.variable} ${caveat.variable}`}>
       <head>
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
       </head>

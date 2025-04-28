@@ -65,6 +65,26 @@ export default function RenderingTools() {
       href: '/generate/landscape'
     },
     {
+      title: 'Site Analysis AI',
+      image: '/thumbnails/site-analysis.jpg',
+      href: '/generate/site-analysis'
+    },
+    {
+      title: 'Case Studies',
+      image: '/thumbnails/case-studies.jpg',
+      href: '/case-studies'
+    },
+    {
+      title: 'Concept Generator AI',
+      image: '/thumbnails/concept.jpg',
+      href: '/generate/concept'
+    },
+    {
+      title: 'Floor Plan Analyzer AI',
+      image: '/thumbnails/floor-plan.jpg',
+      href: '/generate/floor-plan'
+    },
+    {
       title: 'Video AI',
       image: '/thumbnails/video.jpg',
       href: '/generate/video'
@@ -72,7 +92,7 @@ export default function RenderingTools() {
   ];
 
   return (
-    <div className="grid grid-cols-5 gap-6">
+    <div className="grid grid-cols-3 gap-6">
       {tools.map((tool) => (
         <RenderingTool
           key={tool.title}

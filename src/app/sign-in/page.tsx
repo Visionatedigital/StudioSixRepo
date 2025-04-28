@@ -36,6 +36,9 @@ function SignInForm() {
           return;
         }
 
+        // Combine first and last name
+        const name = `${firstName} ${lastName}`.trim();
+
         // Register the user
         const res = await fetch('/api/auth/register', {
           method: 'POST',
@@ -43,8 +46,7 @@ function SignInForm() {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            firstName,
-            lastName,
+            name,
             email,
             password,
           }),
@@ -69,8 +71,8 @@ function SignInForm() {
           setError("Failed to sign in after registration");
           console.error("Sign in error after registration:", signInResult.error);
         } else {
-          // Always redirect new users to onboarding
-          router.push('/onboarding');
+          // Redirect to dashboard for all users
+          router.push('/dashboard');
           router.refresh();
         }
       } else {
@@ -88,17 +90,8 @@ function SignInForm() {
           setError("Invalid email or password");
           console.error("Sign in error:", result.error);
         } else {
-          // Check user's subscription status
-          const session = await fetch('/api/auth/session');
-          const sessionData = await session.json();
-          
-          console.log("Session data:", sessionData);
-          
-          if (sessionData?.user?.subscriptionStatus === 'ACTIVE') {
-            router.push('/dashboard');
-          } else {
-            router.push('/onboarding');
-          }
+          // Always redirect to dashboard
+          router.push('/dashboard');
           router.refresh();
         }
       }
@@ -229,7 +222,7 @@ function SignInForm() {
                       name="firstName"
                       id="firstName"
                       required
-                      className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                      className="mt-1 block w-full px-3 py-2 bg-white border border-[#E0DAF3] rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-[#844BDC] focus:border-[#844BDC]"
                     />
                   </div>
                   <div>
@@ -241,7 +234,7 @@ function SignInForm() {
                       name="lastName"
                       id="lastName"
                       required
-                      className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                      className="mt-1 block w-full px-3 py-2 bg-white border border-[#E0DAF3] rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-[#844BDC] focus:border-[#844BDC]"
                     />
                   </div>
                 </>
@@ -256,7 +249,7 @@ function SignInForm() {
                   name="email"
                   id="email"
                   required
-                  className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                  className="mt-1 block w-full px-3 py-2 bg-white border border-[#E0DAF3] rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-[#844BDC] focus:border-[#844BDC]"
                 />
               </div>
               
@@ -269,7 +262,7 @@ function SignInForm() {
                   name="password"
                   id="password"
                   required
-                  className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                  className="mt-1 block w-full px-3 py-2 bg-white border border-[#E0DAF3] rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-[#844BDC] focus:border-[#844BDC]"
                 />
               </div>
 
@@ -283,7 +276,7 @@ function SignInForm() {
                     name="confirmPassword"
                     id="confirmPassword"
                     required
-                    className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                    className="mt-1 block w-full px-3 py-2 bg-white border border-[#E0DAF3] rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-[#844BDC] focus:border-[#844BDC]"
                   />
                 </div>
               )}
@@ -291,7 +284,7 @@ function SignInForm() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-[#844BDC] to-[#AC4FF1] hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#844BDC] disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isLoading ? (
                   <span>Loading...</span>

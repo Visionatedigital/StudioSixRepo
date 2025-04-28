@@ -7,7 +7,7 @@ import { Icon } from './Icons';
 import HeaderActions from './HeaderActions';
 import { useSession, signOut } from 'next-auth/react';
 import MessageInbox from './MessageInbox';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { VerifiedBadge } from './VerifiedBadge';
 
 interface DashboardLayoutProps {
@@ -15,11 +15,21 @@ interface DashboardLayoutProps {
   currentPage: string;
 }
 
+interface Tool {
+  id: string;
+  title: string;
+  path: string;
+  icon?: string;
+  iconPath?: string;
+}
+
 export default function DashboardLayout({ children, currentPage }: DashboardLayoutProps) {
   const { data: session } = useSession();
   const pathname = usePathname();
+  const router = useRouter();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isMessagesOpen, setIsMessagesOpen] = useState(false);
+  const [isAiToolsExpanded, setIsAiToolsExpanded] = useState(false);
   const [credits, setCredits] = useState<number | null>(null);
   const profileRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
@@ -163,22 +173,85 @@ export default function DashboardLayout({ children, currentPage }: DashboardLayo
                   Home
                 </span>
               </Link>
+
+              {/* AI Tools Expandable Menu */}
+              <div className="flex flex-col">
+                <button 
+                  onClick={() => setIsAiToolsExpanded(!isAiToolsExpanded)}
+                  className={`flex flex-row items-center px-3 py-2.5 gap-1 w-full h-10 rounded-[10px] ${pathname.startsWith('/generate') ? 'bg-white border border-[#D3BBFB] shadow-[0px_2px_3px_rgba(0,0,0,0.01),0px_2px_2px_rgba(135,80,255,0.06)]' : ''}`}
+                >
+                  <div className="w-6 h-6 relative">
+                    <Image
+                      src="/icons/Ai-tools-icon.svg"
+                      alt=""
+                      fill
+                      className={pathname.startsWith('/generate') ? 'text-[#844BDC]' : 'text-[#202126]'}
+                    />
+                  </div>
+                  <span className={`font-roboto font-medium text-sm flex-grow text-left ${pathname.startsWith('/generate') ? 'bg-gradient-to-b from-[#2A0856] to-[#3E0B80] bg-clip-text text-transparent' : 'text-[#202126]'}`}>
+                    AI Tools
+                  </span>
+                  <Icon 
+                    name={isAiToolsExpanded ? "chevron-up" : "chevron-down"} 
+                    size={16} 
+                    className="text-[#202126]" 
+                  />
+                </button>
+
+                {/* Expandable Menu Items */}
+                <div className={`flex flex-col gap-1 overflow-hidden transition-all duration-300 ${isAiToolsExpanded ? 'max-h-[500px] mt-1' : 'max-h-0'}`}>
+                  {[
+                    { id: 'exterior', title: 'Exterior AI', path: '/generate/exterior', icon: 'exterior' },
+                    { id: 'interior', title: 'Interior AI', path: '/generate/interior', icon: 'interior' },
+                    { id: 'enhancer', title: 'Render Enhancer', path: '/generate/enhance', icon: 'enhancer' },
+                    { id: 'landscape', title: 'Landscape AI', path: '/generate/landscape', icon: 'landscape' },
+                    { id: 'site-analysis', title: 'Site Analysis AI', path: '/generate/site-analysis', iconPath: '/icons/site-analysis.svg' },
+                    { id: 'case-studies', title: 'Case Studies', path: '/case-studies', iconPath: '/icons/case-studies.svg' },
+                    { id: 'concept', title: 'Concept Generator AI', path: '/generate/concept', iconPath: '/icons/concept.svg' },
+                    { id: 'floor-plan', title: 'Floor Plan AI', path: '/generate/floor-plan', iconPath: '/icons/floor-plan.svg' },
+                    { id: 'video', title: 'Video Generator AI', path: '/generate/video', icon: 'video' }
+                  ].map((tool: Tool) => (
+                    <Link
+                      key={tool.id}
+                      href={tool.path}
+                      className={`flex flex-row items-center px-3 py-2 gap-1 w-full rounded-[10px] ml-4 ${
+                        pathname === tool.path
+                          ? 'bg-white border border-[#D3BBFB] shadow-[0px_2px_3px_rgba(0,0,0,0.01),0px_2px_2px_rgba(135,80,255,0.06)]'
+                          : 'hover:bg-[#F6F8FA]'
+                      }`}
+                    >
+                      {tool.iconPath ? (
+                        <div className="w-5 h-5 relative">
+                          <Image
+                            src={tool.iconPath}
+                            alt=""
+                            fill
+                            className={pathname === tool.path ? 'text-[#844BDC]' : 'text-[#202126]'}
+                          />
+                        </div>
+                      ) : tool.icon ? (
+                        <Icon 
+                          name={tool.icon} 
+                          size={20} 
+                          className={pathname === tool.path ? 'text-[#844BDC]' : 'text-[#202126]'} 
+                        />
+                      ) : null}
+                      <span className={`font-roboto text-sm ${
+                        pathname === tool.path
+                          ? 'bg-gradient-to-b from-[#2A0856] to-[#3E0B80] bg-clip-text text-transparent font-medium'
+                          : 'text-[#202126]'
+                      }`}>
+                        {tool.title}
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+
               <Link href="/ai-design-assistant" className={`flex flex-row items-center px-3 py-2.5 gap-1 w-full h-10 rounded-[10px] ${currentPage === 'AI Design Assistant' ? 'bg-white border border-[#D3BBFB] shadow-[0px_2px_3px_rgba(0,0,0,0.01),0px_2px_2px_rgba(135,80,255,0.06)]' : ''}`}>
                 <Icon name="prompt" size={20} isActive={currentPage === 'AI Design Assistant'} />
                 <span className={`font-roboto font-medium text-sm ${currentPage === 'AI Design Assistant' ? 'bg-gradient-to-b from-[#2A0856] to-[#3E0B80] bg-clip-text text-transparent' : 'text-[#202126]'}`}>
                   AI Design Assistant
-                </span>
-              </Link>
-              <Link href="/generate" className={`flex flex-row items-center px-3 py-2.5 gap-1 w-full h-10 rounded-[10px] ${currentPage === 'Generate' ? 'bg-white border border-[#D3BBFB] shadow-[0px_2px_3px_rgba(0,0,0,0.01),0px_2px_2px_rgba(135,80,255,0.06)]' : ''}`}>
-                <Icon name="image" size={20} isActive={currentPage === 'Generate'} />
-                <span className={`font-roboto font-medium text-sm ${currentPage === 'Generate' ? 'bg-gradient-to-b from-[#2A0856] to-[#3E0B80] bg-clip-text text-transparent' : 'text-[#202126]'}`}>
-                  Image Generation
-                </span>
-              </Link>
-              <Link href="/video" className={`flex flex-row items-center px-3 py-2.5 gap-1 w-full h-10 rounded-[10px] ${currentPage === 'Video' ? 'bg-white border border-[#D3BBFB] shadow-[0px_2px_3px_rgba(0,0,0,0.01),0px_2px_2px_rgba(135,80,255,0.06)]' : ''}`}>
-                <Icon name="video" size={20} isActive={currentPage === 'Video'} />
-                <span className={`font-roboto font-medium text-sm ${currentPage === 'Video' ? 'bg-gradient-to-b from-[#2A0856] to-[#3E0B80] bg-clip-text text-transparent' : 'text-[#202126]'}`}>
-                  Video Generation
                 </span>
               </Link>
               <div className="w-full border-t border-dashed border-[#CDD0D5] my-2.5" />
@@ -255,7 +328,16 @@ export default function DashboardLayout({ children, currentPage }: DashboardLayo
               <div className="flex items-center gap-2.5">
                 {/* Navigation Arrows */}
                 <div className="flex items-center gap-1">
-                  <button className="w-8 h-8 border border-[#CDD0D5] rounded-lg flex items-center justify-center hover:bg-gray-50 transition-colors">
+                  <button 
+                    onClick={() => {
+                      if (pathname === '/generate/site-analysis/report') {
+                        router.push('/generate/site-analysis');
+                      } else {
+                        router.back();
+                      }
+                    }}
+                    className="w-8 h-8 border border-[#CDD0D5] rounded-lg flex items-center justify-center hover:bg-gray-50 transition-colors"
+                  >
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path d="M12.5 15L7.5 10L12.5 5" stroke="#202126" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                     </svg>

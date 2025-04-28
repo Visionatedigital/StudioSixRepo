@@ -176,7 +176,7 @@ export class ArchDailyScraper extends BaseScraper {
       await browser.close();
 
       const id = url.split('/').pop() || Date.now().toString();
-      const caseStudy: CaseStudy = {
+      return {
         id,
         title,
         description,
@@ -196,11 +196,6 @@ export class ArchDailyScraper extends BaseScraper {
         metadata,
         characteristics
       };
-
-      // Save to database
-      await this.saveCaseStudy(caseStudy);
-
-      return caseStudy;
     } catch (error) {
       console.error(`Error scraping project page ${url}:`, error);
       if (browser) await browser.close();
