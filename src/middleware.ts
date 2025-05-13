@@ -36,6 +36,7 @@ export default withAuth(
       '/auth/signin',        // Alternative sign in path
       '/api/video-generator/test', // Video generator test endpoint
       '/api/video-generator/test/status', // Video generator status endpoint
+      '/api/generate/test', // Image generation test endpoint
       '/sign-up',            // Sign up page
       '/verify-email',       // Verify email page
     ];

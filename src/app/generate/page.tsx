@@ -1,15 +1,17 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { Icon } from '@/components/Icons';
 import DashboardLayout from '@/components/DashboardLayout';
 import ImagePreviewModal from '@/components/ImagePreviewModal';
 import { RenderSettingsPanel } from '@/components/RenderSettingsPanel';
 import type { RenderSettings } from '@/components/RenderSettingsPanel';
 import { useSession } from 'next-auth/react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import ShareModal from '@/components/ShareModal';
 import { ShareIcon } from '@/components/Icons';
+import TypingPrompt from '@/components/TypingPrompt';
 
 const defaultSettings: RenderSettings = {
   style: {
@@ -35,8 +37,11 @@ const defaultSettings: RenderSettings = {
   },
 };
 
-export default function GeneratePage() {
+// Main content component that uses useSearchParams
+function GeneratePageContent() {
   const { data: session } = useSession();
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const [settings, setSettings] = useState({
     ...defaultSettings,
     technical: {
@@ -48,9 +53,24 @@ export default function GeneratePage() {
     }
   });
   const [userPrompt, setUserPrompt] = useState('');
-  const [selectedTool, setSelectedTool] = useState('Exterior AI');
+  const [selectedTool, setSelectedTool] = useState(() => {
+    const toolFromUrl = searchParams.get('tool');
+    if (toolFromUrl) {
+      // Convert tool ID to display name
+      const toolMap: { [key: string]: string } = {
+        'exterior': 'Exterior AI',
+        'interior': 'Interior AI',
+        'enhancer': 'Render Enhancer',
+        'landscape': 'Landscape AI',
+        'site-analysis': 'Site Analysis AI'
+      };
+      return toolMap[toolFromUrl] || 'Exterior AI';
+    }
+    return 'Exterior AI';
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [progressMessage, setProgressMessage] = useState('');
   const [generatedImage, setGeneratedImage] = useState('');
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -63,6 +83,8 @@ export default function GeneratePage() {
   const [error, setError] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
+  const [showTypingPrompt, setShowTypingPrompt] = useState(false);
 
   // Sample images array (replace with your actual gallery images)
   const sampleImages = [
@@ -81,12 +103,32 @@ export default function GeneratePage() {
     'Interior AI',
     'Render Enhancer',
     'Landscape AI',
-    'Video AI'
+    'Site Analysis AI',
+    'Case Studies',
+    'Concept Generator AI',
+    'Floor Plan AI',
+    'Video Generator AI'
   ];
 
   const handleToolSelect = (tool: string) => {
     setSelectedTool(tool);
     setIsToolDropdownOpen(false);
+    // Convert display name to tool ID
+    const toolIdMap: { [key: string]: string } = {
+      'Exterior AI': 'exterior',
+      'Interior AI': 'interior',
+      'Render Enhancer': 'enhancer',
+      'Landscape AI': 'landscape',
+      'Site Analysis AI': 'site-analysis',
+      'Case Studies': 'case-studies',
+      'Concept Generator AI': 'concept',
+      'Floor Plan AI': 'floor-plan',
+      'Video Generator AI': 'video'
+    };
+    const toolId = toolIdMap[tool];
+    if (toolId) {
+      router.push(`/generate?tool=${toolId}`);
+    }
   };
 
   const handleGenerate = async (e: React.FormEvent) => {
@@ -94,8 +136,16 @@ export default function GeneratePage() {
     setError(null);
     setIsLoading(true);
     setProgress(0);
+    setProgressMessage('Initializing image generation...');
 
     try {
+      // Check if user is logged in
+      if (!session?.user?.id) {
+        setError('Please sign in to generate images');
+        setIsLoading(false);
+        return;
+      }
+
       // Check if user has enough credits
       if (credits === null || credits < 13) {
         setError('Insufficient credits. Please purchase more credits to continue.');
@@ -103,6 +153,7 @@ export default function GeneratePage() {
         return;
       }
 
+      // Always require image upload since we only support img2img
       if (!uploadedImage) {
         setError('Please upload an image first');
         setIsLoading(false);
@@ -112,6 +163,9 @@ export default function GeneratePage() {
       // Extract base64 data from data URL
       const base64Data = uploadedImage.split(',')[1];
 
+      setProgressMessage('Processing credits...');
+      setProgress(10);
+      
       // Use credits
       const useCreditsResponse = await fetch('/api/credits/use', {
         method: 'POST',
@@ -129,6 +183,33 @@ export default function GeneratePage() {
         throw new Error(errorData.error || 'Failed to use credits');
       }
 
+      setProgressMessage('Analyzing your sketch and preparing to generate...');
+      setProgress(20);
+      
+      // Set a timeout to simulate progress while waiting for the API
+      const progressInterval = setInterval(() => {
+        setProgress((prev) => {
+          if (prev < 90) {
+            const increment = Math.floor(Math.random() * 5) + 1; // Random increment between 1-5
+            return prev + increment > 90 ? 90 : prev + increment;
+          }
+          return prev;
+        });
+      }, 800);
+      
+      // Update progress message based on progress percentage
+      const messageInterval = setInterval(() => {
+        if (progress > 20 && progress <= 40) {
+          setProgressMessage('Applying architectural style and materials...');
+        } else if (progress > 40 && progress <= 60) {
+          setProgressMessage('Rendering lighting and shadows...');
+        } else if (progress > 60 && progress <= 80) {
+          setProgressMessage('Adding realistic details...');
+        } else if (progress > 80) {
+          setProgressMessage('Finalizing your image...');
+        }
+      }, 1200);
+
       // Call the image generation API
       const response = await fetch('/api/generate', {
         method: 'POST',
@@ -141,6 +222,10 @@ export default function GeneratePage() {
           prompt: userPrompt
         }),
       });
+      
+      // Clear intervals once response is received
+      clearInterval(progressInterval);
+      clearInterval(messageInterval);
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -157,12 +242,14 @@ export default function GeneratePage() {
       // Update credits display
       const { credits: updatedCredits } = await useCreditsResponse.json();
       setCredits(updatedCredits);
+
+      setProgressMessage('Generation complete!');
+      setProgress(100);
     } catch (error) {
       console.error('Generation error:', error);
       setError(error instanceof Error ? error.message : 'Failed to generate image');
     } finally {
       setIsLoading(false);
-      setProgress(100);
     }
   };
 
@@ -239,6 +326,36 @@ export default function GeneratePage() {
     fetchCredits();
   }, []);
 
+  const handleGeneratePrompt = async () => {
+    if (!uploadedImage || isGeneratingPrompt) return;
+
+    setIsGeneratingPrompt(true);
+    try {
+      const response = await fetch('/api/generate-prompt', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          image: uploadedImage
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to generate prompt');
+      }
+
+      const data = await response.json();
+      setShowTypingPrompt(true);
+      setUserPrompt(data.prompt);
+    } catch (error) {
+      console.error('Error generating prompt:', error);
+      setError('Failed to generate prompt. Please try again.');
+    } finally {
+      setIsGeneratingPrompt(false);
+    }
+  };
+
   if (!session) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -290,7 +407,9 @@ export default function GeneratePage() {
 
                   {/* Upload Section */}
                   <div className="flex flex-col gap-1.5 w-[380px]">
-                    <label className="font-roboto font-medium text-base text-[#1A1B1E]">Upload Image</label>
+                    <label className="font-roboto font-medium text-base text-[#1A1B1E]">
+                      Upload Image
+                    </label>
                     <div 
                       className={`flex flex-col items-center justify-center w-[379px] h-[232px] bg-white border-2 border-dashed transition-colors duration-200 rounded-[9px] relative overflow-hidden
                         ${isDragging ? 'border-[#844BDC] bg-purple-50/20' : 'border-[#D3D3D3]'}
@@ -693,17 +812,34 @@ export default function GeneratePage() {
                 <div className="flex flex-col gap-1.5 w-full">
                   <div className="flex justify-between items-center">
                     <label className="font-roboto font-medium text-base text-[#1A1B1E]">Prompt</label>
-                    <button className="flex items-center gap-1 text-[#804ED5]">
-                      <span className="font-roboto text-base">Generate Prompt</span>
+                    <button 
+                      onClick={handleGeneratePrompt}
+                      disabled={!uploadedImage || isGeneratingPrompt}
+                      className={`flex items-center gap-1 ${
+                        !uploadedImage || isGeneratingPrompt 
+                          ? 'text-gray-400 cursor-not-allowed' 
+                          : 'text-[#804ED5] hover:text-[#844BDC]'
+                      } transition-colors`}
+                    >
+                      <span className="font-roboto text-base">
+                        {isGeneratingPrompt ? 'Generating...' : 'Generate Prompt'}
+                      </span>
                       <Icon name="sparkles" size={20} />
                     </button>
                   </div>
+                  {showTypingPrompt ? (
+                    <TypingPrompt 
+                      text={userPrompt} 
+                      onComplete={() => setShowTypingPrompt(false)}
+                    />
+                  ) : (
                   <textarea 
                     value={userPrompt}
                     onChange={(e) => setUserPrompt(e.target.value)}
                     className="w-full h-[106px] p-[13px_19px] bg-white border border-[#E0DAF3] rounded-lg font-roboto text-base resize-none"
                     placeholder="Describe the architectural style and any specific features you want to emphasize..."
                   />
+                  )}
                   <button 
                     onClick={handleGenerate}
                     disabled={isLoading || (credits !== null && credits < 13)}
@@ -726,14 +862,14 @@ export default function GeneratePage() {
               {/* Generated Image Result */}
               <div className="flex-grow bg-white rounded-2xl overflow-hidden flex flex-col">
                 {/* Image Container */}
-                <div className="relative w-full h-full">
+                <div className="relative w-full h-full flex items-center justify-center p-4">
                   {isLoading ? (
                     <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <div className="w-10 h-10 relative">
+                      <div className="w-20 h-20 relative">
                         <div 
                           className="absolute inset-[15%] rounded-full animate-spin"
                           style={{
-                            border: '2px solid transparent',
+                            border: '3px solid transparent',
                             borderTopColor: '#844BDC',
                             borderRightColor: '#342A9C',
                             transform: 'rotate(45deg)',
@@ -741,16 +877,25 @@ export default function GeneratePage() {
                         ></div>
                       </div>
                       <span className="mt-4 font-roboto text-base text-[#6C7275]">
-                        Generating... {progress}%
+                        {progressMessage}
+                      </span>
+                      <div className="mt-4 w-64 h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-to-r from-[#844BDC] to-[#342A9C] transition-all duration-300"
+                          style={{ width: `${progress}%` }}
+                        ></div>
+                      </div>
+                      <span className="mt-2 font-roboto text-sm text-[#6C7275]">
+                        {progress}%
                       </span>
                     </div>
                   ) : generatedImage ? (
-                    <div className="relative mt-8 rounded-lg overflow-hidden">
+                    <div className="relative w-full h-full flex items-center justify-center overflow-auto">
                       <img
-                        src={`data:image/png;base64,${generatedImage}`}
+                        src={generatedImage}
                         alt="Generated render"
-                        className="w-full h-auto"
-                        onClick={() => handleImageClick(`data:image/png;base64,${generatedImage}`)}
+                        className="w-auto h-auto object-contain"
+                        onClick={() => handleImageClick(generatedImage)}
                       />
                       <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/50 to-transparent">
                         <div className="flex justify-between items-center">
@@ -821,7 +966,7 @@ export default function GeneratePage() {
       <ShareModal
         isOpen={isShareModalOpen}
         onClose={() => setIsShareModalOpen(false)}
-        mediaUrl={generatedImage ? `data:image/png;base64,${generatedImage}` : ''}
+        mediaUrl={generatedImage || ''}
       />
 
       <style jsx global>{`
@@ -852,5 +997,14 @@ export default function GeneratePage() {
         }
       `}</style>
     </div>
+  );
+}
+
+// Wrapper component that provides Suspense boundary
+export default function GeneratePage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center">Loading generator...</div>}>
+      <GeneratePageContent />
+    </Suspense>
   );
 } 

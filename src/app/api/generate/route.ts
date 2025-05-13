@@ -1,4 +1,7 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
+import sharp from 'sharp';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 
 interface GenerationSettings {
   style: {
@@ -22,6 +25,13 @@ interface GenerationSettings {
     steps: number;
     cfgScale: number;
   };
+  negativePrompt?: string;
+  controlNetModule?: string;
+  denoiseStrength?: number;
+  guidanceScale?: number;
+  cfgScale?: number;
+  steps?: number;
+  numInferenceSteps?: number;
 }
 
 function buildPrompt(settings: GenerationSettings, userPrompt: string): string {
@@ -61,14 +71,6 @@ function buildPrompt(settings: GenerationSettings, userPrompt: string): string {
 
 async function sendToAutomatic1111(settings: GenerationSettings, image: string, userPrompt: string) {
   try {
-    // Refined weight calculations for Canny model
-    const controlNetWeight = 
-      settings.technical.controlNetMode === "Balanced" ? 0.9 :
-      settings.technical.controlNetMode === "Prompt Focus" ? 0.8 : 1.0;
-
-    const guidanceStart = 0.0;
-    const guidanceEnd = 0.7; // Allow more creative freedom in later stages
-
     const prompt = buildPrompt(settings, userPrompt);
     console.log('Sending request to API with payload:', {
       prompt,
@@ -77,109 +79,345 @@ async function sendToAutomatic1111(settings: GenerationSettings, image: string, 
       cfg_scale: settings.technical.cfgScale
     });
 
-    const response = await fetch('http://44.200.48.147:7860/sdapi/v1/img2img', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        init_images: [image],
-        prompt,
-        negative_prompt: "unrealistic proportions, bad architecture, deformed structure, blurry, low quality, distorted perspective, plain surface, flat texture, warped geometry, asymmetrical architecture, curved walls where straight should be, broken windows, disproportionate features, missing architectural elements, oversaturated, cartoon, anime, illustration, drawing, painting, crayon, CGI, 3d model, dull, boring, plain, simplified, low resolution, flat lighting, uniform textures, noise, grain, artifacts",
-        steps: Math.max(settings.technical.steps, 45), // Increased steps for better quality
-        cfg_scale: Math.min(settings.technical.cfgScale, 12), // Increased for stronger prompt influence
-        width: 768,
-        height: 768,
-        restore_faces: false,
-        sampler_name: "DPM++ 2M Karras", // Changed sampler for better quality
-        denoising_strength: Math.min(settings.technical.denoisingStrength, 0.55), // Balanced for detail preservation
-        alwayson_scripts: {
-          controlnet: {
-            args: [
-              {
-                image: image,
-                module: "canny",
-                model: "control_v11p_sd15_canny",
-                weight: controlNetWeight,
-                guidance_start: guidanceStart,
-                guidance_end: guidanceEnd,
-                processor_res: 768,
-                threshold_a: 100, // Increased for stronger edge detection
-                threshold_b: 200,
-                control_mode: settings.technical.controlNetMode,
-                pixel_perfect: true
-              }
-            ]
-          }
-        }
-      })
-    });
+    // Always use image-to-image mode
+    console.log('Using image-to-image generation...');
 
-    console.log('Response status:', response.status);
-    
-    if (!response.ok) {
-      const errorData = await response.text();
-      console.error('Server error response:', errorData);
-      throw new Error(`HTTP error! status: ${response.status}, details: ${errorData}`);
+    try {
+      console.log('Connecting to RunPod instance...');
+      
+      const response = await fetch(`https://oim4h1ldqg0523-80.proxy.runpod.net/sdapi/v1/img2img`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          init_images: [image],
+          prompt: prompt,
+          negative_prompt: "unrealistic proportions, bad architecture, deformed structure, blurry",
+          steps: settings.technical.steps || 40,
+          cfg_scale: settings.technical.cfgScale || 7,
+          width: 512,
+          height: 512,
+          sampler_name: "DPM++ 2M Karras",
+          denoising_strength: 0.95,
+          batch_size: 1,
+          n_iter: 1,
+          seed: -1
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      let imageData = data.images[0];
+      
+      // Add image prefix if needed
+      if (typeof imageData === 'string' && !imageData.startsWith('data:image/')) {
+        imageData = `data:image/png;base64,${imageData}`;
+      }
+      
+      return imageData;
+    } catch (error) {
+      console.error('RunPod API error:', error);
+      return createEnhancedFallbackImage(prompt);
     }
-
-    const data = await response.json();
-    console.log('Received response data structure:', Object.keys(data));
-    
-    if (!data.images || !data.images[0]) {
-      console.error('Unexpected response format:', JSON.stringify(data));
-      throw new Error('No image data in response');
-    }
-    return data.images[0]; // Base64 encoded image
   } catch (error: any) {
-    console.error('Detailed error:', {
-      message: error?.message || 'Unknown error',
-      cause: error?.cause,
-      stack: error?.stack
-    });
+    console.error('Image generation error:', error);
+    return createEnhancedFallbackImage("Image generation failed. Please try again.");
+  }
+}
+
+// Function to create a more visually appealing fallback image
+function createEnhancedFallbackImage(prompt: string): string {
+  // Create a simple "processing" SVG with the prompt text
+  const escapedPrompt = prompt.replace(/"/g, '&quot;').substring(0, 100) + '...';
+  
+  const svg = `
+  <svg width="1024" height="768" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:#4a6fa5;stop-opacity:1" />
+        <stop offset="100%" style="stop-color:#23395d;stop-opacity:1" />
+      </linearGradient>
+    </defs>
+    <rect width="1024" height="768" fill="url(#grad)" />
+    <rect x="50" y="50" width="924" height="668" fill="rgba(255,255,255,0.1)" rx="15" />
+    
+    <!-- Header -->
+    <text x="512" y="120" font-family="Arial" font-size="36" text-anchor="middle" fill="white" font-weight="bold">Image Generation</text>
+    
+    <!-- Status -->
+    <text x="512" y="180" font-family="Arial" font-size="24" text-anchor="middle" fill="#f8f8f8">
+      Connection to image generation service failed
+    </text>
+    
+    <!-- House icon -->
+    <rect x="437" y="240" width="150" height="120" fill="none" stroke="white" stroke-width="4"/>
+    <polygon points="437,240 512,190 587,240" fill="none" stroke="white" stroke-width="4"/>
+    <rect x="487" y="290" width="50" height="70" fill="none" stroke="white" stroke-width="4"/>
+    
+    <!-- Prompt preview -->
+    <rect x="150" y="400" width="724" height="200" fill="rgba(255,255,255,0.1)" rx="10" />
+    <text x="180" y="440" font-family="Arial" font-size="18" fill="white" font-weight="bold">Prompt:</text>
+    <foreignObject x="180" y="460" width="664" height="120">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="color: #e0e0e0; font-family: Arial; font-size: 14px; word-wrap: break-word;">
+        ${escapedPrompt}
+      </div>
+    </foreignObject>
+    
+    <!-- Instructions -->
+    <text x="512" y="650" font-family="Arial" font-size="18" text-anchor="middle" fill="#f0f0f0">
+      Please check your connection to the image service and try again
+    </text>
+    <text x="512" y="680" font-family="Arial" font-size="14" text-anchor="middle" fill="#d0d0d0">
+      Alternatively, try using a different image or prompt
+    </text>
+  </svg>
+  `;
+  
+  const base64 = Buffer.from(svg).toString('base64');
+  return `data:image/svg+xml;base64,${base64}`;
+}
+
+// Simple version of the fallback image function for backward compatibility
+function createFallbackImage(message: string): string {
+  return createEnhancedFallbackImage(message);
+}
+
+// Improved function to send requests to the RunPod API with better error handling
+async function sendToGradioAPI(prompt: string, uploadedImageBase64: string, settings: GenerationSettings) {
+  try {
+    const negativePrompt = settings.negativePrompt || "bad quality, blurry, low resolution";
+    const runpodAPIUrl = 'https://oim4h1ldqg0523-80.proxy.runpod.net/sdapi/v1/img2img';
+    
+    console.log('Sending request to RunPod API:');
+    console.log(`URL: ${runpodAPIUrl}`);
+    console.log(`Prompt: ${prompt}`);
+    console.log(`Negative Prompt: ${negativePrompt}`);
+
+    // Validate and process the base64 image
+    if (!uploadedImageBase64) {
+      throw new Error('No image data provided');
+    }
+
+    // Extract base64 data if it's a data URL
+    let base64Data = uploadedImageBase64;
+    if (uploadedImageBase64.startsWith('data:')) {
+      const matches = uploadedImageBase64.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
+      if (!matches || matches.length !== 3) {
+        throw new Error('Invalid image data format');
+      }
+      base64Data = matches[2];
+    }
+
+    // Retry mechanism with exponential backoff
+    const MAX_RETRIES = 3;
+    let retryCount = 0;
+    let lastError;
+
+    while (retryCount < MAX_RETRIES) {
+      try {
+        const response = await fetch(runpodAPIUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            init_images: [uploadedImageBase64],
+            prompt: prompt,
+            negative_prompt: negativePrompt,
+            steps: settings.technical?.steps || settings.steps || 40,
+            cfg_scale: settings.technical?.cfgScale || settings.cfgScale || settings.guidanceScale || 7,
+            width: 512,
+            height: 512,
+            sampler_name: "DPM++ 2M Karras",
+            denoising_strength: settings.technical?.denoisingStrength || settings.denoiseStrength || 0.75,
+            batch_size: 1,
+            n_iter: 1,
+            seed: -1,
+            alwayson_scripts: {
+              controlnet: {
+                args: [
+                  {
+                    input_image: uploadedImageBase64,
+                    module: "lineart",
+                    model: "control_v11p_sd15_lineart",
+                    weight: 1.0,
+                    guidance_start: 0.0,
+                    guidance_end: 1.0,
+                    processor_res: 512,
+                    threshold_a: 100,
+                    threshold_b: 200,
+                    control_mode: "Balanced",
+                    pixel_perfect: true
+                  }
+                ]
+              }
+            }
+          })
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+        }
+
+        const data = await response.json();
+        if (!data || !data.images || !data.images[0]) {
+          throw new Error('Invalid response from API: missing image data');
+        }
+
+        let imageData = data.images[0];
+
+        // Add image prefix if needed
+        if (typeof imageData === 'string' && !imageData.startsWith('data:image/')) {
+          imageData = `data:image/png;base64,${imageData}`;
+        }
+
+        return imageData;
+      } catch (error) {
+        lastError = error;
+        const delay = Math.pow(2, retryCount) * 1000;
+        console.log(`Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        retryCount++;
+      }
+    }
+
+    throw new Error(`Failed after ${MAX_RETRIES} attempts: ${lastError instanceof Error ? lastError.message : 'Unknown error'}`);
+  } catch (error: any) {
+    console.error('RunPod API error:', error);
     throw error;
   }
 }
 
-const AUTOMATIC1111_URL = 'http://44.200.48.147:7860';
+// Helper function to get image dimensions
+async function getImageDimensions(buffer: Buffer): Promise<{ width: number; height: number }> {
+  const metadata = await sharp(buffer).metadata();
+  if (!metadata.width || !metadata.height) {
+    throw new Error('Could not determine image dimensions');
+  }
+  return {
+    width: metadata.width,
+    height: metadata.height
+  };
+}
 
-export async function POST(req: Request) {
+// Main API endpoint handler
+export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    // Get the session
+    const session = await getServerSession(authOptions);
     
-    const response = await fetch(`${AUTOMATIC1111_URL}/sdapi/v1/img2img`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        init_images: body.init_images,
-        prompt: body.prompt,
-        negative_prompt: body.negative_prompt,
-        steps: body.steps,
-        cfg_scale: body.cfg_scale,
-        width: body.width,
-        height: body.height,
-        sampler_name: body.sampler_name,
-        alwayson_scripts: body.alwayson_scripts,
-      }),
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      return NextResponse.json(
-        { error: `Stable Diffusion API error: ${error}` },
-        { status: response.status }
-      );
+    // Check if user is authenticated
+    if (!session?.user?.id) {
+      return new NextResponse(JSON.stringify({ error: 'Authentication required' }), { status: 401 });
     }
 
-    const data = await response.json();
-    return NextResponse.json(data);
+    // Parse request body
+    const body = await req.json();
+    const { image, uploadedImage, userPrompt, prompt, settings, mode } = body;
+
+    // Validate inputs
+    if (!userPrompt && !prompt) return new NextResponse(JSON.stringify({ error: 'Prompt is required' }), { status: 400 });
+
+    // Determine which prompt to use
+    const finalPrompt = userPrompt || prompt || '';
+    
+    // Log request details
+    console.log('Received request details:');
+    console.log(`- User ID: ${session.user.id}`);
+    console.log(`- Prompt: ${finalPrompt.substring(0, 100)}...`);
+    console.log(`- Mode: ${mode || (image || uploadedImage ? 'img2img' : 'txt2img')}`);
+    console.log(`- Settings provided: ${!!settings}`);
+
+    const isTextToImage = mode === 'txt2img' || (!image && !uploadedImage);
+    const imageData = image || uploadedImage || '';
+    
+    try {
+      let generatedImage;
+
+      // Choose generation method based on whether an image is provided
+      if (isTextToImage) {
+        console.log('Using text-to-image generation mode');
+        
+        const runpodAPIUrl = 'https://oim4h1ldqg0523-80.proxy.runpod.net/api/predict';
+        
+        console.log('Sending request to RunPod API for txt2img:');
+        console.log(`URL: ${runpodAPIUrl}`);
+        console.log(`Prompt: ${finalPrompt}`);
+        
+        const negativePrompt = settings?.negativePrompt || "bad quality, blurry, low resolution";
+        
+        // Make request with txt2img parameters
+        const response = await fetch(runpodAPIUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            data: [
+              finalPrompt,
+              negativePrompt,
+              settings?.technical?.steps || settings?.steps || 40,
+              settings?.technical?.cfgScale || settings?.cfgScale || settings?.guidanceScale || 7,
+              512, // width
+              512, // height
+              "DPM++ 2M Karras", // sampler
+              false, // restore faces
+              false, // tiling
+              1, // batch count
+              1, // batch size
+              -1, // seed
+              0, // subseed
+              0, // subseed strength
+              0, // seed resize from h
+              0, // seed resize from w
+              0  // seed resize to h
+            ]
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log('Received txt2img response from RunPod API:', { success: !!data, dataLength: JSON.stringify(data).length });
+
+        if (!data || !data.data || !data.data[0]) {
+          throw new Error('Invalid response from API: missing data');
+        }
+
+        let imageData = data.data[0];
+        
+        // Add image prefix if needed
+        if (typeof imageData === 'string' && !imageData.startsWith('data:image/')) {
+          imageData = `data:image/png;base64,${imageData}`;
+        }
+        
+        generatedImage = imageData;
+      } else {
+        console.log('Using image-to-image generation mode');
+        // Use the existing img2img function
+        generatedImage = await sendToGradioAPI(finalPrompt, imageData, settings || {});
+      }
+
+      return NextResponse.json({ image: generatedImage });
+    } catch (error: any) {
+      console.error('API Error:', error);
+      return new NextResponse(
+        JSON.stringify({ 
+          error: `Image generation failed: ${error.message}`,
+          details: error.stack
+        }), 
+        { status: 500 }
+      );
+    }
   } catch (error: any) {
-    console.error('Error in generate route:', error);
-    return NextResponse.json(
-      { error: error.message || 'Internal server error' },
-      { status: 500 }
+    console.error('Request processing error:', error);
+    return new NextResponse(
+      JSON.stringify({ 
+        error: `Failed to process request: ${error.message}`,
+        details: error.stack 
+      }), 
+      { status: 400 }
     );
   }
 } 

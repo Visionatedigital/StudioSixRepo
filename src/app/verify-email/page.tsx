@@ -76,7 +76,7 @@ function VerifyEmailContent() {
       
       // Sign out and redirect to sign in to refresh the session
       setTimeout(() => {
-        signOut({ callbackUrl: '/sign-in' });
+        signOut({ callbackUrl: 'https://studiosix.ai/sign-in' });
       }, 2000);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');

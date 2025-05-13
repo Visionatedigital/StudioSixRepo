@@ -47,6 +47,7 @@ const nextConfig = {
 
     return config;
   },
+  // Only use headers in development and production, not during static export
   async headers() {
     return [
       {
@@ -76,6 +77,18 @@ const nextConfig = {
     maxInactiveAge: 25 * 1000,
     pagesBufferLength: 2,
   },
+  // Skip API routes and dynamic routes during static export
+  experimental: {
+    // Only use this setting during static build
+    outputFileTracing: true,
+  },
+}
+
+// Special handling for static export (build command)
+if (process.env.NODE_ENV === 'production' && process.env.NEXT_STATIC_BUILD === 'true') {
+  nextConfig.output = 'export';
+  // Remove headers during static export
+  nextConfig.headers = () => [];
 }
 
 module.exports = nextConfig 

@@ -201,50 +201,49 @@ export default function DashboardLayout({ children, currentPage }: DashboardLayo
                 {/* Expandable Menu Items */}
                 <div className={`flex flex-col gap-1 overflow-hidden transition-all duration-300 ${isAiToolsExpanded ? 'max-h-[500px] mt-1' : 'max-h-0'}`}>
                   {[
-                    { id: 'exterior', title: 'Exterior AI', path: '/generate/exterior', icon: 'exterior' },
-                    { id: 'interior', title: 'Interior AI', path: '/generate/interior', icon: 'interior' },
-                    { id: 'enhancer', title: 'Render Enhancer', path: '/generate/enhance', icon: 'enhancer' },
-                    { id: 'landscape', title: 'Landscape AI', path: '/generate/landscape', icon: 'landscape' },
-                    { id: 'site-analysis', title: 'Site Analysis AI', path: '/generate/site-analysis', iconPath: '/icons/site-analysis.svg' },
+                    { id: 'exterior', title: 'Exterior AI', path: '/generate?tool=exterior', icon: 'exterior' },
+                    { id: 'interior', title: 'Interior AI', path: '/generate?tool=interior', icon: 'interior' },
+                    { id: 'enhancer', title: 'Render Enhancer', path: '/generate?tool=enhancer', icon: 'enhancer' },
+                    { id: 'landscape', title: 'Landscape AI', path: '/generate?tool=landscape', icon: 'landscape' },
+                    { id: 'site-analysis', title: 'Site Analysis AI', path: '/generate?tool=site-analysis', iconPath: '/icons/site-analysis.svg' },
                     { id: 'case-studies', title: 'Case Studies', path: '/case-studies', iconPath: '/icons/case-studies.svg' },
                     { id: 'concept', title: 'Concept Generator AI', path: '/generate/concept', iconPath: '/icons/concept.svg' },
                     { id: 'floor-plan', title: 'Floor Plan AI', path: '/generate/floor-plan', iconPath: '/icons/floor-plan.svg' },
                     { id: 'video', title: 'Video Generator AI', path: '/generate/video', icon: 'video' }
-                  ].map((tool: Tool) => (
+                  ].map((item: Tool) => {
+                    const isActive = item.path.startsWith('/generate?') 
+                      ? pathname === '/generate' && new URLSearchParams(item.path.split('?')[1]).get('tool') === new URLSearchParams(window.location.search).get('tool')
+                      : pathname === item.path;
+
+                    return (
                     <Link
-                      key={tool.id}
-                      href={tool.path}
-                      className={`flex flex-row items-center px-3 py-2 gap-1 w-full rounded-[10px] ml-4 ${
-                        pathname === tool.path
-                          ? 'bg-white border border-[#D3BBFB] shadow-[0px_2px_3px_rgba(0,0,0,0.01),0px_2px_2px_rgba(135,80,255,0.06)]'
-                          : 'hover:bg-[#F6F8FA]'
-                      }`}
+                        key={item.id}
+                        href={item.path}
+                        className={`flex flex-row items-center px-3 py-2.5 gap-1 w-full h-10 rounded-[10px] hover:bg-[#F6F8FA] transition-colors
+                          ${isActive ? 'bg-white border border-[#D3BBFB] shadow-[0px_2px_3px_rgba(0,0,0,0.01),0px_2px_2px_rgba(135,80,255,0.06)]' : ''}`}
                     >
-                      {tool.iconPath ? (
-                        <div className="w-5 h-5 relative">
+                        <div className="w-6 h-6 relative">
+                          {item.iconPath ? (
                           <Image
-                            src={tool.iconPath}
+                              src={item.iconPath}
                             alt=""
                             fill
-                            className={pathname === tool.path ? 'text-[#844BDC]' : 'text-[#202126]'}
+                              className={isActive ? 'text-[#844BDC]' : 'text-[#202126]'}
+                            />
+                          ) : (
+                            <Icon
+                              name={item.icon as any}
+                              size={24}
+                              className={isActive ? 'text-[#844BDC]' : 'text-[#202126]'}
                           />
+                          )}
                         </div>
-                      ) : tool.icon ? (
-                        <Icon 
-                          name={tool.icon} 
-                          size={20} 
-                          className={pathname === tool.path ? 'text-[#844BDC]' : 'text-[#202126]'} 
-                        />
-                      ) : null}
-                      <span className={`font-roboto text-sm ${
-                        pathname === tool.path
-                          ? 'bg-gradient-to-b from-[#2A0856] to-[#3E0B80] bg-clip-text text-transparent font-medium'
-                          : 'text-[#202126]'
-                      }`}>
-                        {tool.title}
+                        <span className={`font-roboto font-medium text-sm flex-grow text-left ${isActive ? 'bg-gradient-to-b from-[#2A0856] to-[#3E0B80] bg-clip-text text-transparent' : 'text-[#202126]'}`}>
+                          {item.title}
                       </span>
                     </Link>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
@@ -274,12 +273,6 @@ export default function DashboardLayout({ children, currentPage }: DashboardLayo
                 </span>
               </Link>
               <div className="w-full border-t border-dashed border-[#C7CCD8] my-2.5" />
-              <Link href="/whatsnew" className={`flex flex-row items-center px-3 py-2.5 gap-1 w-full h-10 rounded-[10px] ${currentPage === 'WhatsNew' ? 'bg-white border border-[#D3BBFB] shadow-[0px_2px_3px_rgba(0,0,0,0.01),0px_2px_2px_rgba(135,80,255,0.06)]' : ''}`}>
-                <Icon name="whatsnew" size={20} isActive={currentPage === 'WhatsNew'} />
-                <span className={`font-roboto font-medium text-sm ${currentPage === 'WhatsNew' ? 'bg-gradient-to-b from-[#2A0856] to-[#3E0B80] bg-clip-text text-transparent' : 'text-[#202126]'}`}>
-                  What's New
-                </span>
-              </Link>
               <Link href="/pricing" className={`flex flex-row items-center px-3 py-2.5 gap-1 w-full h-10 rounded-[10px] ${currentPage === 'Pricing' ? 'bg-white border border-[#D3BBFB] shadow-[0px_2px_3px_rgba(0,0,0,0.01),0px_2px_2px_rgba(135,80,255,0.06)]' : ''}`}>
                 <Icon name="premium" size={20} isActive={currentPage === 'Pricing'} />
                 <span className={`font-roboto font-medium text-sm ${currentPage === 'Pricing' ? 'bg-gradient-to-b from-[#2A0856] to-[#3E0B80] bg-clip-text text-transparent' : 'text-[#202126]'}`}>
@@ -432,7 +425,7 @@ export default function DashboardLayout({ children, currentPage }: DashboardLayo
         </div>
       </div>
 
-      {/* Message Inbox Modal - Moved outside main layout */}
+      {/* Message Inbox Modal */}
       {showMessageInbox && (
         <MessageInbox onClose={() => setShowMessageInbox(false)} />
       )}

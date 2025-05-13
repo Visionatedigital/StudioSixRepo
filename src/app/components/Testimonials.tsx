@@ -1,32 +1,43 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 
 const testimonials = [
   {
-    name: "Sarah Johnson",
-    role: "Lead Designer",
-    quote: "StudioSix has revolutionized our design workflow. The AI-powered renders are incredibly realistic and save us countless hours."
-  },
-  {
-    name: "Michael Chen",
-    role: "Senior Architect",
-    quote: "The quality and speed of renders are unmatched. It's become an essential tool in our design process."
-  },
-  {
-    name: "Emma Thompson",
+    name: "Atuhaire Esther J.",
     role: "Interior Designer",
-    quote: "The attention to detail in the renders is amazing. It helps us communicate our vision clearly to clients."
+    quote: "StudioSix has revolutionized our design workflow. The AI-powered renders are incredibly realistic and save us countless hours.",
+    image: "/testimonials/atuhaire-esther.jpg",
+    rating: 5
   },
   {
-    name: "David Rodriguez",
-    role: "3D Artist",
-    quote: "The AI capabilities have transformed how we approach visualization. It's incredibly intuitive and powerful."
+    name: "Lukwago Mathew",
+    role: "Engineer",
+    quote: "The quality and speed of renders are unmatched. It's become an essential tool in our design process.",
+    image: "/testimonials/lukwago-mathew.jpg",
+    rating: 5
   },
   {
-    name: "Lisa Wang",
-    role: "Creative Director",
-    quote: "Studio Six has become indispensable for our team. The speed and quality are simply outstanding."
+    name: "Mubiru James",
+    role: "Architect",
+    quote: "The attention to detail in the renders is amazing. It helps us communicate our vision clearly to clients.",
+    image: "/testimonials/mubiru-james.jpg",
+    rating: 4.5
+  },
+  {
+    name: "David Muwanguzi L.",
+    role: "Project Manager",
+    quote: "The AI capabilities have transformed how we approach visualization. It's incredibly intuitive and powerful.",
+    image: "/testimonials/david-muwanguzi.jpg",
+    rating: 5
+  },
+  {
+    name: "Karoline Nyara",
+    role: "Architect",
+    quote: "Studio Six has become indispensable for our team. The speed and quality are simply outstanding.",
+    image: "/testimonials/karoline-nyara.jpg",
+    rating: 4
   }
 ];
 
@@ -36,6 +47,43 @@ type StylePosition = {
   transform: string;
   opacity: string;
   zIndex: string;
+};
+
+// Star Rating Component
+const StarRating = ({ rating }: { rating: number }) => {
+  const stars = [];
+  const fullStars = Math.floor(rating);
+  const hasHalfStar = rating % 1 !== 0;
+
+  // Add full stars
+  for (let i = 0; i < fullStars; i++) {
+    stars.push(
+      <svg key={`full-${i}`} viewBox="0 0 24 24" className="w-5 h-5 text-yellow-400 inline-block">
+        <path fill="currentColor" d="M12,17.27L18.18,21L16.54,13.97L22,9.24L14.81,8.62L12,2L9.19,8.62L2,9.24L7.45,13.97L5.82,21L12,17.27Z" />
+      </svg>
+    );
+  }
+
+  // Add half star if necessary
+  if (hasHalfStar) {
+    stars.push(
+      <svg key="half" viewBox="0 0 24 24" className="w-5 h-5 text-yellow-400 inline-block">
+        <path fill="currentColor" d="M12,15.4V6.1L13.71,10.13L18.09,10.5L14.77,13.39L15.76,17.67M22,9.24L14.81,8.63L12,2L9.19,8.63L2,9.24L7.45,13.97L5.82,21L12,17.27L18.18,21L16.54,13.97L22,9.24Z" />
+      </svg>
+    );
+  }
+
+  // Add empty stars to make 5 total
+  const emptyStars = 5 - fullStars - (hasHalfStar ? 1 : 0);
+  for (let i = 0; i < emptyStars; i++) {
+    stars.push(
+      <svg key={`empty-${i}`} viewBox="0 0 24 24" className="w-5 h-5 text-gray-300 inline-block">
+        <path fill="currentColor" d="M12,15.39L8.24,17.66L9.23,13.38L5.91,10.5L10.29,10.13L12,6.09L13.71,10.13L18.09,10.5L14.77,13.38L15.76,17.66M22,9.24L14.81,8.63L12,2L9.19,8.63L2,9.24L7.45,13.97L5.82,21L12,17.27L18.18,21L16.54,13.97L22,9.24Z" />
+      </svg>
+    );
+  }
+
+  return <div className="flex items-center justify-center space-x-1">{stars}</div>;
 };
 
 export default function Testimonials() {
@@ -118,7 +166,7 @@ export default function Testimonials() {
   };
 
   return (
-    <section className="relative py-[100px] overflow-hidden">
+    <section className="relative pt-[60px] pb-0 overflow-hidden">
       <h2 className="font-lato font-bold text-[36px] leading-[43px] text-center text-black mb-[50px]">
         What Our Designers Say About It
       </h2>
@@ -139,14 +187,29 @@ export default function Testimonials() {
           {/* Previous Testimonial */}
           <div {...getCardStyles('prev')}>
             <div className="flex flex-col items-center p-8 rounded-[24px] shadow-lg h-full">
-              <div className="w-[90px] h-[90px] rounded-full border-2 border-[#1B1464] bg-[#F6F8FA] mb-4" />
+              {testimonials[getPrevIndex(currentIndex)].image ? (
+                <div className="w-[90px] h-[90px] rounded-full border-2 border-[#1B1464] overflow-hidden mb-4">
+                  <Image 
+                    src={testimonials[getPrevIndex(currentIndex)].image!}
+                    alt={`${testimonials[getPrevIndex(currentIndex)].name} profile`}
+                    width={90}
+                    height={90}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              ) : (
+                <div className="w-[90px] h-[90px] rounded-full border-2 border-[#1B1464] bg-[#F6F8FA] mb-4" />
+              )}
               <h3 className="font-poppins font-bold text-[18px] leading-[27px] text-[#1B1464] mb-2">
                 {testimonials[getPrevIndex(currentIndex)].name}
               </h3>
-              <p className="font-lato text-[15px] leading-[18px] text-[#6B6B6B] mb-6">
+              <p className="font-lato text-[15px] leading-[18px] text-[#6B6B6B] mb-1">
                 {testimonials[getPrevIndex(currentIndex)].role}
               </p>
-              <div className="w-[31.54px] h-[31.54px] mb-4">
+              <div>
+                <StarRating rating={testimonials[getPrevIndex(currentIndex)].rating} />
+              </div>
+              <div className="w-[31.54px] h-[31.54px] mb-1">
                 {/* Quote icon placeholder */}
               </div>
               <p className="font-poppins text-[15px] leading-[22px] text-[#1B1464] text-center">
@@ -158,14 +221,29 @@ export default function Testimonials() {
           {/* Current Testimonial */}
           <div {...getCardStyles('current')}>
             <div className="flex flex-col items-center p-8 rounded-[32px] shadow-xl h-full">
-              <div className="w-[120px] h-[120px] rounded-full border-2 border-white bg-[#F6F8FA] mb-4" />
+              {testimonials[currentIndex].image ? (
+                <div className="w-[120px] h-[120px] rounded-full border-2 border-white overflow-hidden mb-4">
+                  <Image 
+                    src={testimonials[currentIndex].image!}
+                    alt={`${testimonials[currentIndex].name} profile`}
+                    width={120}
+                    height={120}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              ) : (
+                <div className="w-[120px] h-[120px] rounded-full border-2 border-white bg-[#F6F8FA] mb-4" />
+              )}
               <h3 className="font-poppins font-bold text-[24px] leading-[36px] text-white mb-2">
                 {testimonials[currentIndex].name}
               </h3>
-              <p className="font-lato text-[18px] leading-[22px] text-white mb-6">
+              <p className="font-lato text-[18px] leading-[22px] text-white mb-1">
                 {testimonials[currentIndex].role}
               </p>
-              <div className="w-[51.6px] h-[51.6px] mb-4">
+              <div>
+                <StarRating rating={testimonials[currentIndex].rating} />
+              </div>
+              <div className="w-[51.6px] h-[51.6px] mb-1">
                 {/* Quote icon placeholder */}
               </div>
               <p className="font-poppins text-[18px] leading-[27px] text-white text-center">
@@ -177,14 +255,29 @@ export default function Testimonials() {
           {/* Next Testimonial */}
           <div {...getCardStyles('next')}>
             <div className="flex flex-col items-center p-8 rounded-[24px] shadow-lg h-full">
-              <div className="w-[90px] h-[90px] rounded-full border-2 border-[#1B1464] bg-[#F6F8FA] mb-4" />
+              {testimonials[getNextIndex(currentIndex)].image ? (
+                <div className="w-[90px] h-[90px] rounded-full border-2 border-[#1B1464] overflow-hidden mb-4">
+                  <Image 
+                    src={testimonials[getNextIndex(currentIndex)].image!}
+                    alt={`${testimonials[getNextIndex(currentIndex)].name} profile`}
+                    width={90}
+                    height={90}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              ) : (
+                <div className="w-[90px] h-[90px] rounded-full border-2 border-[#1B1464] bg-[#F6F8FA] mb-4" />
+              )}
               <h3 className="font-poppins font-bold text-[18px] leading-[27px] text-[#1B1464] mb-2">
                 {testimonials[getNextIndex(currentIndex)].name}
               </h3>
-              <p className="font-lato text-[15px] leading-[18px] text-[#6B6B6B] mb-6">
+              <p className="font-lato text-[15px] leading-[18px] text-[#6B6B6B] mb-1">
                 {testimonials[getNextIndex(currentIndex)].role}
               </p>
-              <div className="w-[31.54px] h-[31.54px] mb-4">
+              <div>
+                <StarRating rating={testimonials[getNextIndex(currentIndex)].rating} />
+              </div>
+              <div className="w-[31.54px] h-[31.54px] mb-1">
                 {/* Quote icon placeholder */}
               </div>
               <p className="font-poppins text-[15px] leading-[22px] text-[#1B1464] text-center">

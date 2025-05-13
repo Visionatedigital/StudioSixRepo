@@ -41,6 +41,7 @@ export const authOptions: NextAuthOptions = {
         }
 
         try {
+          console.log("[AUTH] Attempting to find user with email:", credentials.email);
           const user = await prisma.user.findUnique({
             where: {
               email: credentials.email
@@ -64,6 +65,7 @@ export const authOptions: NextAuthOptions = {
             return null;
           }
 
+          console.log("[AUTH] User found, comparing passwords");
           const passwordsMatch = await bcrypt.compare(credentials.password, user.hashedPassword);
 
           if (!passwordsMatch) {
@@ -76,7 +78,17 @@ export const authOptions: NextAuthOptions = {
           const { hashedPassword, ...userWithoutPassword } = user;
           return userWithoutPassword as any;
         } catch (error) {
-          console.error("[AUTH] Error during authorization:", error);
+          console.error("[AUTH] Detailed error during authorization:", {
+            error: error instanceof Error ? {
+              message: error.message,
+              stack: error.stack,
+              name: error.name
+            } : error,
+            credentials: {
+              email: credentials?.email,
+              hasPassword: !!credentials?.password
+            }
+          });
           return null;
         }
       }
@@ -157,7 +169,6 @@ export const authOptions: NextAuthOptions = {
       return baseUrl;
     }
   },
-  debug: process.env.NODE_ENV === "development",
 }
 
 export async function updateSession(token: JWT): Promise<JWT> {
