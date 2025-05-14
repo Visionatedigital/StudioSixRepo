@@ -9,6 +9,7 @@ import PaystackProvider from '@/components/PaystackProvider';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 import PaymentMethodSelector from '@/components/PaymentMethodSelector';
+import MobileMoneyLoadingScreen from '@/components/MobileMoneyLoadingScreen';
 
 // Types
 type CurrencyCode = 'USD' | 'EUR' | 'GBP' | 'AUD' | 'CAD' | 'JPY' | 'UGX' | 'KES' | 'ZAR';
@@ -119,24 +120,29 @@ export default function WalletPage() {
   const [userLocation, setUserLocation] = useState<string | null>(null);
   const [showPaymentSelector, setShowPaymentSelector] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState<typeof creditPackages[0] | null>(null);
+  const [showMobileMoneyLoading, setShowMobileMoneyLoading] = useState(false);
+  const [mobileMoneyPaymentId, setMobileMoneyPaymentId] = useState('');
+  const [mobileMoneyProvider, setMobileMoneyProvider] = useState<'mtn' | 'airtel'>('mtn');
   const router = useRouter();
 
-  useEffect(() => {
-    const fetchCredits = async () => {
-      try {
-        const response = await fetch('/api/credits/balance');
-        const data = await response.json();
-        if (response.ok) {
-          setCredits(data.credits);
-          setTransactions(data.transactions);
-        }
-      } catch (error) {
-        console.error('Error fetching credits:', error);
-      } finally {
-        setLoading(false);
+  // Extract the fetchCredits function for reuse
+  const fetchCredits = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch('/api/credits/balance');
+      const data = await response.json();
+      if (response.ok) {
+        setCredits(data.credits);
+        setTransactions(data.transactions);
       }
-    };
+    } catch (error) {
+      console.error('Error fetching credits:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchCredits();
   }, []);
 
@@ -212,7 +218,7 @@ export default function WalletPage() {
     setShowPaymentSelector(true);
   };
 
-  const handlePaymentMethodSelect = (method: 'card' | 'mobile' | 'west-africa') => {
+  const handlePaymentMethodSelect = async (method: 'card' | 'mobile' | 'west-africa', data?: any) => {
     if (!selectedPackage || !session?.user?.email) return;
 
     switch (method) {
@@ -224,13 +230,63 @@ export default function WalletPage() {
         }
         break;
       case 'mobile':
-        toast.info('Mobile money payment coming soon!');
+        if (!data?.phoneNumber || !data?.provider) {
+          toast.error('Please provide your phone number and select a provider');
+          return;
+        }
+        
+        try {
+          setShowPaymentSelector(false);
+          
+          const toastId = toast.loading('Initiating mobile money payment...');
+          
+          // Call the Mobile Money API endpoint
+          const response = await fetch('/api/payments/mobilemoney', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              packageId: selectedPackage.credits === 100 ? 'basic' : 
+                         selectedPackage.credits === 500 ? 'standard' : 'premium',
+              phoneNumber: data.phoneNumber
+            }),
+          });
+          
+          const result = await response.json();
+          
+          // Always dismiss the loading toast
+          toast.dismiss(toastId);
+          
+          if (response.ok && result.success) {
+            console.log("Mobile money payment initiated:", result);
+            setMobileMoneyPaymentId(result.payment.payment_id);
+            setMobileMoneyProvider(data.provider);
+            setShowMobileMoneyLoading(true);
+          } else {
+            console.error("Mobile money payment failed:", result);
+            toast.error(result.error || 'Failed to initiate mobile money payment');
+          }
+        } catch (error) {
+          console.error('Error initiating mobile money payment:', error);
+          toast.dismiss();
+          toast.error('An error occurred while processing your payment. Please try again.');
+        }
         break;
       case 'west-africa':
         toast.info('West Africa payment coming soon!');
         break;
     }
-    setShowPaymentSelector(false);
+  };
+
+  const handleMobileMoneySuccess = () => {
+    toast.success('Payment successful! Your credits have been added.');
+    fetchCredits();
+    router.refresh();
+  };
+
+  const handleMobileMoneyFailure = (error: string) => {
+    toast.error(error || 'Payment failed or was cancelled.');
   };
 
   if (!session) {
@@ -405,6 +461,15 @@ export default function WalletPage() {
             onSelect={handlePaymentMethodSelect}
             amount={Number(convertPrice(selectedPackage.priceUSD, false))}
             currency={currencies[selectedCurrency].symbol}
+          />
+          
+          <MobileMoneyLoadingScreen
+            isOpen={showMobileMoneyLoading}
+            onClose={() => setShowMobileMoneyLoading(false)}
+            paymentId={mobileMoneyPaymentId}
+            provider={mobileMoneyProvider}
+            onSuccess={handleMobileMoneySuccess}
+            onFailure={handleMobileMoneyFailure}
           />
           
           {/* Hidden Paystack button */}
