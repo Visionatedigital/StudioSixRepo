@@ -58,7 +58,7 @@ const StarRating = ({ rating }: { rating: number }) => {
   // Add full stars
   for (let i = 0; i < fullStars; i++) {
     stars.push(
-      <svg key={`full-${i}`} viewBox="0 0 24 24" className="w-5 h-5 text-yellow-400 inline-block">
+      <svg key={`full-${i}`} viewBox="0 0 24 24" className="w-4 h-4 md:w-5 md:h-5 text-yellow-400 inline-block">
         <path fill="currentColor" d="M12,17.27L18.18,21L16.54,13.97L22,9.24L14.81,8.62L12,2L9.19,8.62L2,9.24L7.45,13.97L5.82,21L12,17.27Z" />
       </svg>
     );
@@ -67,7 +67,7 @@ const StarRating = ({ rating }: { rating: number }) => {
   // Add half star if necessary
   if (hasHalfStar) {
     stars.push(
-      <svg key="half" viewBox="0 0 24 24" className="w-5 h-5 text-yellow-400 inline-block">
+      <svg key="half" viewBox="0 0 24 24" className="w-4 h-4 md:w-5 md:h-5 text-yellow-400 inline-block">
         <path fill="currentColor" d="M12,15.4V6.1L13.71,10.13L18.09,10.5L14.77,13.39L15.76,17.67M22,9.24L14.81,8.63L12,2L9.19,8.63L2,9.24L7.45,13.97L5.82,21L12,17.27L18.18,21L16.54,13.97L22,9.24Z" />
       </svg>
     );
@@ -77,7 +77,7 @@ const StarRating = ({ rating }: { rating: number }) => {
   const emptyStars = 5 - fullStars - (hasHalfStar ? 1 : 0);
   for (let i = 0; i < emptyStars; i++) {
     stars.push(
-      <svg key={`empty-${i}`} viewBox="0 0 24 24" className="w-5 h-5 text-gray-300 inline-block">
+      <svg key={`empty-${i}`} viewBox="0 0 24 24" className="w-4 h-4 md:w-5 md:h-5 text-gray-300 inline-block">
         <path fill="currentColor" d="M12,15.39L8.24,17.66L9.23,13.38L5.91,10.5L10.29,10.13L12,6.09L13.71,10.13L18.09,10.5L14.77,13.38L15.76,17.66M22,9.24L14.81,8.63L12,2L9.19,8.63L2,9.24L7.45,13.97L5.82,21L12,17.27L18.18,21L16.54,13.97L22,9.24Z" />
       </svg>
     );
@@ -121,9 +121,9 @@ export default function Testimonials() {
     
     const positions: Record<CardPosition, StylePosition> = {
       prev: {
-        left: direction === -1 ? '20%' : '30%',
-        transform: `translateX(-50%) scale(${direction === -1 ? '0.85' : '0.85'})`,
-        opacity: direction === 1 ? '0' : '1',
+        left: '30%',
+        transform: 'translateX(-50%) scale(0.85)',
+        opacity: '0',
         zIndex: '0'
       },
       current: {
@@ -133,17 +133,33 @@ export default function Testimonials() {
         zIndex: '10'
       },
       next: {
-        left: direction === 1 ? '80%' : '70%',
-        transform: `translateX(-50%) scale(${direction === 1 ? '0.85' : '0.85'})`,
-        opacity: direction === -1 ? '0' : '1',
+        left: '70%',
+        transform: 'translateX(-50%) scale(0.85)',
+        opacity: '0',
         zIndex: '0'
       }
     };
 
+    // Mobile-specific adjustments
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      if (position === 'current') {
+        positions[position].transform = 'translateX(-50%) scale(0.9)';
+      }
+    } else {
+      // Apply animation effects only on desktop
+      if (position === 'prev') {
+        positions[position].opacity = direction === 1 ? '0' : '1';
+        positions[position].left = direction === -1 ? '20%' : '30%';
+      } else if (position === 'next') {
+        positions[position].opacity = direction === -1 ? '0' : '1';
+        positions[position].left = direction === 1 ? '80%' : '70%';
+      }
+    }
+
     const widthStyles = {
-      prev: "w-[400px]",
-      current: "w-[500px]",
-      next: "w-[400px]"
+      prev: "w-[250px] md:w-[400px]",
+      current: "w-[280px] md:w-[500px]",
+      next: "w-[250px] md:w-[400px]"
     };
 
     const bgStyles = {
@@ -166,19 +182,19 @@ export default function Testimonials() {
   };
 
   return (
-    <section className="relative pt-[60px] pb-0 overflow-hidden">
-      <h2 className="font-lato font-bold text-[36px] leading-[43px] text-center text-black mb-[50px]">
+    <section className="relative pt-[40px] md:pt-[60px] pb-0 overflow-hidden px-4 md:px-0">
+      <h2 className="font-lato font-bold text-[28px] md:text-[36px] leading-[34px] md:leading-[43px] text-center text-black mb-[30px] md:mb-[50px]">
         What Our Designers Say About It
       </h2>
 
-      <div className="flex justify-center items-center h-[500px] max-w-[1656px] mx-auto relative">
+      <div className="flex justify-center items-center h-[380px] md:h-[500px] max-w-[1656px] mx-auto relative">
         {/* Left Arrow */}
         <button 
           onClick={handlePrevClick}
           disabled={isAnimating}
-          className="absolute left-[100px] top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white shadow-lg flex items-center justify-center hover:bg-gray-50 transition-colors z-20 disabled:opacity-50"
+          className="absolute left-[4px] md:left-[100px] top-1/2 -translate-y-1/2 w-8 h-8 md:w-12 md:h-12 rounded-full bg-white shadow-lg flex items-center justify-center hover:bg-gray-50 transition-colors z-20 disabled:opacity-50"
         >
-          <svg viewBox="0 0 24 24" className="w-6 h-6 text-[#1B1464]">
+          <svg viewBox="0 0 24 24" className="w-4 h-4 md:w-6 md:h-6 text-[#1B1464]">
             <path fill="currentColor" d="M15.41,16.58L10.83,12L15.41,7.41L14,6L8,12L14,18L15.41,16.58Z" />
           </svg>
         </button>
@@ -186,9 +202,9 @@ export default function Testimonials() {
         <div className="relative w-full h-full">
           {/* Previous Testimonial */}
           <div {...getCardStyles('prev')}>
-            <div className="flex flex-col items-center p-8 rounded-[24px] shadow-lg h-full">
+            <div className="flex flex-col items-center p-4 md:p-8 rounded-[20px] md:rounded-[24px] shadow-lg h-full">
               {testimonials[getPrevIndex(currentIndex)].image ? (
-                <div className="w-[90px] h-[90px] rounded-full border-2 border-[#1B1464] overflow-hidden mb-4">
+                <div className="w-[60px] h-[60px] md:w-[90px] md:h-[90px] rounded-full border-2 border-[#1B1464] overflow-hidden mb-2 md:mb-4">
                   <Image 
                     src={testimonials[getPrevIndex(currentIndex)].image!}
                     alt={`${testimonials[getPrevIndex(currentIndex)].name} profile`}
@@ -198,21 +214,21 @@ export default function Testimonials() {
                   />
                 </div>
               ) : (
-                <div className="w-[90px] h-[90px] rounded-full border-2 border-[#1B1464] bg-[#F6F8FA] mb-4" />
+              <div className="w-[60px] h-[60px] md:w-[90px] md:h-[90px] rounded-full border-2 border-[#1B1464] bg-[#F6F8FA] mb-2 md:mb-4" />
               )}
-              <h3 className="font-poppins font-bold text-[18px] leading-[27px] text-[#1B1464] mb-2">
+              <h3 className="font-poppins font-bold text-[14px] md:text-[18px] leading-[20px] md:leading-[27px] text-[#1B1464] mb-1 md:mb-2">
                 {testimonials[getPrevIndex(currentIndex)].name}
               </h3>
-              <p className="font-lato text-[15px] leading-[18px] text-[#6B6B6B] mb-1">
+              <p className="font-lato text-[12px] md:text-[15px] leading-[14px] md:leading-[18px] text-[#6B6B6B] mb-1">
                 {testimonials[getPrevIndex(currentIndex)].role}
               </p>
               <div>
                 <StarRating rating={testimonials[getPrevIndex(currentIndex)].rating} />
               </div>
-              <div className="w-[31.54px] h-[31.54px] mb-1">
+              <div className="w-[20px] h-[20px] md:w-[31.54px] md:h-[31.54px] mb-1">
                 {/* Quote icon placeholder */}
               </div>
-              <p className="font-poppins text-[15px] leading-[22px] text-[#1B1464] text-center">
+              <p className="font-poppins text-[12px] md:text-[15px] leading-[18px] md:leading-[22px] text-[#1B1464] text-center">
                 "{testimonials[getPrevIndex(currentIndex)].quote}"
               </p>
             </div>
@@ -220,9 +236,9 @@ export default function Testimonials() {
 
           {/* Current Testimonial */}
           <div {...getCardStyles('current')}>
-            <div className="flex flex-col items-center p-8 rounded-[32px] shadow-xl h-full">
+            <div className="flex flex-col items-center p-4 md:p-8 rounded-[20px] md:rounded-[32px] shadow-xl h-full">
               {testimonials[currentIndex].image ? (
-                <div className="w-[120px] h-[120px] rounded-full border-2 border-white overflow-hidden mb-4">
+                <div className="w-[70px] h-[70px] md:w-[120px] md:h-[120px] rounded-full border-2 border-white overflow-hidden mb-2 md:mb-4">
                   <Image 
                     src={testimonials[currentIndex].image!}
                     alt={`${testimonials[currentIndex].name} profile`}
@@ -232,21 +248,21 @@ export default function Testimonials() {
                   />
                 </div>
               ) : (
-                <div className="w-[120px] h-[120px] rounded-full border-2 border-white bg-[#F6F8FA] mb-4" />
+              <div className="w-[70px] h-[70px] md:w-[120px] md:h-[120px] rounded-full border-2 border-white bg-[#F6F8FA] mb-2 md:mb-4" />
               )}
-              <h3 className="font-poppins font-bold text-[24px] leading-[36px] text-white mb-2">
+              <h3 className="font-poppins font-bold text-[16px] md:text-[24px] leading-[22px] md:leading-[36px] text-white mb-1 md:mb-2">
                 {testimonials[currentIndex].name}
               </h3>
-              <p className="font-lato text-[18px] leading-[22px] text-white mb-1">
+              <p className="font-lato text-[14px] md:text-[18px] leading-[16px] md:leading-[22px] text-white mb-1">
                 {testimonials[currentIndex].role}
               </p>
               <div>
                 <StarRating rating={testimonials[currentIndex].rating} />
               </div>
-              <div className="w-[51.6px] h-[51.6px] mb-1">
+              <div className="w-[32px] h-[32px] md:w-[51.6px] md:h-[51.6px] mb-1">
                 {/* Quote icon placeholder */}
               </div>
-              <p className="font-poppins text-[18px] leading-[27px] text-white text-center">
+              <p className="font-poppins text-[14px] md:text-[18px] leading-[20px] md:leading-[27px] text-white text-center">
                 "{testimonials[currentIndex].quote}"
               </p>
             </div>
@@ -254,9 +270,9 @@ export default function Testimonials() {
 
           {/* Next Testimonial */}
           <div {...getCardStyles('next')}>
-            <div className="flex flex-col items-center p-8 rounded-[24px] shadow-lg h-full">
+            <div className="flex flex-col items-center p-4 md:p-8 rounded-[20px] md:rounded-[24px] shadow-lg h-full">
               {testimonials[getNextIndex(currentIndex)].image ? (
-                <div className="w-[90px] h-[90px] rounded-full border-2 border-[#1B1464] overflow-hidden mb-4">
+                <div className="w-[60px] h-[60px] md:w-[90px] md:h-[90px] rounded-full border-2 border-[#1B1464] overflow-hidden mb-2 md:mb-4">
                   <Image 
                     src={testimonials[getNextIndex(currentIndex)].image!}
                     alt={`${testimonials[getNextIndex(currentIndex)].name} profile`}
@@ -266,21 +282,21 @@ export default function Testimonials() {
                   />
                 </div>
               ) : (
-                <div className="w-[90px] h-[90px] rounded-full border-2 border-[#1B1464] bg-[#F6F8FA] mb-4" />
+              <div className="w-[60px] h-[60px] md:w-[90px] md:h-[90px] rounded-full border-2 border-[#1B1464] bg-[#F6F8FA] mb-2 md:mb-4" />
               )}
-              <h3 className="font-poppins font-bold text-[18px] leading-[27px] text-[#1B1464] mb-2">
+              <h3 className="font-poppins font-bold text-[14px] md:text-[18px] leading-[20px] md:leading-[27px] text-[#1B1464] mb-1 md:mb-2">
                 {testimonials[getNextIndex(currentIndex)].name}
               </h3>
-              <p className="font-lato text-[15px] leading-[18px] text-[#6B6B6B] mb-1">
+              <p className="font-lato text-[12px] md:text-[15px] leading-[14px] md:leading-[18px] text-[#6B6B6B] mb-1">
                 {testimonials[getNextIndex(currentIndex)].role}
               </p>
               <div>
                 <StarRating rating={testimonials[getNextIndex(currentIndex)].rating} />
               </div>
-              <div className="w-[31.54px] h-[31.54px] mb-1">
+              <div className="w-[20px] h-[20px] md:w-[31.54px] md:h-[31.54px] mb-1">
                 {/* Quote icon placeholder */}
               </div>
-              <p className="font-poppins text-[15px] leading-[22px] text-[#1B1464] text-center">
+              <p className="font-poppins text-[12px] md:text-[15px] leading-[18px] md:leading-[22px] text-[#1B1464] text-center">
                 "{testimonials[getNextIndex(currentIndex)].quote}"
               </p>
             </div>
@@ -291,9 +307,9 @@ export default function Testimonials() {
         <button 
           onClick={handleNextClick}
           disabled={isAnimating}
-          className="absolute right-[100px] top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white shadow-lg flex items-center justify-center hover:bg-gray-50 transition-colors z-20 disabled:opacity-50"
+          className="absolute right-[4px] md:right-[100px] top-1/2 -translate-y-1/2 w-8 h-8 md:w-12 md:h-12 rounded-full bg-white shadow-lg flex items-center justify-center hover:bg-gray-50 transition-colors z-20 disabled:opacity-50"
         >
-          <svg viewBox="0 0 24 24" className="w-6 h-6 text-[#1B1464]">
+          <svg viewBox="0 0 24 24" className="w-4 h-4 md:w-6 md:h-6 text-[#1B1464]">
             <path fill="currentColor" d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z" />
           </svg>
         </button>

@@ -250,9 +250,9 @@ export default function PaymentMethodSelector({
                     {phoneError ? (
                       <p className="text-xs text-red-500 mt-1">{phoneError}</p>
                     ) : (
-                      <p className="text-xs text-gray-500 mt-1">
+                    <p className="text-xs text-gray-500 mt-1">
                         Enter your phone number in local format (e.g., 0772123456)
-                      </p>
+                    </p>
                     )}
                   </div>
                 </div>

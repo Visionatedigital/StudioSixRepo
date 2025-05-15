@@ -1,0 +1,349 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { Icon } from '@/components/Icons';
+import Image from 'next/image';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+
+// Types from wallet page
+type CurrencyCode = 'USD' | 'EUR' | 'GBP' | 'AUD' | 'CAD' | 'JPY' | 'UGX' | 'KES' | 'ZAR';
+
+type CurrencyInfo = {
+  symbol: string;
+  name: string;
+};
+
+// Currency configuration
+const currencies: Record<CurrencyCode, CurrencyInfo> = {
+  USD: { symbol: '$', name: 'USD' },
+  EUR: { symbol: '€', name: 'EUR' },
+  GBP: { symbol: '£', name: 'GBP' },
+  AUD: { symbol: 'A$', name: 'AUD' },
+  CAD: { symbol: 'C$', name: 'CAD' },
+  JPY: { symbol: '¥', name: 'JPY' },
+  UGX: { symbol: 'USh', name: 'UGX' },
+  KES: { symbol: 'KSh', name: 'KES' },
+  ZAR: { symbol: 'R', name: 'ZAR' },
+};
+
+// Pricing plans data
+const pricingPlans = [
+  {
+    name: 'Starter Plan',
+    icon: '/icons/logo.svg',
+    priceUSD: 1,
+    description: 'Perfect for individuals starting their creative journey with AI.',
+    features: [
+      '1,500 Monthly Credits',
+      '50 AI-Generated Designs',
+      'Basic Design Templates',
+      'Standard Image Resolution',
+      'Email Support',
+      'Community Access',
+      'Basic Export Options'
+    ],
+    buttonText: 'Get Started Now',
+    popular: false
+  },
+  {
+    name: 'Pro Plan',
+    icon: '/icons/logo.svg',
+    priceUSD: 69,
+    description: 'Ideal for professionals seeking advanced AI design capabilities.',
+    features: [
+      '5,000 Monthly Credits',
+      '300 AI-Generated Designs',
+      '50 AI Video Generations',
+      '4K Image Resolution',
+      'Priority Email Support',
+      'Advanced Templates Library',
+      'Commercial Usage Rights'
+    ],
+    buttonText: 'Get Started Now',
+    popular: true
+  },
+  {
+    name: 'Studio Plan',
+    icon: '/icons/logo.svg',
+    priceUSD: 99,
+    description: 'Full-scale solution for agencies and creative teams.',
+    features: [
+      '10,000 Monthly Credits',
+      'Unlimited AI Designs',
+      'Unlimited Video Generation',
+      '8K Ultra HD Resolution',
+      '24/7 Priority Support',
+      'API Access & Integration',
+      'Custom Branding Tools'
+    ],
+    buttonText: 'Get Started Now',
+    popular: false
+  }
+];
+
+function HomePricingCard({ 
+  title, 
+  description, 
+  price, 
+  features, 
+  popular
+}: { 
+  title: string; 
+  description: string; 
+  price: number; 
+  features: string[];
+  popular: boolean;
+}) {
+  const router = useRouter();
+  
+  return (
+    <div className={`flex flex-col p-6 bg-white rounded-lg shadow-lg ${popular ? 'border-2 border-[#814ADA] relative' : ''}`}>
+      {popular && (
+        <div className="absolute top-0 right-0 bg-[#814ADA] text-white text-xs font-bold px-3 py-1 rounded-bl-lg rounded-tr-lg">
+          MOST POPULAR
+        </div>
+      )}
+      <div className="flex-1">
+        <h3 className="text-2xl font-bold text-gray-900">{title}</h3>
+        <p className="mt-4 text-gray-500">{description}</p>
+        <div className="mt-8">
+          <div className="flex items-baseline gap-x-2">
+            <span className="text-4xl font-bold tracking-tight text-gray-900">
+              ${price}
+            </span>
+            <span className="text-sm font-semibold leading-6 tracking-wide text-gray-600">
+              /mo
+            </span>
+          </div>
+          <div className="mt-1 text-sm text-gray-500">
+            (Approx. R {(price * 18).toFixed(2)}/mo)
+          </div>
+        </div>
+        <ul role="list" className="mt-8 space-y-3">
+          {features.map((feature, index) => (
+            <li key={index} className="flex">
+              <Icon
+                name="check-circle"
+                className="h-6 w-6 flex-none text-indigo-600"
+              />
+              <span className="ml-3 text-sm text-gray-500">{feature}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+      <Link 
+        href="/sign-in"
+        className="mt-6 block w-full py-3 px-4 rounded-md text-center text-white font-medium bg-[#814ADA] hover:bg-[#6E3BBC] transition-colors"
+      >
+        Get Started
+      </Link>
+    </div>
+  );
+}
+
+export default function HomePricingContent() {
+  const router = useRouter();
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
+  const [selectedCurrency, setSelectedCurrency] = useState<CurrencyCode>('ZAR');
+  const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({});
+  const [userLocation, setUserLocation] = useState<string | null>(null);
+
+  // Fetch exchange rates
+  useEffect(() => {
+    const fetchExchangeRates = async () => {
+      try {
+        const response = await fetch('https://api.exchangerate-api.com/v4/latest/ZAR');
+        const data = await response.json();
+        setExchangeRates(data.rates);
+      } catch (error) {
+        console.error('Failed to fetch exchange rates:', error);
+      }
+    };
+
+    fetchExchangeRates();
+  }, []);
+
+  // Detect user's location and set initial currency
+  useEffect(() => {
+    const detectUserLocation = async () => {
+      try {
+        const response = await fetch('https://ipapi.co/json/');
+        const data = await response.json();
+        setUserLocation(data.country);
+        
+        // Map country to currency
+        const currencyMap: Record<string, string> = {
+          ZA: 'ZAR',
+          US: 'USD',
+          GB: 'GBP',
+          EU: 'EUR',
+          AU: 'AUD',
+          CA: 'CAD',
+          JP: 'JPY',
+          UG: 'UGX',
+          KE: 'KES',
+        };
+        
+        if (currencyMap[data.country]) {
+          setSelectedCurrency(currencyMap[data.country] as CurrencyCode);
+        }
+      } catch (error) {
+        console.error('Failed to detect location:', error);
+      }
+    };
+
+    detectUserLocation();
+  }, []);
+
+  // Convert price to selected currency
+  const convertPrice = (priceUSD: number) => {
+    if (!exchangeRates[selectedCurrency]) return priceUSD;
+    const converted = priceUSD * exchangeRates[selectedCurrency];
+    
+    // Round to whole numbers for currencies that typically don't use decimals
+    if (['UGX', 'KES', 'JPY'].includes(selectedCurrency)) {
+      return Math.round(converted).toLocaleString();
+    }
+    
+    return converted.toFixed(2);
+  };
+
+  // Calculate yearly price (20% discount)
+  const getYearlyPrice = (price: number) => {
+    return price * 0.8;
+  };
+
+  return (
+    <div className="w-full bg-[#F6F8FA] rounded-2xl overflow-y-auto">
+      <div className="flex flex-col items-center max-w-[1200px] mx-auto px-6">
+        {/* Title */}
+        <h1 className="text-[28px] font-bold text-[#1B1464] text-center mt-6 mb-8">
+          Find the perfect plan to power your creativity
+        </h1>
+
+        {/* Currency and Billing Cycle Controls */}
+        <div className="flex items-center gap-4 mb-8">
+          <select
+            value={selectedCurrency}
+            onChange={(e) => setSelectedCurrency(e.target.value as CurrencyCode)}
+            className="px-3 py-1.5 bg-white border border-[#E0DAF3] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+          >
+            {Object.entries(currencies).map(([code, { name }]) => (
+              <option key={code} value={code}>
+                {name}
+              </option>
+            ))}
+          </select>
+
+          <div className="inline-flex items-center bg-white rounded-full p-1 border border-[#E0DAF3]">
+            <button
+              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                billingCycle === 'monthly'
+                  ? 'bg-white text-[#1B1464] shadow-sm'
+                  : 'text-gray-500 hover:text-[#1B1464]'
+              }`}
+              onClick={() => setBillingCycle('monthly')}
+            >
+              Pay Monthly
+            </button>
+            <button
+              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                billingCycle === 'yearly'
+                  ? 'bg-[#814ADA] text-white'
+                  : 'text-gray-500 hover:text-[#1B1464]'
+              }`}
+              onClick={() => setBillingCycle('yearly')}
+            >
+              Pay Yearly
+            </button>
+          </div>
+        </div>
+
+        {/* Pricing Cards Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-8">
+          {pricingPlans.map((plan) => (
+            <HomePricingCard
+              key={plan.name}
+              title={plan.name}
+              description={plan.description}
+              price={billingCycle === 'yearly' ? getYearlyPrice(plan.priceUSD) : plan.priceUSD}
+              features={plan.features}
+              popular={plan.popular}
+            />
+          ))}
+        </div>
+
+        {/* Student/Educator Discount Banner */}
+        <div className="w-full mt-8 mb-6">
+          <div className="relative w-full h-[300px] rounded-2xl overflow-hidden">
+            <Image
+              src="/images/students-banner.jpg"
+              alt="Students walking and smiling"
+              fill
+              className="object-cover"
+              priority
+            />
+            {/* Overlay Content */}
+            <div className="absolute inset-0 bg-gradient-to-r from-[#814ADA]/60 to-[#392CA0]/60 flex items-center justify-center">
+              <div className="max-w-2xl text-center text-white">
+                <h2 className="text-3xl font-bold mb-4">Education Discount</h2>
+                <p className="text-lg mb-6">Students & educators get 30% off all plans</p>
+                <Link 
+                  href="/education" 
+                  className="px-8 py-3 bg-white text-[#1B1464] font-medium rounded-lg hover:bg-opacity-90 transition-colors inline-block"
+                >
+                  Apply for the discount
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* FAQ Section */}
+        <div className="w-full max-w-3xl mx-auto mb-16">
+          <h2 className="text-2xl font-bold text-[#1B1464] text-center mb-8">Frequently Asked Questions</h2>
+          <div className="space-y-4">
+            {[
+              {
+                question: "How does billing work?",
+                answer: "Your subscription begins as soon as you complete your purchase. You'll be billed monthly or yearly depending on your chosen billing cycle. For yearly subscriptions, you'll receive a 20% discount. You can change your billing cycle at any time from your account settings."
+              },
+              {
+                question: "Can I change my plan later?",
+                answer: "Yes! You can upgrade, downgrade, or change your plan at any time. When you upgrade, you'll get immediate access to the new features, and we'll prorate your billing. If you downgrade, the changes will take effect at the start of your next billing cycle."
+              },
+              {
+                question: "What payment methods do you accept?",
+                answer: "We accept all major credit cards (Visa, MasterCard, American Express), PayPal, and bank transfers for business accounts. All payments are processed securely through our payment partners."
+              },
+              {
+                question: "How does the education discount work?",
+                answer: "Students and educators can receive a 30% discount on any plan. To qualify, you'll need to verify your status with a valid .edu email address or current school ID. Once verified, the discount will be automatically applied to your subscription."
+              },
+              {
+                question: "What happens if I run out of credits?",
+                answer: "If you run out of credits before your next billing cycle, you can purchase additional credits or upgrade to a higher tier plan. Unused credits from your monthly allocation roll over for up to one month."
+              }
+            ].map((faq, index) => (
+              <div key={index} className="bg-white rounded-xl border border-[#E0DAF3] overflow-hidden">
+                <details className="group">
+                  <summary className="flex items-center justify-between px-6 py-4 cursor-pointer list-none">
+                    <span className="font-medium text-[#1B1464]">{faq.question}</span>
+                    <Icon
+                      name="chevron-down"
+                      className="w-5 h-5 text-gray-500 transition-transform group-open:rotate-180"
+                    />
+                  </summary>
+                  <div className="px-6 pb-4 text-gray-600">
+                    {faq.answer}
+                  </div>
+                </details>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+} 

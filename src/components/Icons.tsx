@@ -22,6 +22,16 @@ export const Icon: React.FC<IconProps> = ({ name, size = 24, className = '', isA
         return '/icons/verified vector.svg';
       case 'profile':
         return isActive ? '/icons/profile-icon-white.svg' : '/icons/profile-icon.svg';
+      case 'trash':
+        return '/icons/trash-icon.svg';
+      case 'collection':
+        return '/icons/collection-icon.svg';
+      case 'collection-filled':
+        return '/icons/collection-filled-icon.svg';
+      case 'collections-grid':
+        return '/icons/collections-grid-icon.svg';
+      case 'expand':
+        return '/icons/expand-icon.svg';
       default:
         return `/icons/${iconName}-icon.svg`;
     }

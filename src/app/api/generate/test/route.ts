@@ -33,7 +33,7 @@ export async function GET() {
     
     console.log('Sending text-to-image request with payload:', JSON.stringify(txt2imgPayload, null, 2));
     
-    const txt2imgResponse = await fetch('https://oim4h1ldqg0523-80.proxy.runpod.net/sdapi/v1/txt2img', {
+    const txt2imgResponse = await fetch('https://n8sbg27o9f9smg-80.proxy.runpod.net/sdapi/v1/txt2img', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -70,7 +70,7 @@ export async function GET() {
     
     console.log('Sending image-to-image request with payload:', JSON.stringify(img2imgPayload, null, 2));
     
-    const img2imgResponse = await fetch('https://oim4h1ldqg0523-80.proxy.runpod.net/sdapi/v1/img2img', {
+    const img2imgResponse = await fetch('https://n8sbg27o9f9smg-80.proxy.runpod.net/sdapi/v1/img2img', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'

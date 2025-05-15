@@ -9,8 +9,8 @@ import { KonvaEventObject } from 'konva/lib/Node';
 import { Vector2d } from 'konva/lib/types';
 import { Stage as KonvaStage } from 'konva/lib/Stage';
 // Import components directly
-import { Stage, Layer, KonvaRect, KonvaCircle, KonvaLine, KonvaText, KonvaImage, KonvaTransformer, KonvaGroup, Path } from './KonvaComponents';
-import Konva from 'konva/lib/index';
+  import { Stage, Layer, KonvaRect, KonvaCircle, KonvaLine, KonvaText, KonvaImage, KonvaTransformer, KonvaGroup, Path } from './KonvaComponents';
+  import Konva from 'konva/lib/index';
 import nextImage from 'next/image';
 
 import Notification from '../ui/Notification';
@@ -1482,7 +1482,7 @@ export default function Canvas({ name, description, projectId }: Props) {
       setPromptElements(prev => 
         prev.map(el => 
           el.id === id 
-            ? { ...el, status: 'generating' as const }
+            ? { ...el, status: 'generating' as const } 
             : el
         )
       );
@@ -1515,7 +1515,7 @@ export default function Canvas({ name, description, projectId }: Props) {
         setPromptElements(prev => 
           prev.map(el => 
             el.id === id 
-              ? { ...el, status: 'complete' as const, generatedImage: data.imageUrl }
+              ? { ...el, status: 'complete' as const, generatedImage: data.imageUrl } 
               : el
           )
         );
@@ -1527,7 +1527,7 @@ export default function Canvas({ name, description, projectId }: Props) {
         setPromptElements(prev => 
           prev.map(el => 
             el.id === id 
-              ? { ...el, status: 'idle' as const }
+              ? { ...el, status: 'idle' as const } 
               : el
           )
         );
@@ -1538,7 +1538,7 @@ export default function Canvas({ name, description, projectId }: Props) {
       setPromptElements(prev => 
         prev.map(el => 
           el.id === id 
-            ? { ...el, prompt }
+            ? { ...el, prompt } 
             : el
         )
       );
@@ -2359,7 +2359,7 @@ export default function Canvas({ name, description, projectId }: Props) {
                 ...style,
                 fontSize: typeof style.fontSize === 'string' ? parseInt(style.fontSize, 10) : (style.fontSize || 14)
               }
-            }
+            } 
           : el
       ));
     };
@@ -2451,7 +2451,7 @@ export default function Canvas({ name, description, projectId }: Props) {
     const handleStickyNoteContentChange = (id: string, content: string) => {
       setElements(prev => prev.map(el => 
         el.id === id && el.type === 'sticky-note' 
-          ? { ...el, content }
+          ? { ...el, content } 
           : el
       ));
     };
@@ -3097,7 +3097,7 @@ export default function Canvas({ name, description, projectId }: Props) {
                 const node = e.target;
                 setElements(prev => prev.map(el => 
                   el.id === element.id 
-                    ? { ...el, x: node.x(), y: node.y() }
+                    ? { ...el, x: node.x(), y: node.y() } 
                     : el
                 ));
               }}
@@ -3181,7 +3181,7 @@ export default function Canvas({ name, description, projectId }: Props) {
             Reload Page
           </button>
         </div>
-      </div>
-    );
-  }
+    </div>
+  );
+} 
 }

@@ -17,4 +17,11 @@ const profileIcons = [
 export const getRandomProfileIcon = () => {
   const randomIndex = Math.floor(Math.random() * profileIcons.length);
   return profileIcons[randomIndex];
+};
+
+export const getConsistentProfileIcon = (identifier: string) => {
+  // Use the sum of character codes in identifier to create a deterministic index
+  const charCodeSum = identifier.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  const iconIndex = charCodeSum % profileIcons.length; // Use mod to ensure we stay within bounds
+  return profileIcons[iconIndex];
 }; 

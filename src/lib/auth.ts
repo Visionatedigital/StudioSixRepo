@@ -108,6 +108,8 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         // Initial sign in
         const dbUser = user as DatabaseUser;
+        
+        // Add lastChecked timestamp for tracking when we last verified data
         return {
           ...token,
           id: dbUser.id,
@@ -117,20 +119,44 @@ export const authOptions: NextAuthOptions = {
           bannerImage: dbUser.bannerImage,
           credits: dbUser.credits,
           level: dbUser.level,
-          verified: dbUser.verified,
+          verified: dbUser.verified || !!dbUser.emailVerified,
           email_verified: dbUser.emailVerified,
-          subscriptionStatus: dbUser.subscriptionStatus
+          subscriptionStatus: dbUser.subscriptionStatus,
+          lastChecked: Date.now()
         };
       }
 
+      // Only check for updates every 5 minutes to reduce DB queries
+      const lastChecked = token.lastChecked as number || 0;
+      const fiveMinutes = 5 * 60 * 1000;
+      const shouldRefresh = Date.now() - lastChecked > fiveMinutes;
+      
       // Check if we need to update email verification status
-      if (token.email) {
-        const user = await prisma.user.findUnique({
-          where: { email: token.email },
-          select: { emailVerified: true }
-        });
-        if (user?.emailVerified) {
-          token.email_verified = user.emailVerified;
+      if (token.email && shouldRefresh) {
+        console.log("[AUTH] Refreshing user data from database (5-minute interval)");
+        try {
+          const user = await prisma.user.findUnique({
+            where: { email: token.email },
+            select: { 
+              emailVerified: true,
+              credits: true,
+              level: true,
+              verified: true,
+              subscriptionStatus: true
+            }
+          });
+          
+          if (user) {
+            token.email_verified = user.emailVerified;
+            token.credits = user.credits;
+            token.level = user.level;
+            token.verified = user.verified || !!user.emailVerified;
+            token.subscriptionStatus = user.subscriptionStatus;
+            token.lastChecked = Date.now();
+          }
+        } catch (error) {
+          console.error("[AUTH] Error refreshing user data:", error);
+          // Don't update lastChecked on error to try again next time
         }
       }
 
@@ -186,7 +212,8 @@ export async function updateSession(token: JWT): Promise<JWT> {
       bannerImage: true,
       credits: true,
       level: true,
-      verified: true,
+      verified: true, 
+      emailVerified: true,
       subscriptionStatus: true
     }
   });
@@ -204,7 +231,8 @@ export async function updateSession(token: JWT): Promise<JWT> {
     bannerImage: dbUser.bannerImage,
     credits: dbUser.credits,
     level: dbUser.level,
-    verified: dbUser.verified,
+    verified: dbUser.verified || !!dbUser.emailVerified,
+    email_verified: dbUser.emailVerified,
     subscriptionStatus: dbUser.subscriptionStatus
   };
 } 

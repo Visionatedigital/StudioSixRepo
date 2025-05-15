@@ -12,42 +12,746 @@ interface TemplateData {
 export const conceptDevelopmentTemplate: TemplateData = {
   name: 'Concept Development',
   elements: [
+    // 📝 Project Brief Zone
     {
       id: uuidv4(),
       type: 'container',
-      name: 'Project Input',
+      name: 'Project Brief',
       x: 50,
       y: 50,
       width: 400,
-      height: 700,
-      backgroundColor: '#FFFFFF',
+      height: 250,
+      backgroundColor: '#F9FAFB',
       borderColor: '#E5E7EB',
       canvasId: 'root',
       rotation: 0
     },
+    // Project Brief Title
+    {
+      id: uuidv4(),
+      type: 'text',
+      x: 75,
+      y: 70,
+      width: 350,
+      height: 40,
+      text: '📝 Project Brief',
+      fontSize: 24,
+      fontFamily: 'Inter, sans-serif',
+      fontStyle: 'bold',
+      fill: '#111827',
+      canvasId: 'root',
+      rotation: 0
+    },
+    // Project Brief Subtitle
+    {
+      id: uuidv4(),
+      type: 'text',
+      x: 75,
+      y: 110,
+      width: 350,
+      height: 30,
+      text: 'Define goals, users, timeline',
+      fontSize: 16,
+      fontFamily: 'Inter, sans-serif',
+      fontStyle: 'normal',
+      fill: '#6B7280',
+      canvasId: 'root',
+      rotation: 0
+    },
+    // Project Brief Text Area
+    {
+      id: uuidv4(),
+      type: 'text',
+      x: 75,
+      y: 150,
+      width: 350,
+      height: 130,
+      text: 'Enter project goals, client requirements, and timeline details here...',
+      fontSize: 14,
+      fontFamily: 'Inter, sans-serif',
+      fontStyle: 'normal',
+      fill: '#374151',
+      canvasId: 'root',
+      rotation: 0
+    },
+    
+    // 🌞 Site Analysis Zone
     {
       id: uuidv4(),
       type: 'container',
-      name: 'Design Tools',
-      x: 500,
-      y: 50,
-      width: 700,
+      name: 'Site Analysis',
+      x: 50,
+      y: 320,
+      width: 400,
+      height: 320,
+      backgroundColor: '#F9FAFB',
+      borderColor: '#E5E7EB',
+      canvasId: 'root',
+      rotation: 0
+    },
+    // Site Analysis Title
+    {
+      id: uuidv4(),
+      type: 'text',
+      x: 75,
+      y: 340,
+      width: 350,
+      height: 40,
+      text: '🌞 Site Analysis',
+      fontSize: 24,
+      fontFamily: 'Inter, sans-serif',
+      fontStyle: 'bold',
+      fill: '#111827',
+      canvasId: 'root',
+      rotation: 0
+    },
+    // Site Analysis Subtitle
+    {
+      id: uuidv4(),
+      type: 'text',
+      x: 75,
+      y: 380,
+      width: 350,
+      height: 30,
+      text: 'Explore environmental factors',
+      fontSize: 16,
+      fontFamily: 'Inter, sans-serif',
+      fontStyle: 'normal',
+      fill: '#6B7280',
+      canvasId: 'root',
+      rotation: 0
+    },
+    // Sun Path Analysis
+    {
+      id: uuidv4(),
+      type: 'container',
+      name: 'Sun Path',
+      x: 75,
+      y: 420,
+      width: 160,
+      height: 100,
+      backgroundColor: '#ffffff',
+      borderColor: '#E5E7EB',
+      canvasId: 'root',
+      rotation: 0
+    },
+    // Sun Path Label
+    {
+      id: uuidv4(),
+      type: 'text',
+      x: 85,
+      y: 430,
+      width: 140,
+      height: 20,
+      text: 'Sun Path',
+      fontSize: 14,
+      fontFamily: 'Inter, sans-serif',
+      fontStyle: 'medium',
+      fill: '#4B5563',
+      canvasId: 'root',
+      rotation: 0
+    },
+    // Wind Direction Analysis
+    {
+      id: uuidv4(),
+      type: 'container',
+      name: 'Wind Direction',
+      x: 265,
+      y: 420,
+      width: 160,
+      height: 100,
+      backgroundColor: '#ffffff',
+      borderColor: '#E5E7EB',
+      canvasId: 'root',
+      rotation: 0
+    },
+    // Wind Direction Label
+    {
+      id: uuidv4(),
+      type: 'text',
+      x: 275,
+      y: 430,
+      width: 140,
+      height: 20,
+      text: 'Wind Direction',
+      fontSize: 14,
+      fontFamily: 'Inter, sans-serif',
+      fontStyle: 'medium',
+      fill: '#4B5563',
+      canvasId: 'root',
+      rotation: 0
+    },
+    // Site Constraints
+    {
+      id: uuidv4(),
+      type: 'container',
+      name: 'Site Constraints',
+      x: 75,
+      y: 540,
+      width: 350,
+      height: 80,
+      backgroundColor: '#ffffff',
+      borderColor: '#E5E7EB',
+      canvasId: 'root',
+      rotation: 0
+    },
+    // Site Constraints Label
+    {
+      id: uuidv4(),
+      type: 'text',
+      x: 85,
+      y: 550,
+      width: 200,
+      height: 20,
+      text: 'Site Constraints & Zoning',
+      fontSize: 14,
+      fontFamily: 'Inter, sans-serif',
+      fontStyle: 'medium',
+      fill: '#4B5563',
+      canvasId: 'root',
+      rotation: 0
+    },
+    
+    // 🔁 Spatial Program Zone
+    {
+      id: uuidv4(),
+      type: 'container',
+      name: 'Spatial Program',
+      x: 50,
+      y: 660,
+      width: 400,
       height: 300,
-      backgroundColor: '#FFFFFF',
+      backgroundColor: '#F9FAFB',
       borderColor: '#E5E7EB',
       canvasId: 'root',
       rotation: 0
     },
+    // Spatial Program Title
+    {
+      id: uuidv4(),
+      type: 'text',
+      x: 75,
+      y: 680,
+      width: 350,
+      height: 40,
+      text: '🔁 Spatial Program',
+      fontSize: 24,
+      fontFamily: 'Inter, sans-serif',
+      fontStyle: 'bold',
+      fill: '#111827',
+      canvasId: 'root',
+      rotation: 0
+    },
+    // Spatial Program Subtitle
+    {
+      id: uuidv4(),
+      type: 'text',
+      x: 75,
+      y: 720,
+      width: 350,
+      height: 30,
+      text: 'Bubble diagrams, zoning, adjacencies',
+      fontSize: 16,
+      fontFamily: 'Inter, sans-serif',
+      fontStyle: 'normal',
+      fill: '#6B7280',
+      canvasId: 'root',
+      rotation: 0
+    },
+    // Bubble Diagram Area
     {
       id: uuidv4(),
       type: 'container',
-      name: 'Generated Output',
-      x: 500,
-      y: 400,
-      width: 700,
-      height: 350,
-      backgroundColor: '#FFFFFF',
+      name: 'Bubble Diagram',
+      x: 75,
+      y: 760,
+      width: 350,
+      height: 180,
+      backgroundColor: '#ffffff',
       borderColor: '#E5E7EB',
+      canvasId: 'root',
+      rotation: 0
+    },
+    // Bubble Diagram Label
+    {
+      id: uuidv4(),
+      type: 'text',
+      x: 190,
+      y: 840,
+      width: 120,
+      height: 20,
+      text: 'Bubble Diagram',
+      fontSize: 14,
+      fontFamily: 'Inter, sans-serif',
+      fontStyle: 'medium',
+      fill: '#9CA3AF',
+      canvasId: 'root',
+      rotation: 0
+    },
+
+    // ✏️ Sketch Area Zone
+    {
+      id: uuidv4(),
+      type: 'container',
+      name: 'Sketch Area',
+      x: 480,
+      y: 50,
+      width: 570,
+      height: 480,
+      backgroundColor: '#ffffff',
+      borderColor: '#E5E7EB',
+      canvasId: 'root',
+      rotation: 0
+    },
+    // Sketch Area Title
+    {
+      id: uuidv4(),
+      type: 'text',
+      x: 505,
+      y: 70,
+      width: 350,
+      height: 40,
+      text: '✏️ Sketch Area',
+      fontSize: 24,
+      fontFamily: 'Inter, sans-serif',
+      fontStyle: 'bold',
+      fill: '#111827',
+      canvasId: 'root',
+      rotation: 0
+    },
+    // Sketch Area Subtitle
+    {
+      id: uuidv4(),
+      type: 'text',
+      x: 505,
+      y: 110,
+      width: 350,
+      height: 30,
+      text: 'Rough drawings, overlays',
+      fontSize: 16,
+      fontFamily: 'Inter, sans-serif',
+      fontStyle: 'normal',
+      fill: '#6B7280',
+      canvasId: 'root',
+      rotation: 0
+    },
+    // Grid Background for Sketch
+    {
+      id: uuidv4(),
+      type: 'container',
+      name: 'Grid Background',
+      x: 505,
+      y: 150,
+      width: 520,
+      height: 360,
+      backgroundColor: '#F9FAFB',
+      borderColor: '#E5E7EB',
+      canvasId: 'root',
+      rotation: 0
+    },
+    // Grid Layer Instructions
+    {
+      id: uuidv4(),
+      type: 'text',
+      x: 650,
+      y: 310,
+      width: 200,
+      height: 40,
+      text: 'Sketch your ideas here',
+      fontSize: 16,
+      fontFamily: 'Inter, sans-serif',
+      fontStyle: 'italic',
+      fill: '#9CA3AF',
+      canvasId: 'root',
+      rotation: 0
+    },
+    
+    // 🎨 Moodboard Zone
+    {
+      id: uuidv4(),
+      type: 'container',
+      name: 'Moodboard',
+      x: 480,
+      y: 550,
+      width: 570,
+      height: 220,
+      backgroundColor: '#F9FAFB',
+      borderColor: '#E5E7EB',
+      canvasId: 'root',
+      rotation: 0
+    },
+    // Moodboard Title
+    {
+      id: uuidv4(),
+      type: 'text',
+      x: 505,
+      y: 570,
+      width: 350,
+      height: 40,
+      text: '🎨 Moodboard',
+      fontSize: 24,
+      fontFamily: 'Inter, sans-serif',
+      fontStyle: 'bold',
+      fill: '#111827',
+      canvasId: 'root',
+      rotation: 0
+    },
+    // Moodboard Subtitle
+    {
+      id: uuidv4(),
+      type: 'text',
+      x: 505,
+      y: 610,
+      width: 350,
+      height: 30,
+      text: 'Curate style and material direction',
+      fontSize: 16,
+      fontFamily: 'Inter, sans-serif',
+      fontStyle: 'normal',
+      fill: '#6B7280',
+      canvasId: 'root',
+      rotation: 0
+    },
+    // Image Placeholder 1
+    {
+      id: uuidv4(),
+      type: 'container',
+      name: 'Image Placeholder 1',
+      x: 505,
+      y: 650,
+      width: 120,
+      height: 100,
+      backgroundColor: '#ffffff',
+      borderColor: '#E5E7EB',
+      canvasId: 'root',
+      rotation: 0
+    },
+    // Image Placeholder 2
+    {
+      id: uuidv4(),
+      type: 'container',
+      name: 'Image Placeholder 2',
+      x: 645,
+      y: 650,
+      width: 120,
+      height: 100,
+      backgroundColor: '#ffffff',
+      borderColor: '#E5E7EB',
+      canvasId: 'root',
+      rotation: 0
+    },
+    // Image Placeholder 3
+    {
+      id: uuidv4(),
+      type: 'container',
+      name: 'Image Placeholder 3',
+      x: 785,
+      y: 650,
+      width: 120,
+      height: 100,
+      backgroundColor: '#ffffff',
+      borderColor: '#E5E7EB',
+      canvasId: 'root',
+      rotation: 0
+    },
+    
+    // 🧠 Concept Statement Zone
+    {
+      id: uuidv4(),
+      type: 'container',
+      name: 'Concept Statement',
+      x: 480,
+      y: 790,
+      width: 570,
+      height: 170,
+      backgroundColor: '#F9FAFB',
+      borderColor: '#E5E7EB',
+      canvasId: 'root',
+      rotation: 0
+    },
+    // Concept Statement Title
+    {
+      id: uuidv4(),
+      type: 'text',
+      x: 505,
+      y: 810,
+      width: 350,
+      height: 40,
+      text: '🧠 Concept Statement',
+      fontSize: 24,
+      fontFamily: 'Inter, sans-serif',
+      fontStyle: 'bold',
+      fill: '#111827',
+      canvasId: 'root',
+      rotation: 0
+    },
+    // Concept Statement Subtitle
+    {
+      id: uuidv4(),
+      type: 'text',
+      x: 505,
+      y: 850,
+      width: 350,
+      height: 30,
+      text: 'Capture design narrative',
+      fontSize: 16,
+      fontFamily: 'Inter, sans-serif',
+      fontStyle: 'normal',
+      fill: '#6B7280',
+      canvasId: 'root',
+      rotation: 0
+    },
+    // Concept Statement Text Area
+    {
+      id: uuidv4(),
+      type: 'text',
+      x: 505,
+      y: 890,
+      width: 520,
+      height: 50,
+      text: 'Describe your design concept and narrative here...',
+      fontSize: 14,
+      fontFamily: 'Inter, sans-serif',
+      fontStyle: 'normal',
+      fill: '#374151',
+      canvasId: 'root',
+      rotation: 0
+    },
+    
+    // 🤖 AI Prompt Zone
+    {
+      id: uuidv4(),
+      type: 'container',
+      name: 'AI Assistant',
+      x: 1080,
+      y: 50,
+      width: 350,
+      height: 550,
+      backgroundColor: '#F0F9FF',
+      borderColor: '#BAE6FD',
+      canvasId: 'root',
+      rotation: 0
+    },
+    // AI Assistant Title
+    {
+      id: uuidv4(),
+      type: 'text',
+      x: 1105,
+      y: 70,
+      width: 300,
+      height: 40,
+      text: '🤖 AI Prompt Zone',
+      fontSize: 24,
+      fontFamily: 'Inter, sans-serif',
+      fontStyle: 'bold',
+      fill: '#0C4A6E',
+      canvasId: 'root',
+      rotation: 0
+    },
+    // AI Assistant Subtitle
+    {
+      id: uuidv4(),
+      type: 'text',
+      x: 1105,
+      y: 110,
+      width: 300,
+      height: 30,
+      text: 'Assist with ideas & precedents',
+      fontSize: 16,
+      fontFamily: 'Inter, sans-serif',
+      fontStyle: 'normal',
+      fill: '#0E7490',
+      canvasId: 'root',
+      rotation: 0
+    },
+    // AI Prompt Help Text
+    {
+      id: uuidv4(),
+      type: 'text',
+      x: 1105,
+      y: 150,
+      width: 300,
+      height: 60,
+      text: 'Drag AI icon to any element for targeted suggestions. Or use general prompt below:',
+      fontSize: 14,
+      fontFamily: 'Inter, sans-serif',
+      fontStyle: 'normal',
+      fill: '#0E7490',
+      canvasId: 'root',
+      rotation: 0
+    },
+    // AI Prompt Input Area
+    {
+      id: uuidv4(),
+      type: 'container',
+      name: 'AI Prompt Input',
+      x: 1105,
+      y: 220,
+      width: 300,
+      height: 100,
+      backgroundColor: '#ffffff',
+      borderColor: '#BAE6FD',
+      canvasId: 'root',
+      rotation: 0
+    },
+    // AI Prompt Input Text
+    {
+      id: uuidv4(),
+      type: 'text',
+      x: 1120,
+      y: 240,
+      width: 270,
+      height: 60,
+      text: 'Enter your design prompt here...',
+      fontSize: 14,
+      fontFamily: 'Inter, sans-serif',
+      fontStyle: 'normal',
+      fill: '#94A3B8',
+      canvasId: 'root',
+      rotation: 0
+    },
+    // AI Response Area Label
+    {
+      id: uuidv4(),
+      type: 'text',
+      x: 1105,
+      y: 330,
+      width: 300,
+      height: 30,
+      text: 'AI Suggestions:',
+      fontSize: 16,
+      fontFamily: 'Inter, sans-serif',
+      fontStyle: 'medium',
+      fill: '#0E7490',
+      canvasId: 'root',
+      rotation: 0
+    },
+    // AI Response Area
+    {
+      id: uuidv4(),
+      type: 'container',
+      name: 'AI Response Container',
+      x: 1105,
+      y: 370,
+      width: 300,
+      height: 210,
+      backgroundColor: '#ffffff',
+      borderColor: '#BAE6FD',
+      canvasId: 'root',
+      rotation: 0
+    },
+    // AI Response Placeholder Text
+    {
+      id: uuidv4(),
+      type: 'text',
+      x: 1120,
+      y: 390,
+      width: 270,
+      height: 170,
+      text: 'AI suggestions and design ideas will appear here...',
+      fontSize: 14,
+      fontFamily: 'Inter, sans-serif',
+      fontStyle: 'normal',
+      fill: '#94A3B8',
+      canvasId: 'root',
+      rotation: 0
+    },
+    
+    // 💬 Comment Layer Zone
+    {
+      id: uuidv4(),
+      type: 'container',
+      name: 'Comment Layer',
+      x: 1080,
+      y: 620,
+      width: 350,
+      height: 340,
+      backgroundColor: '#FEF3C7',
+      borderColor: '#FDE68A',
+      canvasId: 'root',
+      rotation: 0
+    },
+    // Comment Layer Title
+    {
+      id: uuidv4(),
+      type: 'text',
+      x: 1105,
+      y: 640,
+      width: 300,
+      height: 40,
+      text: '💬 Comment Layer',
+      fontSize: 24,
+      fontFamily: 'Inter, sans-serif',
+      fontStyle: 'bold',
+      fill: '#92400E',
+      canvasId: 'root',
+      rotation: 0
+    },
+    // Comment Layer Subtitle
+    {
+      id: uuidv4(),
+      type: 'text',
+      x: 1105,
+      y: 680,
+      width: 300,
+      height: 30,
+      text: 'Enable discussion and review',
+      fontSize: 16,
+      fontFamily: 'Inter, sans-serif',
+      fontStyle: 'normal',
+      fill: '#92400E',
+      canvasId: 'root',
+      rotation: 0
+    },
+    // Comment 1
+    {
+      id: uuidv4(),
+      type: 'sticky-note',
+      x: 1105,
+      y: 720,
+      width: 300,
+      height: 80,
+      canvasId: 'root',
+      rotation: 0,
+      content: 'Add comments or feedback here. Drag to position near relevant elements.',
+      style: {
+        backgroundColor: '#FEF3C7',
+        textColor: '#92400E',
+        fontSize: 14,
+        shadowColor: 'rgba(0, 0, 0, 0.1)'
+      }
+    },
+    // Comment 2
+    {
+      id: uuidv4(),
+      type: 'sticky-note',
+      x: 1105,
+      y: 810,
+      width: 300,
+      height: 80,
+      canvasId: 'root',
+      rotation: 0,
+      content: 'Use this layer for team discussion and client feedback.',
+      style: {
+        backgroundColor: '#FFEDD5',
+        textColor: '#9A3412',
+        fontSize: 14,
+        shadowColor: 'rgba(0, 0, 0, 0.1)'
+      }
+    },
+    // Draggable Comment Instructions
+    {
+      id: uuidv4(),
+      type: 'text',
+      x: 1105,
+      y: 900,
+      width: 300,
+      height: 40,
+      text: 'Drag comments to specific areas of your design',
+      fontSize: 12,
+      fontFamily: 'Inter, sans-serif',
+      fontStyle: 'italic',
+      fill: '#92400E',
       canvasId: 'root',
       rotation: 0
     }

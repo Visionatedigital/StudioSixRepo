@@ -54,7 +54,7 @@ const tools = [
     id: 'concept',
     title: 'Concept Generator AI',
     description: 'Generate innovative architectural concepts and ideas',
-    image: '/Banner Images/Concept.jpg',
+    image: '/Banner Images/Concept Generator.jpg',
     href: '/generate/concept',
     iconPath: '/icons/concept.svg'
   },
@@ -109,7 +109,7 @@ export default function DashboardBanner() {
                 src={tool.image}
                 alt={tool.title}
                 fill
-                className="object-cover object-top"
+                className="object-cover object-center"
                 priority={tools.indexOf(tool) === currentSlide}
               />
               <div className="absolute inset-0 bg-gradient-to-r from-black/60 to-transparent">

@@ -33,7 +33,7 @@ export default function TemplateSelectionModal({
     {
       id: 'concept-development',
       title: 'Concept Development',
-      description: 'Start turning your ideas and site constraints into a visual concept. Scribble early thoughts, analyze site data, explore precedent studies, and let AI assist with creative prompts.',
+      description: 'Structured design workspace with 8 key zones: Project Brief, Site Analysis, Spatial Program, Sketch Area, Moodboard, Concept Statement, AI Prompt Zone with element-specific assistance, and Comment Layer for reviews.',
       image: '/images/390d22aaf3ca6d926787a845d1271e54.jpg'
     },
     {

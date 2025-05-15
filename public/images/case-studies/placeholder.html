@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Case Study Placeholder Images</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+    canvas {
+      border: 1px solid #ddd;
+      margin-bottom: 20px;
+    }
+    button {
+      padding: 8px 16px;
+      background: #4a5568;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Case Study Placeholder Images</h1>
+  
+  <h2>Main Image</h2>
+  <canvas id="mainImage" width="600" height="400"></canvas>
+  <div>
+    <button onclick="saveImage('mainImage', 'placeholder-main.jpg')">Save as placeholder-main.jpg</button>
+  </div>
+  
+  <h2>Garden House Main</h2>
+  <canvas id="gardenHouseMain" width="600" height="400"></canvas>
+  <div>
+    <button onclick="saveImage('gardenHouseMain', 'garden-house-main.jpg')">Save as garden-house-main.jpg</button>
+  </div>
+  
+  <h2>Garden House Floor Plan</h2>
+  <canvas id="gardenHousePlan" width="400" height="300"></canvas>
+  <div>
+    <button onclick="saveImage('gardenHousePlan', 'garden-house-plan-1.jpg')">Save as garden-house-plan-1.jpg</button>
+  </div>
+  
+  <h2>Garden House Section</h2>
+  <canvas id="gardenHouseSection" width="400" height="300"></canvas>
+  <div>
+    <button onclick="saveImage('gardenHouseSection', 'garden-house-section-1.jpg')">Save as garden-house-section-1.jpg</button>
+  </div>
+  
+  <h2>Office Main</h2>
+  <canvas id="officeMain" width="600" height="400"></canvas>
+  <div>
+    <button onclick="saveImage('officeMain', 'office-main.jpg')">Save as office-main.jpg</button>
+  </div>
+  
+  <h2>Office Floor Plan</h2>
+  <canvas id="officePlan" width="400" height="300"></canvas>
+  <div>
+    <button onclick="saveImage('officePlan', 'office-plan-1.jpg')">Save as office-plan-1.jpg</button>
+  </div>
+  
+  <h2>Office Section</h2>
+  <canvas id="officeSection" width="400" height="300"></canvas>
+  <div>
+    <button onclick="saveImage('officeSection', 'office-section-1.jpg')">Save as office-section-1.jpg</button>
+  </div>
+  
+  <h2>Office Render</h2>
+  <canvas id="officeRender" width="400" height="300"></canvas>
+  <div>
+    <button onclick="saveImage('officeRender', 'office-render-1.jpg')">Save as office-render-1.jpg</button>
+  </div>
+  
+  <h2>Error Placeholder</h2>
+  <canvas id="errorPlaceholder" width="600" height="400"></canvas>
+  <div>
+    <button onclick="saveImage('errorPlaceholder', 'error-placeholder.jpg')">Save as error-placeholder.jpg</button>
+  </div>
+
+  <script>
+    // Function to draw placeholder images
+    function drawPlaceholder(canvasId, text, bgColor, textColor) {
+      const canvas = document.getElementById(canvasId);
+      const ctx = canvas.getContext('2d');
+      
+      // Fill background
+      ctx.fillStyle = bgColor || '#f0f0f0';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Add a border
+      ctx.strokeStyle = '#cccccc';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(5, 5, canvas.width - 10, canvas.height - 10);
+      
+      // Add text
+      ctx.fillStyle = textColor || '#333333';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      
+      const lines = text.split('\n');
+      const lineHeight = 30;
+      const startY = canvas.height / 2 - (lines.length - 1) * lineHeight / 2;
+      
+      lines.forEach((line, index) => {
+        // Adjust font size based on canvas width
+        const fontSize = Math.min(24, canvas.width / 20);
+        ctx.font = `bold ${fontSize}px Arial`;
+        ctx.fillText(line, canvas.width / 2, startY + index * lineHeight);
+      });
+    }
+    
+    // Function to save canvas as image
+    function saveImage(canvasId, filename) {
+      const canvas = document.getElementById(canvasId);
+      const link = document.createElement('a');
+      link.download = filename;
+      link.href = canvas.toDataURL('image/jpeg', 0.8);
+      link.click();
+    }
+    
+    // Draw all placeholder images when page loads
+    window.onload = function() {
+      drawPlaceholder('mainImage', 'Placeholder Image\nArchitecture Case Study', '#e2e8f0', '#2d3748');
+      drawPlaceholder('gardenHouseMain', 'Modern Garden House\nSustainable Architecture', '#e8f5e9', '#1b5e20');
+      drawPlaceholder('gardenHousePlan', 'Floor Plan\nGarden House', '#e3f2fd', '#0d47a1');
+      drawPlaceholder('gardenHouseSection', 'Building Section\nGarden House', '#f3e5f5', '#4a148c');
+      drawPlaceholder('officeMain', 'Urban Office Complex\nCommercial Architecture', '#eceff1', '#263238');
+      drawPlaceholder('officePlan', 'Floor Plan\nOffice Complex', '#e0f2f1', '#004d40');
+      drawPlaceholder('officeSection', 'Building Section\nOffice Complex', '#fff3e0', '#e65100');
+      drawPlaceholder('officeRender', '3D Rendering\nOffice Complex', '#f9fbe7', '#827717');
+      drawPlaceholder('errorPlaceholder', 'Error Loading Image\nPlease try again later', '#ffebee', '#b71c1c');
+    };
+  </script>
+</body>
+</html> 

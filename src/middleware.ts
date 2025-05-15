@@ -47,6 +47,7 @@ export default withAuth(
     const isPublicPage = publicPages.includes(req.nextUrl.pathname) || 
                         req.nextUrl.pathname.startsWith('/blog/') ||  // Allow all blog posts
                         req.nextUrl.pathname.startsWith('/tutorials/') || // Allow all tutorials
+                        req.nextUrl.pathname.startsWith('/help/') || // Allow all help pages
                         isStaticAsset; // Allow all static assets
 
     // Allow static assets and API auth routes to pass through
@@ -69,8 +70,8 @@ export default withAuth(
       return NextResponse.next();
     }
 
-    // Check if email is verified
-    if (token && !token.email_verified) {
+    // Check if email is verified - use either verified or email_verified flag
+    if (token && !token.verified && !token.email_verified) {
       // If trying to access protected routes, redirect to verify-email page
       if (!isPublicPage) {
         const verifyEmailUrl = new URL('/verify-email', req.url);

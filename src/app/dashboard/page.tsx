@@ -30,15 +30,15 @@ function DashboardContent() {
 
   return (
     <DashboardLayout currentPage="Dashboard">
-      {/* Main Content */}
-      <div className="flex flex-col gap-8 p-8">
+      {/* Main Content - Updated with better container styling */}
+      <div className="flex flex-col gap-8 p-4 sm:p-6 md:p-8 w-full max-w-full overflow-x-hidden">
         {/* Banner Section */}
-        <section>
+        <section className="w-full">
           <DashboardBanner />
         </section>
 
-        {/* Community Gallery Section */}
-        <section>
+        {/* Community Gallery Section - Added width and overflow control */}
+        <section className="w-full overflow-visible pb-16">
           <CommunityGallery />
         </section>
       </div>

@@ -163,12 +163,12 @@ export async function getPaymentStatus(paymentId: string) {
       try {
         console.log(`Trying to check payment status at: ${endpoint}`);
         const result = await fetch(endpoint, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        });
-        
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
         if (result.ok) {
           response = result;
           break;

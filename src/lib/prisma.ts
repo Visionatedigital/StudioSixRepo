@@ -1,8 +1,8 @@
 import { PrismaClient } from '@prisma/client';
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
-};
+// PrismaClient is attached to the `global` object in development to prevent
+// exhausting your database connection limit.
+const globalForPrisma = global as unknown as { prisma: PrismaClient };
 
 // Debug environment variables
 console.log('[PRISMA] Environment check:', {
@@ -21,13 +21,15 @@ if (!process.env.DATABASE_URL) {
 // Add debug logging
 console.log('[PRISMA] Initializing Prisma client with database URL:', process.env.DATABASE_URL.replace(/:[^:@]+@/, ':****@')); // Hide password in logs
 
-export const prisma = globalForPrisma.prisma ?? new PrismaClient({
+export const prisma =
+  globalForPrisma.prisma ||
+  new PrismaClient({
   datasources: {
     db: {
       url: process.env.DATABASE_URL,
     },
   },
-  log: ['query', 'error', 'info', 'warn'],
+    log: ['query', 'error', 'info', 'warn'],
 });
 
 // Simplified logging - remove event listeners that are causing type issues
@@ -56,6 +58,6 @@ prisma.$connect()
     }
   });
 
-if (process.env.NODE_ENV !== 'production') {
-  globalForPrisma.prisma = prisma;
-} 
+if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
+
+export default prisma; 

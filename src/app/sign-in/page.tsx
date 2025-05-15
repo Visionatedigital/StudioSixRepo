@@ -3,7 +3,7 @@
 import { signIn } from "next-auth/react";
 import Image from "next/image";
 import Link from "next/link";
-import { useState, Suspense } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 function SignInForm() {
@@ -12,8 +12,19 @@ function SignInForm() {
   const [error, setError] = useState<string | null>(
     searchParams?.get("error") || null
   );
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
+
+  // Check for verified parameter
+  const verified = searchParams?.get("verified") === "true";
+
+  // Set success message if the user was redirected after verification
+  useEffect(() => {
+    if (verified) {
+      setSuccessMessage("Email verified successfully! Please sign in to continue.");
+    }
+  }, [verified]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -177,6 +188,13 @@ function SignInForm() {
             <p className="text-sm text-gray-600 mb-6">
               {isSignUp ? 'Sign up to start creating' : 'Sign in to continue'}
             </p>
+
+            {/* Success Message */}
+            {successMessage && (
+              <div className="w-full p-3 mb-4 bg-green-50 border border-green-200 rounded-lg">
+                <p className="text-sm text-green-600">{successMessage}</p>
+              </div>
+            )}
 
             {/* Error Message */}
             {error && (

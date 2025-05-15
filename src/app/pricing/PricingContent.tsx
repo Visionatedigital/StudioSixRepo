@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import DashboardLayout from '@/components/DashboardLayout';
 import { Icon } from '@/components/Icons';
 import Image from 'next/image';
 import PaystackProvider from '@/components/PaystackProvider';
@@ -234,139 +233,137 @@ export default function PricingContent() {
   };
 
   return (
-    <DashboardLayout currentPage="Pricing">
-      <div className="w-full h-[calc(100vh-6rem)] bg-[#F6F8FA] rounded-2xl overflow-y-auto">
-        <div className="flex flex-col items-center max-w-[1200px] mx-auto px-6">
-          {/* Title */}
-          <h1 className="text-[28px] font-bold text-[#1B1464] text-center mt-6 mb-8">
-            Find the perfect plan to power your creativity
-          </h1>
+    <div className="w-full bg-[#F6F8FA] rounded-2xl overflow-y-auto">
+      <div className="flex flex-col items-center max-w-[1200px] mx-auto px-6">
+        {/* Title */}
+        <h1 className="text-[28px] font-bold text-[#1B1464] text-center mt-6 mb-8">
+          Find the perfect plan to power your creativity
+        </h1>
 
-          {/* Currency and Billing Cycle Controls */}
-          <div className="flex items-center gap-4 mb-8">
-            <select
-              value={selectedCurrency}
-              onChange={(e) => setSelectedCurrency(e.target.value as CurrencyCode)}
-              className="px-3 py-1.5 bg-white border border-[#E0DAF3] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-            >
-              {Object.entries(currencies).map(([code, { name }]) => (
-                <option key={code} value={code}>
-                  {name}
-                </option>
-              ))}
-            </select>
-
-            <div className="inline-flex items-center bg-white rounded-full p-1 border border-[#E0DAF3]">
-              <button
-                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                  billingCycle === 'monthly'
-                    ? 'bg-white text-[#1B1464] shadow-sm'
-                    : 'text-gray-500 hover:text-[#1B1464]'
-                }`}
-                onClick={() => setBillingCycle('monthly')}
-              >
-                Pay Monthly
-              </button>
-              <button
-                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                  billingCycle === 'yearly'
-                    ? 'bg-[#814ADA] text-white'
-                    : 'text-gray-500 hover:text-[#1B1464]'
-                }`}
-                onClick={() => setBillingCycle('yearly')}
-              >
-                Pay Yearly
-              </button>
-            </div>
-          </div>
-
-          {/* Pricing Cards Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-8">
-            {pricingPlans.map((plan) => (
-              <PricingCard
-                key={plan.name}
-                title={plan.name}
-                description={plan.description}
-                price={plan.priceUSD}
-                features={plan.features}
-                type={plan.name.split(' ')[0]}
-                selectedCurrency={selectedCurrency}
-                getPrice={getPrice}
-              />
+        {/* Currency and Billing Cycle Controls */}
+        <div className="flex items-center gap-4 mb-8">
+          <select
+            value={selectedCurrency}
+            onChange={(e) => setSelectedCurrency(e.target.value as CurrencyCode)}
+            className="px-3 py-1.5 bg-white border border-[#E0DAF3] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+          >
+            {Object.entries(currencies).map(([code, { name }]) => (
+              <option key={code} value={code}>
+                {name}
+              </option>
             ))}
-          </div>
+          </select>
 
-          {/* Student/Educator Discount Banner */}
-          <div className="w-full mt-8 mb-6">
-            <div className="relative w-full h-[300px] rounded-2xl overflow-hidden">
-              <Image
-                src="/images/students-banner.jpg"
-                alt="Students walking and smiling"
-                fill
-                className="object-cover"
-                priority
-              />
-              {/* Overlay Content */}
-              <div className="absolute inset-0 bg-gradient-to-r from-[#814ADA]/60 to-[#392CA0]/60 flex items-center justify-center">
-                <div className="max-w-2xl text-center text-white">
-                  <h2 className="text-3xl font-bold mb-4">Education Discount</h2>
-                  <p className="text-lg mb-6">Students & educators get 30% off all plans</p>
-                  <button 
-                    className="px-8 py-3 bg-white text-[#1B1464] font-medium rounded-lg hover:bg-opacity-90 transition-colors"
-                    onClick={() => {/* Handle discount application */}}
-                  >
-                    Apply for the discount
-                  </button>
-                </div>
+          <div className="inline-flex items-center bg-white rounded-full p-1 border border-[#E0DAF3]">
+            <button
+              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                billingCycle === 'monthly'
+                  ? 'bg-white text-[#1B1464] shadow-sm'
+                  : 'text-gray-500 hover:text-[#1B1464]'
+              }`}
+              onClick={() => setBillingCycle('monthly')}
+            >
+              Pay Monthly
+            </button>
+            <button
+              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                billingCycle === 'yearly'
+                  ? 'bg-[#814ADA] text-white'
+                  : 'text-gray-500 hover:text-[#1B1464]'
+              }`}
+              onClick={() => setBillingCycle('yearly')}
+            >
+              Pay Yearly
+            </button>
+          </div>
+        </div>
+
+        {/* Pricing Cards Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-8">
+          {pricingPlans.map((plan) => (
+            <PricingCard
+              key={plan.name}
+              title={plan.name}
+              description={plan.description}
+              price={plan.priceUSD}
+              features={plan.features}
+              type={plan.name.split(' ')[0]}
+              selectedCurrency={selectedCurrency}
+              getPrice={getPrice}
+            />
+          ))}
+        </div>
+
+        {/* Student/Educator Discount Banner */}
+        <div className="w-full mt-8 mb-6">
+          <div className="relative w-full h-[300px] rounded-2xl overflow-hidden">
+            <Image
+              src="/images/students-banner.jpg"
+              alt="Students walking and smiling"
+              fill
+              className="object-cover"
+              priority
+            />
+            {/* Overlay Content */}
+            <div className="absolute inset-0 bg-gradient-to-r from-[#814ADA]/60 to-[#392CA0]/60 flex items-center justify-center">
+              <div className="max-w-2xl text-center text-white">
+                <h2 className="text-3xl font-bold mb-4">Education Discount</h2>
+                <p className="text-lg mb-6">Students & educators get 30% off all plans</p>
+                <button 
+                  className="px-8 py-3 bg-white text-[#1B1464] font-medium rounded-lg hover:bg-opacity-90 transition-colors"
+                  onClick={() => {/* Handle discount application */}}
+                >
+                  Apply for the discount
+                </button>
               </div>
             </div>
           </div>
+        </div>
 
-          {/* FAQ Section */}
-          <div className="w-full max-w-3xl mx-auto mb-16">
-            <h2 className="text-2xl font-bold text-[#1B1464] text-center mb-8">Frequently Asked Questions</h2>
-            <div className="space-y-4">
-              {[
-                {
-                  question: "How does billing work?",
-                  answer: "Your subscription begins as soon as you complete your purchase. You'll be billed monthly or yearly depending on your chosen billing cycle. For yearly subscriptions, you'll receive a 20% discount. You can change your billing cycle at any time from your account settings."
-                },
-                {
-                  question: "Can I change my plan later?",
-                  answer: "Yes! You can upgrade, downgrade, or change your plan at any time. When you upgrade, you'll get immediate access to the new features, and we'll prorate your billing. If you downgrade, the changes will take effect at the start of your next billing cycle."
-                },
-                {
-                  question: "What payment methods do you accept?",
-                  answer: "We accept all major credit cards (Visa, MasterCard, American Express), PayPal, and bank transfers for business accounts. All payments are processed securely through our payment partners."
-                },
-                {
-                  question: "How does the education discount work?",
-                  answer: "Students and educators can receive a 30% discount on any plan. To qualify, you'll need to verify your status with a valid .edu email address or current school ID. Once verified, the discount will be automatically applied to your subscription."
-                },
-                {
-                  question: "What happens if I run out of credits?",
-                  answer: "If you run out of credits before your next billing cycle, you can purchase additional credits or upgrade to a higher tier plan. Unused credits from your monthly allocation roll over for up to one month."
-                }
-              ].map((faq, index) => (
-                <div key={index} className="bg-white rounded-xl border border-[#E0DAF3] overflow-hidden">
-                  <details className="group">
-                    <summary className="flex items-center justify-between px-6 py-4 cursor-pointer list-none">
-                      <span className="font-medium text-[#1B1464]">{faq.question}</span>
-                      <Icon
-                        name="chevron-down"
-                        className="w-5 h-5 text-gray-500 transition-transform group-open:rotate-180"
-                      />
-                    </summary>
-                    <div className="px-6 pb-4 text-gray-600">
-                      {faq.answer}
-                    </div>
-                  </details>
-                </div>
-              ))}
-            </div>
+        {/* FAQ Section */}
+        <div className="w-full max-w-3xl mx-auto mb-16">
+          <h2 className="text-2xl font-bold text-[#1B1464] text-center mb-8">Frequently Asked Questions</h2>
+          <div className="space-y-4">
+            {[
+              {
+                question: "How does billing work?",
+                answer: "Your subscription begins as soon as you complete your purchase. You'll be billed monthly or yearly depending on your chosen billing cycle. For yearly subscriptions, you'll receive a 20% discount. You can change your billing cycle at any time from your account settings."
+              },
+              {
+                question: "Can I change my plan later?",
+                answer: "Yes! You can upgrade, downgrade, or change your plan at any time. When you upgrade, you'll get immediate access to the new features, and we'll prorate your billing. If you downgrade, the changes will take effect at the start of your next billing cycle."
+              },
+              {
+                question: "What payment methods do you accept?",
+                answer: "We accept all major credit cards (Visa, MasterCard, American Express), PayPal, and bank transfers for business accounts. All payments are processed securely through our payment partners."
+              },
+              {
+                question: "How does the education discount work?",
+                answer: "Students and educators can receive a 30% discount on any plan. To qualify, you'll need to verify your status with a valid .edu email address or current school ID. Once verified, the discount will be automatically applied to your subscription."
+              },
+              {
+                question: "What happens if I run out of credits?",
+                answer: "If you run out of credits before your next billing cycle, you can purchase additional credits or upgrade to a higher tier plan. Unused credits from your monthly allocation roll over for up to one month."
+              }
+            ].map((faq, index) => (
+              <div key={index} className="bg-white rounded-xl border border-[#E0DAF3] overflow-hidden">
+                <details className="group">
+                  <summary className="flex items-center justify-between px-6 py-4 cursor-pointer list-none">
+                    <span className="font-medium text-[#1B1464]">{faq.question}</span>
+                    <Icon
+                      name="chevron-down"
+                      className="w-5 h-5 text-gray-500 transition-transform group-open:rotate-180"
+                    />
+                  </summary>
+                  <div className="px-6 pb-4 text-gray-600">
+                    {faq.answer}
+                  </div>
+                </details>
+              </div>
+            ))}
           </div>
         </div>
       </div>
-    </DashboardLayout>
+    </div>
   );
 } 

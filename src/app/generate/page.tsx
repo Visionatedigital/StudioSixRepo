@@ -30,10 +30,10 @@ const defaultSettings: RenderSettings = {
     shadowIntensity: 50,
   },
   technical: {
-    controlNetMode: 'Balanced',
-    denoisingStrength: 0.65,
-    steps: 40,
-    cfgScale: 7.0,
+    controlNetMode: 'ControlNet is more important',
+    denoisingStrength: 0.5,
+    steps: 30,
+    cfgScale: 5.0,
   },
 };
 
@@ -46,10 +46,10 @@ function GeneratePageContent() {
     ...defaultSettings,
     technical: {
       ...defaultSettings.technical,
-      denoisingStrength: 0.65,
-      steps: 40,
-      cfgScale: 7.0,
-      controlNetMode: 'Balanced'
+      denoisingStrength: 0.5,
+      steps: 30,
+      cfgScale: 5.0,
+      controlNetMode: 'ControlNet is more important'
     }
   });
   const [userPrompt, setUserPrompt] = useState('');
@@ -85,6 +85,12 @@ function GeneratePageContent() {
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
   const [showTypingPrompt, setShowTypingPrompt] = useState(false);
+  const [roomType, setRoomType] = useState('living room');
+  const [resolution, setResolution] = useState('2k');
+  const [enhancementType, setEnhancementType] = useState('quality');
+  const [landscapeStyle, setLandscapeStyle] = useState('modern');
+  const [terrainType, setTerrainType] = useState('flat');
+  const [vegetationDensity, setVegetationDensity] = useState('moderate');
 
   // Sample images array (replace with your actual gallery images)
   const sampleImages = [
@@ -102,17 +108,128 @@ function GeneratePageContent() {
     'Exterior AI',
     'Interior AI',
     'Render Enhancer',
-    'Landscape AI',
-    'Site Analysis AI',
-    'Case Studies',
-    'Concept Generator AI',
-    'Floor Plan AI',
-    'Video Generator AI'
+    'Landscape AI'
+  ];
+
+  const isInteriorTool = selectedTool === 'Interior AI';
+  const isRenderEnhancer = selectedTool === 'Render Enhancer';
+  const isLandscapeAI = selectedTool === 'Landscape AI';
+  const isExteriorTool = selectedTool === 'Exterior AI';
+  
+  // Exterior architectural styles
+  const exteriorStyles = [
+    'modern',
+    'minimalist',
+    'industrial',
+    'traditional',
+    'contemporary',
+  ];
+  
+  // Interior architectural styles
+  const interiorStyles = [
+    'modern',
+    'minimalist',
+    'scandinavian',
+    'industrial',
+    'mid-century modern',
+    'bohemian',
+    'contemporary'
+  ];
+  
+  // Room types for interior designs
+  const roomTypes = [
+    'living room',
+    'kitchen',
+    'bedroom',
+    'bathroom',
+    'dining room',
+    'home office',
+    'studio'
+  ];
+
+  // Resolution options for render enhancer
+  const resolutionOptions = [
+    '2k',
+    '4k',
+    '8k'
+  ];
+  
+  // Enhancement types for render enhancer
+  const enhancementTypes = [
+    'quality',
+    'lighting',
+    'detail',
+    'realism',
+    'color correction',
+    'fix artifacts',
+    'complete render'
+  ];
+
+  // Landscape styles
+  const landscapeStyles = [
+    'modern',
+    'natural',
+    'zen',
+    'tropical',
+    'mediterranean',
+    'xeriscape',
+    'cottage',
+    'formal'
+  ];
+  
+  // Terrain types
+  const terrainTypes = [
+    'flat',
+    'sloped',
+    'terraced',
+    'rocky',
+    'waterfront',
+    'urban',
+    'mountainous',
+    'coastal'
+  ];
+  
+  // Vegetation density options
+  const vegetationDensities = [
+    'minimal',
+    'sparse',
+    'moderate',
+    'lush',
+    'abundant'
   ];
 
   const handleToolSelect = (tool: string) => {
     setSelectedTool(tool);
     setIsToolDropdownOpen(false);
+    
+    // Reset active tab when switching tools
+    if (activeTab === 'materials' && tool !== 'Exterior AI') {
+      setActiveTab('style');
+    }
+    
+    // Reset settings when switching between interior and other tools
+    if (tool === 'Interior AI') {
+      if (settings.style.architecturalStyle && !interiorStyles.includes(settings.style.architecturalStyle)) {
+        setSettings({
+          ...settings,
+          style: {
+            ...settings.style,
+            architecturalStyle: 'modern'
+          }
+        });
+      }
+    } else {
+      if (settings.style.architecturalStyle && !exteriorStyles.includes(settings.style.architecturalStyle)) {
+        setSettings({
+          ...settings,
+          style: {
+            ...settings.style,
+            architecturalStyle: 'modern'
+          }
+        });
+      }
+    }
+    
     // Convert display name to tool ID
     const toolIdMap: { [key: string]: string } = {
       'Exterior AI': 'exterior',
@@ -160,8 +277,22 @@ function GeneratePageContent() {
         return;
       }
 
-      // Extract base64 data from data URL
-      const base64Data = uploadedImage.split(',')[1];
+      // Prepare image data if available
+      let base64Data = null;
+      if (uploadedImage) {
+        // Make sure we're sending the complete data URL for proper processing
+        if (!uploadedImage.startsWith('data:')) {
+          base64Data = `data:image/jpeg;base64,${uploadedImage}`;
+          console.log("Added data URL prefix to image");
+        } else {
+          base64Data = uploadedImage;
+        }
+        console.log("Using uploaded image for generation");
+        console.log(`Image data length: ${base64Data.length}`);
+        console.log(`Image data starts with: ${base64Data.substring(0, 30)}...`);
+      } else {
+        console.error("No image available for img2img generation!");
+      }
 
       setProgressMessage('Processing credits...');
       setProgress(10);
@@ -217,9 +348,26 @@ function GeneratePageContent() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          settings,
+          settings: {
+            ...settings,
+            roomType: isInteriorTool ? roomType : undefined,
+            enhancementType: isRenderEnhancer ? enhancementType : undefined,
+            resolution: isRenderEnhancer ? resolution : undefined,
+            landscapeStyle: isLandscapeAI ? landscapeStyle : undefined,
+            terrainType: isLandscapeAI ? terrainType : undefined,
+            vegetationDensity: isLandscapeAI ? vegetationDensity : undefined,
+            controlNetModule: "lineart"
+          },
           image: base64Data,
-          prompt: userPrompt
+          prompt: userPrompt || 
+            (isInteriorTool ? 
+              `A detailed ${settings.style.architecturalStyle} style ${roomType} interior design` : 
+            isRenderEnhancer ?
+              `Enhance this architectural render with ${enhancementType} improvements at ${resolution} resolution` :
+            isLandscapeAI ?
+              `A ${landscapeStyle} landscape design with ${vegetationDensity} vegetation on ${terrainType} terrain` :
+              `A ${settings.style.architecturalStyle} style ${settings.style.buildingType} building`),
+          mode: 'img2img'
         }),
       });
       
@@ -229,6 +377,7 @@ function GeneratePageContent() {
 
       if (!response.ok) {
         const errorData = await response.json();
+        console.error('API error details:', errorData);
         throw new Error(errorData.error || 'Failed to generate image');
       }
 
@@ -247,7 +396,13 @@ function GeneratePageContent() {
       setProgress(100);
     } catch (error) {
       console.error('Generation error:', error);
-      setError(error instanceof Error ? error.message : 'Failed to generate image');
+      setError(error instanceof Error ? 
+        `Generation failed: ${error.message}. Please try again or contact support if the problem persists.` : 
+        'Failed to generate image. Please try again.');
+      
+      // Reset progress
+      setProgress(0);
+      setProgressMessage('');
     } finally {
       setIsLoading(false);
     }
@@ -353,6 +508,15 @@ function GeneratePageContent() {
       setError('Failed to generate prompt. Please try again.');
     } finally {
       setIsGeneratingPrompt(false);
+    }
+  };
+
+  // Define available tabs based on selected tool
+  const getAvailableTabs = () => {
+    if (isExteriorTool) {
+      return ['style', 'materials', 'lighting', 'technical'];
+    } else {
+      return ['style', 'lighting', 'technical'];
     }
   };
 
@@ -467,7 +631,7 @@ function GeneratePageContent() {
                   <div className="w-[380px]">
                     {/* Settings Tabs */}
                     <div className="flex gap-2 mb-6">
-                      {['style', 'materials', 'lighting', 'technical'].map((tab) => (
+                      {getAvailableTabs().map((tab) => (
                         <button
                           key={tab}
                           onClick={() => setActiveTab(tab)}
@@ -487,8 +651,121 @@ function GeneratePageContent() {
                       {/* Style Tab */}
                       {activeTab === 'style' && (
                         <div className="space-y-6">
+                          {isRenderEnhancer ? (
+                            <>
                           <div className="space-y-2">
-                            <label className="font-roboto font-medium text-sm text-[#1A1B1E]">Architectural Style</label>
+                                <label className="font-roboto font-medium text-sm text-[#1A1B1E]">Enhancement Type</label>
+                                <select
+                                  value={enhancementType}
+                                  onChange={(e) => setEnhancementType(e.target.value)}
+                                  className="w-full px-4 py-2.5 bg-white border border-[#E0DAF3] rounded-lg font-roboto text-base text-[#2F3033]"
+                                >
+                                  {enhancementTypes.map((type) => (
+                                    <option key={type} value={type}>
+                                      {type.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              
+                              <div className="space-y-2">
+                                <label className="font-roboto font-medium text-sm text-[#1A1B1E]">Target Resolution</label>
+                                <select
+                                  value={resolution}
+                                  onChange={(e) => setResolution(e.target.value)}
+                                  className="w-full px-4 py-2.5 bg-white border border-[#E0DAF3] rounded-lg font-roboto text-base text-[#2F3033]"
+                                >
+                                  {resolutionOptions.map((res) => (
+                                    <option key={res} value={res}>
+                                      {res.toUpperCase()} Resolution
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              
+                              <div className="space-y-2">
+                                <label className="font-roboto font-medium text-sm text-[#1A1B1E]">Enhancement Notes</label>
+                                <textarea
+                                  value={settings.style.customStyleNotes}
+                                  onChange={(e) =>
+                                    setSettings({
+                                      ...settings,
+                                      style: { ...settings.style, customStyleNotes: e.target.value },
+                                    })
+                                  }
+                                  className="w-full h-24 px-4 py-2.5 bg-white border border-[#E0DAF3] rounded-lg font-roboto text-base text-[#2F3033] resize-none"
+                                  placeholder="Add any specific enhancement instructions..."
+                                />
+                              </div>
+                            </>
+                          ) : isLandscapeAI ? (
+                            <>
+                              <div className="space-y-2">
+                                <label className="font-roboto font-medium text-sm text-[#1A1B1E]">Landscape Style</label>
+                                <select
+                                  value={landscapeStyle}
+                                  onChange={(e) => setLandscapeStyle(e.target.value)}
+                                  className="w-full px-4 py-2.5 bg-white border border-[#E0DAF3] rounded-lg font-roboto text-base text-[#2F3033]"
+                                >
+                                  {landscapeStyles.map((style) => (
+                                    <option key={style} value={style}>
+                                      {style.charAt(0).toUpperCase() + style.slice(1)}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              
+                              <div className="space-y-2">
+                                <label className="font-roboto font-medium text-sm text-[#1A1B1E]">Terrain Type</label>
+                                <select
+                                  value={terrainType}
+                                  onChange={(e) => setTerrainType(e.target.value)}
+                                  className="w-full px-4 py-2.5 bg-white border border-[#E0DAF3] rounded-lg font-roboto text-base text-[#2F3033]"
+                                >
+                                  {terrainTypes.map((type) => (
+                                    <option key={type} value={type}>
+                                      {type.charAt(0).toUpperCase() + type.slice(1)}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              
+                              <div className="space-y-2">
+                                <label className="font-roboto font-medium text-sm text-[#1A1B1E]">Vegetation Density</label>
+                                <select
+                                  value={vegetationDensity}
+                                  onChange={(e) => setVegetationDensity(e.target.value)}
+                                  className="w-full px-4 py-2.5 bg-white border border-[#E0DAF3] rounded-lg font-roboto text-base text-[#2F3033]"
+                                >
+                                  {vegetationDensities.map((density) => (
+                                    <option key={density} value={density}>
+                                      {density.charAt(0).toUpperCase() + density.slice(1)}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              
+                              <div className="space-y-2">
+                                <label className="font-roboto font-medium text-sm text-[#1A1B1E]">Landscape Notes</label>
+                                <textarea
+                                  value={settings.style.customStyleNotes}
+                                  onChange={(e) =>
+                                    setSettings({
+                                      ...settings,
+                                      style: { ...settings.style, customStyleNotes: e.target.value },
+                                    })
+                                  }
+                                  className="w-full h-24 px-4 py-2.5 bg-white border border-[#E0DAF3] rounded-lg font-roboto text-base text-[#2F3033] resize-none"
+                                  placeholder="Add any specific landscape features or elements..."
+                                />
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <div className="space-y-2">
+                                <label className="font-roboto font-medium text-sm text-[#1A1B1E]">
+                                  {isInteriorTool ? 'Interior Style' : 'Architectural Style'}
+                                </label>
                             <select
                               value={settings.style.architecturalStyle}
                               onChange={(e) =>
@@ -499,14 +776,30 @@ function GeneratePageContent() {
                               }
                               className="w-full px-4 py-2.5 bg-white border border-[#E0DAF3] rounded-lg font-roboto text-base text-[#2F3033]"
                             >
-                              <option value="modern">Modern</option>
-                              <option value="minimalist">Minimalist</option>
-                              <option value="industrial">Industrial</option>
-                              <option value="traditional">Traditional</option>
-                              <option value="contemporary">Contemporary</option>
+                                  {(isInteriorTool ? interiorStyles : exteriorStyles).map((style) => (
+                                    <option key={style} value={style}>
+                                      {style.charAt(0).toUpperCase() + style.slice(1)}
+                                    </option>
+                                  ))}
                             </select>
                           </div>
 
+                              {isInteriorTool ? (
+                                <div className="space-y-2">
+                                  <label className="font-roboto font-medium text-sm text-[#1A1B1E]">Room Type</label>
+                                  <select
+                                    value={roomType}
+                                    onChange={(e) => setRoomType(e.target.value)}
+                                    className="w-full px-4 py-2.5 bg-white border border-[#E0DAF3] rounded-lg font-roboto text-base text-[#2F3033]"
+                                  >
+                                    {roomTypes.map((type) => (
+                                      <option key={type} value={type}>
+                                        {type.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              ) : (
                           <div className="space-y-2">
                             <label className="font-roboto font-medium text-sm text-[#1A1B1E]">Building Type</label>
                             <select
@@ -524,6 +817,7 @@ function GeneratePageContent() {
                               <option value="mixed-use">Mixed Use</option>
                             </select>
                           </div>
+                              )}
 
                           <div className="space-y-2">
                             <label className="font-roboto font-medium text-sm text-[#1A1B1E]">Style Notes</label>
@@ -539,6 +833,8 @@ function GeneratePageContent() {
                               placeholder="Add any specific style instructions..."
                             />
                           </div>
+                            </>
+                          )}
                         </div>
                       )}
 

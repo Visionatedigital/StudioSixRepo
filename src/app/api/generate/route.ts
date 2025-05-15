@@ -85,7 +85,7 @@ async function sendToAutomatic1111(settings: GenerationSettings, image: string, 
     try {
       console.log('Connecting to RunPod instance...');
       
-      const response = await fetch(`https://oim4h1ldqg0523-80.proxy.runpod.net/sdapi/v1/img2img`, {
+      const response = await fetch(`https://n8sbg27o9f9smg-80.proxy.runpod.net/sdapi/v1/img2img`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -187,102 +187,145 @@ function createFallbackImage(message: string): string {
 // Improved function to send requests to the RunPod API with better error handling
 async function sendToGradioAPI(prompt: string, uploadedImageBase64: string, settings: GenerationSettings) {
   try {
-    const negativePrompt = settings.negativePrompt || "bad quality, blurry, low resolution";
-    const runpodAPIUrl = 'https://oim4h1ldqg0523-80.proxy.runpod.net/sdapi/v1/img2img';
-    
-    console.log('Sending request to RunPod API:');
-    console.log(`URL: ${runpodAPIUrl}`);
-    console.log(`Prompt: ${prompt}`);
-    console.log(`Negative Prompt: ${negativePrompt}`);
-
-    // Validate and process the base64 image
-    if (!uploadedImageBase64) {
-      throw new Error('No image data provided');
-    }
-
-    // Extract base64 data if it's a data URL
-    let base64Data = uploadedImageBase64;
-    if (uploadedImageBase64.startsWith('data:')) {
-      const matches = uploadedImageBase64.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
-      if (!matches || matches.length !== 3) {
-        throw new Error('Invalid image data format');
+    console.log(`sendToGradioAPI received image data: ${!!uploadedImageBase64}`);
+    if (uploadedImageBase64) {
+      console.log(`Image data starting with: ${uploadedImageBase64.substring(0, 30)}...`);
+      console.log(`Image data length: ${uploadedImageBase64.length}`);
+      
+      // Debug: Validate the image data format
+      if (!uploadedImageBase64.startsWith('data:image')) {
+        console.warn('WARNING: Image data does not start with data:image prefix - adding prefix');
+        uploadedImageBase64 = `data:image/jpeg;base64,${uploadedImageBase64}`;
       }
-      base64Data = matches[2];
+    } else {
+      console.error('No image data was provided to sendToGradioAPI!');
+      throw new Error('No image data provided for ControlNet processing');
     }
-
-    // Retry mechanism with exponential backoff
-    const MAX_RETRIES = 3;
-    let retryCount = 0;
-    let lastError;
-
-    while (retryCount < MAX_RETRIES) {
+    
+    const negativePrompt = settings.negativePrompt || "bad quality, blurry, low resolution, distorted architecture, unrealistic proportions, warped structure, deformed buildings, inaccurate perspective, changed layout, modified floorplan, incorrect geometry, altered windows, changed doors, different roofline";
+    
+    // Use only the working endpoint
+    const endpoints = [
+      'https://n8sbg27o9f9smg-80.proxy.runpod.net/sdapi/v1/img2img'
+    ];
+    
+    console.log('Connecting to Stable Diffusion endpoint...');
+    
+    let lastError: Error | null = null;
+    
+    // Try the endpoint
+    for (const endpoint of endpoints) {
       try {
-        const response = await fetch(runpodAPIUrl, {
+        console.log(`Using endpoint: ${endpoint}`);
+        
+        // Debug: Print exact settings received
+        console.log('Settings received:', JSON.stringify({
+          promptLength: prompt.length,
+          denoisingStrength: settings.technical?.denoisingStrength,
+          controlNetMode: settings.technical?.controlNetMode,
+          steps: settings.technical?.steps,
+          cfgScale: settings.technical?.cfgScale
+        }));
+        
+        // Extract base64 data if it's a data URL
+        let base64Data = uploadedImageBase64;
+        if (uploadedImageBase64.startsWith('data:')) {
+          const matches = uploadedImageBase64.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
+          if (!matches || matches.length !== 3) {
+            throw new Error('Invalid image data format');
+          }
+          base64Data = matches[2];
+        }
+        
+        // Get the denoising strength from settings or use default
+        const denoisingStrength = settings.technical?.denoisingStrength || 
+                                  settings.denoiseStrength || 
+                                  0.5; // Default denoising strength of 0.5 for better balance
+        
+        // Force settings values for debugging
+        console.log(`Using denoising strength: ${denoisingStrength}`);
+        
+        // Set up the ControlNet configuration with the uploaded image
+        const controlNetConfig = {
+          args: [
+            {
+              image: uploadedImageBase64, // Use the full data URL
+              module: "lineart", // Use standard lineart module
+              model: "control_v11p_sd15_lineart",
+              weight: 2.0, // Maximum allowed weight
+              guidance_start: 0.0,
+              guidance_end: 1.0,
+              processor_res: 1024, // Higher resolution for better detail
+              threshold_a: 32, // Lower threshold for detecting lighter lines
+              threshold_b: 192,
+              control_mode: settings.technical?.controlNetMode || "ControlNet is more important",
+              pixel_perfect: true,
+              preprocessor: "lineart_realistic" // More detailed preprocessor for architectural sketches
+            }
+          ]
+        };
+        
+        console.log(`Using ControlNet weight: ${controlNetConfig.args[0].weight}`);
+        console.log(`Using ControlNet mode: ${controlNetConfig.args[0].control_mode}`);
+        
+        const requestPayload = {
+          init_images: [uploadedImageBase64],
+          prompt: prompt,
+          negative_prompt: negativePrompt,
+          steps: settings.technical?.steps || settings.steps || 30,
+          cfg_scale: settings.technical?.cfgScale || settings.cfgScale || settings.guidanceScale || 7,
+          width: 768,
+          height: 768,
+          sampler_name: "DPM++ 2M Karras",
+          denoising_strength: denoisingStrength, // Use the explicitly defined denoising strength
+          batch_size: 1,
+          n_iter: 1,
+          seed: -1,
+          alwayson_scripts: {
+            controlnet: controlNetConfig
+          }
+        };
+        
+        console.log('Sending API request with init_images and ControlNet configuration');
+        console.log(`Image included in init_images: ${!!requestPayload.init_images[0]}`);
+        console.log(`Image included in ControlNet: ${!!requestPayload.alwayson_scripts.controlnet.args[0].image}`);
+        
+        const response = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            init_images: [uploadedImageBase64],
-            prompt: prompt,
-            negative_prompt: negativePrompt,
-            steps: settings.technical?.steps || settings.steps || 40,
-            cfg_scale: settings.technical?.cfgScale || settings.cfgScale || settings.guidanceScale || 7,
-            width: 512,
-            height: 512,
-            sampler_name: "DPM++ 2M Karras",
-            denoising_strength: settings.technical?.denoisingStrength || settings.denoiseStrength || 0.75,
-            batch_size: 1,
-            n_iter: 1,
-            seed: -1,
-            alwayson_scripts: {
-              controlnet: {
-                args: [
-                  {
-                    input_image: uploadedImageBase64,
-                    module: "lineart",
-                    model: "control_v11p_sd15_lineart",
-                    weight: 1.0,
-                    guidance_start: 0.0,
-                    guidance_end: 1.0,
-                    processor_res: 512,
-                    threshold_a: 100,
-                    threshold_b: 200,
-                    control_mode: "Balanced",
-                    pixel_perfect: true
-                  }
-                ]
-              }
-            }
-          })
+          body: JSON.stringify(requestPayload)
         });
-
+        
+        console.log(`Endpoint ${endpoint} response status:`, response.status);
+        
         if (!response.ok) {
           const errorText = await response.text();
           throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
         }
-
+        
         const data = await response.json();
         if (!data || !data.images || !data.images[0]) {
           throw new Error('Invalid response from API: missing image data');
         }
-
+        
+        console.log('Successfully received image data');
         let imageData = data.images[0];
-
+        
         // Add image prefix if needed
         if (typeof imageData === 'string' && !imageData.startsWith('data:image/')) {
           imageData = `data:image/png;base64,${imageData}`;
         }
-
+        
         return imageData;
       } catch (error) {
-        lastError = error;
-        const delay = Math.pow(2, retryCount) * 1000;
-        console.log(`Retrying in ${delay}ms...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-        retryCount++;
+        console.error(`Error with endpoint ${endpoint}:`, error);
+        lastError = error instanceof Error ? error : new Error(`Unknown error: ${error}`);
+        // Continue to try the next endpoint
       }
     }
-
-    throw new Error(`Failed after ${MAX_RETRIES} attempts: ${lastError instanceof Error ? lastError.message : 'Unknown error'}`);
+    
+    // If we get here, all endpoints failed
+    throw new Error(`All API endpoints failed. Last error: ${lastError ? lastError.message : 'Unknown error'}`);
   } catch (error: any) {
     console.error('RunPod API error:', error);
     throw error;
@@ -328,9 +371,16 @@ export async function POST(req: NextRequest) {
     console.log(`- Prompt: ${finalPrompt.substring(0, 100)}...`);
     console.log(`- Mode: ${mode || (image || uploadedImage ? 'img2img' : 'txt2img')}`);
     console.log(`- Settings provided: ${!!settings}`);
+    console.log(`- Image provided: ${!!(image || uploadedImage)}`);
+    if (image || uploadedImage) {
+      console.log(`- Image data length: ${(image || uploadedImage).substring(0, 30)}...`);
+    }
 
     const isTextToImage = mode === 'txt2img' || (!image && !uploadedImage);
     const imageData = image || uploadedImage || '';
+    
+    console.log(`- Using image-to-image mode: ${!isTextToImage}`);
+    console.log(`- Image data available: ${!!imageData}`);
     
     try {
       let generatedImage;
@@ -339,7 +389,7 @@ export async function POST(req: NextRequest) {
       if (isTextToImage) {
         console.log('Using text-to-image generation mode');
         
-        const runpodAPIUrl = 'https://oim4h1ldqg0523-80.proxy.runpod.net/api/predict';
+        const runpodAPIUrl = 'https://n8sbg27o9f9smg-80.proxy.runpod.net/api/predict';
         
         console.log('Sending request to RunPod API for txt2img:');
         console.log(`URL: ${runpodAPIUrl}`);
@@ -420,4 +470,132 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
-} 
+}
+
+async function sendToTxt2ImgWithControlNet(prompt: string, controlNetImage: string, settings: GenerationSettings) {
+  try {
+    const negativePrompt = settings.negativePrompt || "bad quality, blurry, low resolution, distorted architecture, unrealistic proportions, warped structure, deformed buildings, inaccurate perspective, changed layout, modified floorplan, incorrect geometry, altered windows, changed doors, different roofline";
+    const runpodAPIUrl = 'https://n8sbg27o9f9smg-80.proxy.runpod.net/sdapi/v1/txt2img';
+    
+    console.log('=== USING TXT2IMG WITH CONTROLNET FOR BETTER ARCHITECTURE RENDERING ===');
+    console.log('URL:', runpodAPIUrl);
+    console.log('Prompt Length:', prompt.length);
+    console.log('Negative Prompt:', negativePrompt);
+    console.log('Using ControlNet with lineart model to preserve geometry');
+
+    // Validate the control image
+    if (!controlNetImage) {
+      throw new Error('No control image data provided');
+    }
+
+    // Make sure the image has the proper format for ControlNet
+    let processedControlImage = controlNetImage;
+    if (!controlNetImage.startsWith('data:')) {
+      processedControlImage = `data:image/png;base64,${controlNetImage}`;
+    }
+    
+    console.log('Using image for ControlNet guidance');
+
+    // Determine ControlNet module based on settings or default to lineart
+    const controlNetModule = settings.controlNetModule || "lineart_standard";
+    const controlNetModel = "control_v11p_sd15_lineart";
+    // Higher weight for stronger influence on structure
+    const controlNetWeight = 1.5; 
+    
+    // Set steps higher for better quality with txt2img
+    const steps = settings.technical?.steps || settings.steps || 40;
+
+    console.log('ControlNet Config:', {
+      module: controlNetModule,
+      model: controlNetModel,
+      weight: controlNetWeight,
+      mode: settings.technical?.controlNetMode || 'My prompt is more important',
+      steps: steps,
+      cfgScale: settings.technical?.cfgScale || settings.cfgScale || 6.5
+    });
+
+    // Retry mechanism with exponential backoff
+    const MAX_RETRIES = 3;
+    let retryCount = 0;
+    let lastError;
+
+    while (retryCount < MAX_RETRIES) {
+      try {
+        const payload = {
+          prompt: prompt,
+          negative_prompt: negativePrompt,
+          steps: steps,
+          cfg_scale: settings.technical?.cfgScale || settings.cfgScale || settings.guidanceScale || 6.5,
+          width: 768,  // Higher resolution for better quality
+          height: 768,
+          sampler_name: "DPM++ 2M", // Use DPM++ 2M for consistency
+          batch_size: 1,
+          n_iter: 1,
+          seed: -1,
+          alwayson_scripts: {
+            controlnet: {
+              args: [
+                {
+                  image: processedControlImage,
+                  module: controlNetModule,
+                  model: controlNetModel,
+                  weight: controlNetWeight,
+                  guidance_start: 0.0,
+                  guidance_end: 1.0,
+                  processor_res: 1024, // Higher resolution for better detail preservation
+                  control_mode: "My prompt is more important", // Use My prompt is more important for more creative freedom
+                  pixel_perfect: true,
+                  low_vram: false,
+                  threshold_a: 32,  // Lower threshold for more sensitive line detection
+                  threshold_b: 192,  // Upper threshold for line detection
+                  preprocessor: "lineart_coarse" // Use coarse for architectural sketches
+                }
+              ]
+            }
+          }
+        };
+
+        console.log('Sending txt2img request with ControlNet guidance');
+
+        const response = await fetch(runpodAPIUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        console.log('API Response Status:', response.status);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+        }
+
+        const data = await response.json();
+        if (!data || !data.images || !data.images[0]) {
+          throw new Error('Invalid response from API: missing image data');
+        }
+
+        console.log('Successfully received image data from txt2img API');
+        let imageData = data.images[0];
+
+        // Add image prefix if needed
+        if (typeof imageData === 'string' && !imageData.startsWith('data:image/')) {
+          imageData = `data:image/png;base64,${imageData}`;
+        }
+
+        return imageData;
+      } catch (error) {
+        lastError = error;
+        const delay = Math.pow(2, retryCount) * 1000;
+        console.log(`Retrying in ${delay}ms due to:`, error);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        retryCount++;
+      }
+    }
+
+    throw new Error(`Failed after ${MAX_RETRIES} attempts: ${lastError instanceof Error ? lastError.message : 'Unknown error'}`);
+  } catch (error: any) {
+    console.error('RunPod API error:', error);
+    throw error;
+  }
+}

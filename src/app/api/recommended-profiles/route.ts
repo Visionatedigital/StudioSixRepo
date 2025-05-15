@@ -32,10 +32,12 @@ const profileIcons = [
   '/profile-icons/Profile-icon-10.svg'
 ];
 
-// Function to get a random profile icon
-const getRandomProfileIcon = () => {
-  const randomIndex = Math.floor(Math.random() * profileIcons.length);
-  return profileIcons[randomIndex];
+// Function to get a consistent profile icon for a user based on their ID
+const getProfileIconForUser = (userId: string) => {
+  // Use the sum of character codes in userId to create a deterministic index
+  const charCodeSum = userId.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  const index = charCodeSum % profileIcons.length;
+  return profileIcons[index];
 };
 
 export async function GET() {
@@ -94,16 +96,23 @@ export async function GET() {
     );
 
     // Format the response
-    const formattedProfiles = profilesWithCounts.map(profile => ({
-      id: profile.id,
-      name: profile.name || 'Anonymous',
-      avatar: profile.image || getRandomProfileIcon(),
-      level: Math.min(Math.floor(profile.credits / 1000) + 1, 5),
-      levelTitle: 'Designer',
-      followers: profile.followersCount,
-      following: profile.followingCount,
-      verified: profile.verified
-    }));
+    const formattedProfiles = profilesWithCounts.map(profile => {
+      // Get avatar URL - if user has an image use it, otherwise generate a consistent avatar
+      const avatarUrl = profile.image 
+        ? profile.image 
+        : getProfileIconForUser(profile.id);
+      
+      return {
+        id: profile.id,
+        name: profile.name || 'Anonymous',
+        avatar: avatarUrl,
+        level: Math.min(Math.floor(profile.credits / 1000) + 1, 5),
+        levelTitle: 'Designer',
+        followers: profile.followersCount,
+        following: profile.followingCount,
+        verified: profile.verified
+      };
+    });
 
     return NextResponse.json({ profiles: formattedProfiles });
   } catch (error) {

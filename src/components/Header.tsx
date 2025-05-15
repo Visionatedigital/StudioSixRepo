@@ -42,7 +42,7 @@ export default function Header() {
         </div>
 
         {/* Buttons */}
-        <div className="flex flex-row items-center gap-[16px]">
+        <div className="flex-1 sm:flex-none flex flex-row items-center justify-center sm:justify-end gap-[16px]">
           <Link 
             href="/sign-in" 
             className="hidden sm:flex justify-center items-center px-6 py-2.5 bg-[#F8F8F8] rounded-lg hover:bg-[#F0F0F0]"

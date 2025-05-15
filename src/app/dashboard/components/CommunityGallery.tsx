@@ -129,31 +129,36 @@ export default function CommunityGallery() {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 w-full overflow-visible">
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-semibold text-[#1B1464]">Get inspired from Community</h2>
         <button className="text-[#844BDC] hover:text-[#6B3EB3] transition-colors font-medium">
           View All
         </button>
       </div>
-      <div className="grid grid-cols-3 gap-4">
-        {images.map((image, index) => {
-          // Adjust grid spans based on index for better layout
+      
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 w-full overflow-visible pb-4">
+        {images.slice(0, 6).map((image, index) => {
           let gridSpan;
           if (index === 0) {
-            gridSpan = 'col-span-2 row-span-2'; // First image large
+            gridSpan = 'sm:col-span-2 sm:row-span-2';
           } else if (index === 1 || index === 2) {
-            gridSpan = 'col-span-1 row-span-1'; // Next two small
+            gridSpan = 'col-span-1 row-span-1';
           } else if (index === 3) {
-            gridSpan = 'col-span-2 row-span-1'; // Fourth image horizontal
+            gridSpan = 'sm:col-span-2 row-span-1';
           } else {
-            gridSpan = 'col-span-1 row-span-1'; // Rest small
+            gridSpan = 'col-span-1 row-span-1';
           }
 
           return (
             <div 
               key={image.id} 
-              className={`${gridSpan} group relative overflow-hidden rounded-xl aspect-square`}
+              className={`${gridSpan} group relative overflow-hidden rounded-xl shadow-sm hover:shadow-md transition-shadow duration-300`}
+              style={{
+                aspectRatio: index === 0 ? '2/2' : 
+                             index === 3 ? '2/1' : '1/1',
+                minHeight: index === 0 ? '300px' : '150px'
+              }}
             >
               <Image
                 src={image.src}

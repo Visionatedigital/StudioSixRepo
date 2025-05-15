@@ -33,18 +33,18 @@ export default function FAQ() {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
   return (
-    <div className="space-y-[32px]">
+    <div className="space-y-[20px] md:space-y-[32px]">
       {faqs.map((faq, index) => (
-        <div key={index} className="border-b border-[#6B6B6B]/50 pb-[32px]">
+        <div key={index} className="border-b border-[#6B6B6B]/50 pb-[20px] md:pb-[32px]">
           <button 
             className="w-full flex items-center justify-between group"
             onClick={() => setOpenIndex(openIndex === index ? null : index)}
           >
-            <h3 className="font-inter text-[24px] leading-[32px] text-[#6B6B6B] text-left group-hover:text-[#1B1464]">
+            <h3 className="font-inter text-[18px] md:text-[24px] leading-[24px] md:leading-[32px] text-[#6B6B6B] text-left group-hover:text-[#1B1464]">
               {faq.question}
             </h3>
             <svg 
-              className={`w-6 h-6 text-[#6B6B6B] transform transition-transform duration-200 group-hover:text-[#1B1464] ${openIndex === index ? 'rotate-180' : ''}`}
+              className={`w-5 h-5 md:w-6 md:h-6 flex-shrink-0 ml-2 text-[#6B6B6B] transform transition-transform duration-200 group-hover:text-[#1B1464] ${openIndex === index ? 'rotate-180' : ''}`}
               viewBox="0 0 24 24"
             >
               <path 
@@ -54,7 +54,7 @@ export default function FAQ() {
             </svg>
           </button>
           <div 
-            className={`mt-4 font-inter text-[18px] leading-[28px] text-[#6B6B6B] pl-1 transition-all duration-200 ${openIndex === index ? 'block' : 'hidden'}`}
+            className={`mt-3 md:mt-4 font-inter text-[16px] md:text-[18px] leading-[24px] md:leading-[28px] text-[#6B6B6B] pl-1 transition-all duration-200 ${openIndex === index ? 'block' : 'hidden'}`}
           >
             {faq.answer}
           </div>

@@ -1,0 +1,24 @@
+[2025-05-14T10:20:46.993Z] Case study search request: {
+  "projectType": "healthcare",
+  "location": "urban",
+  "size": "large",
+  "materials": [
+    "Concrete"
+  ],
+  "keywords": "sustainable"
+}
+[2025-05-14T10:20:46.993Z] Environment detection: NODE_ENV=development, using mock scraper 
+[2025-05-14T10:20:46.993Z] Using mock scraper for development or testing 
+[2025-05-14T10:20:51.727Z] Found 3 mock case studies 
+[2025-05-14T12:27:24.385Z] Case study search request: {
+  "projectType": "healthcare",
+  "location": "urban",
+  "size": "large",
+  "materials": [
+    "Concrete"
+  ],
+  "keywords": "sustainable"
+}
+[2025-05-14T12:27:24.385Z] Environment detection: NODE_ENV=development, using mock scraper 
+[2025-05-14T12:27:24.385Z] Using mock scraper for development or testing 
+[2025-05-14T12:27:28.575Z] Found 3 mock case studies 
