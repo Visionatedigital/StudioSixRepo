@@ -10,7 +10,7 @@ import { signOut, useSession } from 'next-auth/react';
 function VerifyEmailContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { update: updateSession } = useSession();
+  const { update: updateSession, data: session } = useSession();
   const [email, setEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -19,6 +19,12 @@ function VerifyEmailContent() {
   const [isVerified, setIsVerified] = useState(false);
 
   useEffect(() => {
+    // Check if user is already verified
+    if (session?.user?.verified) {
+      router.push('/dashboard');
+      return;
+    }
+
     // Check if there's a verification token in the URL
     const token = searchParams.get('token');
     const emailParam = searchParams.get('email');
@@ -28,7 +34,7 @@ function VerifyEmailContent() {
     if (emailParam) {
       setEmail(emailParam);
     }
-  }, [searchParams]);
+  }, [searchParams, session, router]);
 
   const handleResendVerification = async () => {
     if (!email) return;
@@ -79,20 +85,12 @@ function VerifyEmailContent() {
       try {
         await updateSession({
           verified: true,
-          email_verified: new Date(),
+          emailVerified: new Date(),
         });
       } catch (sessionError) {
         console.error("Error updating session:", sessionError);
         // Continue with sign-out even if session update fails
       }
-      
-      // Sign out and redirect to sign in with a param to indicate verification was completed
-      setTimeout(() => {
-        signOut({ 
-          callbackUrl: 'https://studiosix.ai/sign-in?verified=true',
-          redirect: true
-        });
-      }, 2000);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
@@ -182,14 +180,22 @@ function VerifyEmailContent() {
               </div>
             )}
 
-            {/* Success Message */}
+            {/* Success Message and Continue Button */}
             {isVerified && (
-              <div className="w-full p-3 mb-4 bg-green-50 border border-green-200 rounded-lg">
-                <div className="flex items-center justify-center space-x-2">
-                  <Icon name="check-circle" className="w-5 h-5 text-green-500" />
-                  <p className="text-sm text-green-600">Email verified successfully!</p>
+              <>
+                <div className="w-full p-3 mb-4 bg-green-50 border border-green-200 rounded-lg">
+                  <div className="flex items-center justify-center space-x-2">
+                    <Icon name="check-circle" className="w-5 h-5 text-green-500" />
+                    <p className="text-sm text-green-600">Email verified successfully!</p>
+                  </div>
                 </div>
-              </div>
+                <button
+                  className="w-full h-[46px] bg-[#844BDC] text-white rounded-[12px] font-medium hover:bg-[#844BDC]/90 transition-colors"
+                  onClick={() => signOut({ callbackUrl: '/sign-in?verified=true' })}
+                >
+                  Continue to Sign In
+                </button>
+              </>
             )}
 
             {verificationToken && !isVerified ? (

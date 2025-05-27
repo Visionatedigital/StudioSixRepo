@@ -88,10 +88,46 @@ export default function CommunityContent({ categoryId, categoryName, channelId, 
   const [pollDuration, setPollDuration] = useState('24 hours');
   const [allowMultipleAnswers, setAllowMultipleAnswers] = useState(false);
   const [votedPolls, setVotedPolls] = useState<{ [key: string]: string[] }>({});
-  const [refreshInterval, setRefreshInterval] = useState<NodeJS.Timeout | null>(null);
+  const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [lastMessageFetchTime, setLastMessageFetchTime] = useState<Date>(new Date());
   const [showMessageMenu, setShowMessageMenu] = useState<string | null>(null);
   const messageMenuRef = useRef<HTMLDivElement>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Utility: Compare arrays of messages by id
+  const areMessagesEqual = (a: Message[], b: Message[]): boolean => {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (a[i].id !== b[i].id) return false;
+    }
+    return true;
+  };
+
+  // Optimized setMessages: only update if changed
+  const updateMessages = (newMessages: Message[]): void => {
+    setMessages((prev: Message[]) => {
+      if (areMessagesEqual(prev, newMessages)) return prev;
+      return newMessages;
+    });
+  };
+
+  // When fetching, append only new messages
+  const appendNewMessages = (fetchedMessages: Message[]): void => {
+    setMessages((prev: Message[]) => {
+      const existingIds = new Set(prev.map((m: Message) => m.id));
+      const newOnes = fetchedMessages.filter((m: Message) => !existingIds.has(m.id));
+      if (newOnes.length === 0) return prev;
+      return [...prev, ...newOnes];
+    });
+  };
+
+  // Utility: Filter out messages with blob URLs in attachments
+  const filterOutBlobMessages = (messages: Message[]): Message[] =>
+    messages.filter(
+      m =>
+        !m.attachments ||
+        m.attachments.every(att => !att.url.startsWith('blob:') && !att.url.startsWith('/blob:'))
+    );
 
   // Fetch messages based on category and channel with improved error handling
   const fetchMessages = useCallback(async (initialLoad = false) => {
@@ -132,9 +168,16 @@ export default function CommunityContent({ categoryId, categoryName, channelId, 
             // Ensure the attachment has a valid URL
             let url = attachment.url || '';
             
-            // Make sure image URLs start with a slash if they're relative
-            if (attachment.type === 'image' && url && !url.startsWith('/') && !url.startsWith('http')) {
-              url = `/${url}`;
+            // Handle different URL types
+            if (attachment.type === 'image') {
+              if (url.startsWith('/blob:')) {
+                // For blob URLs, just remove the leading slash
+                url = url.slice(1);
+              } else if (!url.startsWith('http') && !url.startsWith('blob:')) {
+                // For regular relative URLs, add the origin
+                const origin = typeof window !== 'undefined' ? window.location.origin : '';
+                url = `${origin}${url}`;
+              }
               console.log(`Fixed relative image URL: ${url}`);
             }
             
@@ -185,11 +228,11 @@ export default function CommunityContent({ categoryId, categoryName, channelId, 
       
       if (loadingTime < minLoadingTime) {
         setTimeout(() => {
-          setMessages(transformedMessages);
+          updateMessages(filterOutBlobMessages(transformedMessages));
           if (initialLoad) setIsLoading(false);
         }, minLoadingTime - loadingTime);
       } else {
-        setMessages(transformedMessages);
+        updateMessages(filterOutBlobMessages(transformedMessages));
         if (initialLoad) setIsLoading(false);
       }
     } catch (error) {
@@ -200,7 +243,7 @@ export default function CommunityContent({ categoryId, categoryName, channelId, 
         setTimeout(() => {
           // Keep this for backward compatibility, but we won't use it in production
           const mockMessages: Message[] = [];
-          setMessages(mockMessages);
+          updateMessages(mockMessages);
           setIsLoading(false);
         }, Math.max(0, 300 - (Date.now() - loadingStart)));
       }
@@ -210,31 +253,28 @@ export default function CommunityContent({ categoryId, categoryName, channelId, 
   // Set up auto-refresh interval when channelId changes
   useEffect(() => {
     console.log('Setting up message refresh interval for channel:', channelId);
-    
+
     // Clear previous interval if exists
-    if (refreshInterval) {
-      console.log('Clearing previous interval');
-      clearInterval(refreshInterval);
-      setRefreshInterval(null);
+    if (refreshIntervalRef.current) {
+      clearInterval(refreshIntervalRef.current);
+      refreshIntervalRef.current = null;
     }
 
     // Initial fetch
     fetchMessages(true);
-    
-    // Set up auto-refresh every 30 seconds instead of 10
-    const interval = setInterval(() => {
+
+    // Set up auto-refresh every 30 seconds
+    refreshIntervalRef.current = setInterval(() => {
       console.log('Auto-refreshing messages for channel:', channelId);
       fetchMessages(false);
-    }, 30000); // 30 seconds instead of 10
-    
-    setRefreshInterval(interval);
-    
+    }, 30000);
+
     // Cleanup function
     return () => {
       console.log('Cleaning up message refresh interval');
-      if (refreshInterval) {
-        clearInterval(refreshInterval);
-        setRefreshInterval(null);
+      if (refreshIntervalRef.current) {
+        clearInterval(refreshIntervalRef.current);
+        refreshIntervalRef.current = null;
       }
     };
   }, [fetchMessages, channelId]);
@@ -248,169 +288,63 @@ export default function CommunityContent({ categoryId, categoryName, channelId, 
   const handleSendMessage = async () => {
     if (!newMessage.trim() && attachments.length === 0) return;
     
-    // Generate a unique temporary ID for the message (for optimistic UI updates)
-    const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    
-    // Create temporary attachments from the current files for UI display
-    const tempMessageAttachments = attachments.map(file => ({
-      type: file.type.startsWith('image/') 
-        ? 'image' 
-        : file.type.startsWith('video/') 
-          ? 'video' 
-          : 'file',
-      url: file.type.startsWith('image/') ? '/images/placeholder-render.jpg' : '#', // Placeholder until upload completes
-      name: file.name,
-      size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`
-    }));
-    
-    // Create a temporary message object for immediate display
-    const newMessageObj: Message = {
-      id: tempId,
-      userId: session?.user?.id || 'current-user',
-      username: session?.user?.name || 'You',
-      userImage: session?.user?.image || '/profile-icons/profile-icon-01.png',
-      userLevel: 1,
-      userVerified: false,
-      content: newMessage,
-      timestamp: new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-      channelId: channelId,
-      likes: 0,
-      replies: 0,
-      attachments: tempMessageAttachments.length > 0 ? tempMessageAttachments as any : undefined
-    };
-    
-    // Add the temporary message to the UI immediately
-    setMessages(prevMessages => [...prevMessages, newMessageObj]);
-    
-    // Clear input and attachments
+    // Upload attachments first and get permanent URLs
+    let uploadedAttachments: {
+      type: 'image' | 'video' | 'file';
+      url: string;
+      name: string;
+      size: string;
+    }[] = [];
+    if (attachments.length > 0) {
+      uploadedAttachments = await Promise.all(
+        attachments.map(async (file) => {
+          const formData = new FormData();
+          formData.append('file', file);
+          const uploadResponse = await fetch('/api/upload', {
+            method: 'POST',
+            body: formData,
+          });
+          if (!uploadResponse.ok) {
+            throw new Error(`Failed to upload file: ${file.name}`);
+          }
+          const uploadResult = await uploadResponse.json();
+          return {
+            type: file.type.startsWith('image/') 
+              ? 'image' 
+              : file.type.startsWith('video/') 
+                ? 'video' 
+                : 'file',
+            url: uploadResult.url,
+            name: file.name,
+            size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`
+          };
+        })
+      );
+    }
+    // Now send the message with the permanent attachment URLs
+    const response = await fetch('/api/community/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        content: newMessage,
+        channelId,
+        attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
+      }),
+    });
+    if (!response.ok) {
+      // Optionally show error to user
+      return;
+    }
+    const data = await response.json();
+    appendNewMessages(filterOutBlobMessages([data.message]));
     setNewMessage('');
     setAttachments([]);
     setSelectedFiles([]);
-    
-    // Scroll to the bottom after a short delay to ensure the message is rendered
     setTimeout(() => {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
-    
-    let retryCount = 0;
-    const maxRetries = 3;
-    
-    const sendMessageToApi = async () => {
-      try {
-        // First, upload any attachments to get permanent URLs
-        let uploadedAttachments: {
-          type: 'image' | 'video' | 'file';
-          url: string;
-          name: string;
-          size: string;
-        }[] = [];
-        
-        if (attachments.length > 0) {
-          uploadedAttachments = await Promise.all(
-            attachments.map(async (file) => {
-              const formData = new FormData();
-              formData.append('file', file);
-              
-              // Upload the file
-              const uploadResponse = await fetch('/api/upload', {
-                method: 'POST',
-                body: formData,
-              });
-              
-              if (!uploadResponse.ok) {
-                throw new Error(`Failed to upload file: ${file.name}`);
-              }
-              
-              const uploadResult = await uploadResponse.json();
-              
-              // Return the attachment with a permanent URL
-              return {
-                type: file.type.startsWith('image/') 
-                  ? 'image' 
-                  : file.type.startsWith('video/') 
-                    ? 'video' 
-                    : 'file',
-                url: uploadResult.url,
-                name: file.name,
-                size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`
-              };
-            })
-          );
-          
-          console.log('All files uploaded successfully:', uploadedAttachments);
-        }
-        
-        // Now send the message with the permanent attachment URLs
-        const response = await fetch('/api/community/messages', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            content: newMessageObj.content,
-            channelId,
-            attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
-          }),
-        });
-        
-        if (!response.ok) {
-          throw new Error(`Failed to send message: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        console.log('Message sent successfully:', data);
-        
-        // Replace the temporary message with the real one from the server
-        setMessages(prevMessages => 
-          prevMessages.map(msg => msg.id === tempId ? {
-            ...data.message,
-            username: data.message.user?.name || 'Unknown User',
-            userImage: data.message.user?.image || '/profile-icons/default.png',
-            userLevel: data.message.user?.level || 1,
-            userVerified: data.message.user?.verified || false,
-            timestamp: data.message.createdAt,
-          } : msg)
-        );
-        
-        // Update the message list to ensure we have the latest data
-        setTimeout(() => {
-          fetchMessages(false);
-        }, 1000);
-        
-        return true;
-      } catch (error) {
-        console.error('Error sending message:', error);
-        
-        if (retryCount < maxRetries) {
-          retryCount++;
-          console.log(`Retrying sending message (attempt ${retryCount}/${maxRetries})...`);
-          // Exponential backoff: 1s, 2s, 4s, etc.
-          await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retryCount - 1)));
-          return sendMessageToApi();
-        } else {
-          console.error('Maximum retries reached. Could not send message.');
-          
-          // Keep the message in the UI but mark it with an error state
-          setMessages(prevMessages => 
-            prevMessages.map(msg => {
-              if (msg.id === tempId) {
-                return {
-                  ...msg,
-                  sendFailed: true
-                };
-              }
-              return msg;
-            })
-          );
-          
-          return false;
-        }
-      }
-    };
-    
-    // Try to send the message (with retries)
-    await sendMessageToApi();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -437,130 +371,48 @@ export default function CommunityContent({ categoryId, categoryName, channelId, 
   // Update handleUploadWithCaption to upload files to the server
   const handleUploadWithCaption = async () => {
     if (!uploadCaption && selectedFiles.length === 0) return;
-    
-    // Generate a unique temporary ID for optimistic UI updates
-    const tempId = `temp-upload-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    
-    // Create temporary file attachments for UI display while uploading
-    const tempFileAttachments = selectedFiles.map(file => {
-      const isImage = file.type.startsWith('image/');
-      return {
-        type: isImage ? 'image' as const : 'file' as const,
-        url: isImage ? '/images/placeholder-render.jpg' : '#', // Placeholder until upload completes
-        name: file.name,
-        size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`
-      };
+    // Upload all files to get permanent URLs
+    const uploadedAttachments = await Promise.all(
+      selectedFiles.map(async (file) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        const uploadResponse = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData,
+        });
+        if (!uploadResponse.ok) {
+          throw new Error(`Failed to upload file: ${file.name}`);
+        }
+        const uploadResult = await uploadResponse.json();
+        return {
+          type: file.type.startsWith('image/') ? 'image' as const : 'file' as const,
+          url: uploadResult.url,
+          name: file.name,
+          size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`
+        };
+      })
+    );
+    // Now create the message with permanent URLs
+    const response = await fetch('/api/community/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        content: uploadCaption,
+        channelId,
+        attachments: uploadedAttachments,
+      }),
     });
-    
-    // Create temporary message object for immediate display
-    const newMessageObj: Message = {
-      id: tempId,
-      userId: session?.user?.id || 'current-user',
-      username: session?.user?.name || 'You',
-      userImage: session?.user?.image || '/profile-icons/default.png',
-      userLevel: 1,
-      userVerified: false,
-      content: uploadCaption,
-      timestamp: new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-      channelId: channelId,
-      likes: 0,
-      replies: 0,
-      attachments: tempFileAttachments,
-      sendFailed: false
-    };
-    
-    // Add the message to the UI immediately (optimistic update)
-    setMessages(prev => [...prev, newMessageObj]);
-    
-    // Clear form and close modal
+    if (!response.ok) {
+      // Optionally show error to user
+      return;
+    }
+    const data = await response.json();
+    appendNewMessages(filterOutBlobMessages([data.message]));
     setSelectedFiles([]);
     setUploadCaption('');
     setShowUploadModal(false);
-    
-    try {
-      // First, upload all the files to get permanent URLs
-      const uploadedAttachments = await Promise.all(
-        selectedFiles.map(async (file) => {
-          const formData = new FormData();
-          formData.append('file', file);
-          
-          // Upload the file
-          const uploadResponse = await fetch('/api/upload', {
-            method: 'POST',
-            body: formData,
-          });
-          
-          if (!uploadResponse.ok) {
-            throw new Error(`Failed to upload file: ${file.name}`);
-          }
-          
-          const uploadResult = await uploadResponse.json();
-          
-          // Return the attachment with a permanent URL
-          return {
-            type: file.type.startsWith('image/') ? 'image' as const : 'file' as const,
-            url: uploadResult.url, // Use the permanent URL from the server
-            name: file.name,
-            size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`
-          };
-        })
-      );
-      
-      console.log('All files uploaded successfully:', uploadedAttachments);
-      
-      // Now that we have all permanent URLs, create the message
-      const response = await fetch('/api/community/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          content: uploadCaption,
-          channelId,
-          attachments: uploadedAttachments,
-        }),
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to create message with attachments');
-      }
-      
-      const data = await response.json();
-      
-      // Replace the temporary message with the real one from the server
-      setMessages(prevMessages => 
-        prevMessages.map(msg => msg.id === tempId ? {
-          ...data.message,
-          username: data.message.user?.name || 'Unknown User',
-          userImage: data.message.user?.image || '/profile-icons/default.png',
-          userLevel: data.message.user?.level || 1,
-          userVerified: data.message.user?.verified || false,
-          timestamp: data.message.createdAt,
-        } : msg)
-      );
-      
-      // Fetch messages again after a short delay to ensure we have the latest
-      setTimeout(() => {
-        fetchMessages(false);
-      }, 1000);
-      
-    } catch (error) {
-      console.error('Error uploading message with attachments:', error);
-      
-      // Mark the message as failed
-      setMessages(prevMessages => 
-        prevMessages.map(msg => {
-          if (msg.id === tempId) {
-            return {
-              ...msg,
-              sendFailed: true
-            };
-          }
-          return msg;
-        })
-      );
-    }
   };
 
   const formatTimestamp = (timestamp: string) => {
@@ -655,19 +507,17 @@ export default function CommunityContent({ categoryId, categoryName, channelId, 
     const isCurrentlyLiked = likedMessages[messageId] || false;
     
     // Update UI optimistically
-    setMessages(prevMessages => 
-      prevMessages.map(message => {
-        if (message.id === messageId) {
-          const newLikeCount = isCurrentlyLiked ? Math.max(0, message.likes - 1) : message.likes + 1;
-          
-          return {
-            ...message,
-            likes: newLikeCount
-          };
-        }
-        return message;
-      })
-    );
+    updateMessages(messages.map(message => {
+      if (message.id === messageId) {
+        const newLikeCount = isCurrentlyLiked ? Math.max(0, message.likes - 1) : message.likes + 1;
+        
+        return {
+          ...message,
+          likes: newLikeCount
+        };
+      }
+      return message;
+    }));
     
     // Set the new like state
     setLikedMessages(prev => ({
@@ -699,20 +549,18 @@ export default function CommunityContent({ categoryId, categoryName, channelId, 
       console.error('Error liking/unliking message:', error);
       
       // Revert optimistic update if action fails
-      setMessages(prevMessages => 
-        prevMessages.map(message => {
-          if (message.id === messageId) {
-            // Revert like status
-            const revertedLikeCount = isCurrentlyLiked ? message.likes + 1 : Math.max(0, message.likes - 1);
-            
-            return {
-              ...message,
-              likes: revertedLikeCount
-            };
-          }
-          return message;
-        })
-      );
+      updateMessages(messages.map(message => {
+        if (message.id === messageId) {
+          // Revert like status
+          const revertedLikeCount = isCurrentlyLiked ? message.likes + 1 : Math.max(0, message.likes - 1);
+          
+          return {
+            ...message,
+            likes: revertedLikeCount
+          };
+        }
+        return message;
+      }));
       
       // Revert the liked status
       setLikedMessages(prev => ({
@@ -759,7 +607,7 @@ export default function CommunityContent({ categoryId, categoryName, channelId, 
     };
     
     // Add the thread to messages
-    setMessages(prev => [...prev, newThread]);
+    appendNewMessages([newThread]);
     
     // Clear the form and close the modal
     setThreadTitle('');
@@ -792,9 +640,7 @@ export default function CommunityContent({ categoryId, categoryName, channelId, 
       const data = await response.json();
       
       // Replace the temporary thread with the real one from the server
-      setMessages(prevMessages => 
-        prevMessages.map(msg => msg.id === tempId ? data.message : msg)
-      );
+      appendNewMessages([data.message]);
       
       // Update messages to ensure we have the latest data
       setTimeout(() => {
@@ -804,17 +650,10 @@ export default function CommunityContent({ categoryId, categoryName, channelId, 
     } catch (error) {
       console.error('Error creating thread:', error);
       // Mark the thread message as failed
-      setMessages(prevMessages => 
-        prevMessages.map(msg => {
-          if (msg.id === tempId) {
-            return {
-              ...msg,
-              sendFailed: true
-            };
-          }
-          return msg;
-        })
-      );
+      appendNewMessages([{
+        ...newThread,
+        sendFailed: true
+      }]);
     }
   };
 
@@ -879,7 +718,7 @@ export default function CommunityContent({ categoryId, categoryName, channelId, 
     };
     
     // Add the poll message to messages
-    setMessages(prev => [...prev, newPollMessage]);
+    appendNewMessages([newPollMessage]);
     
     // Clear the form and close the modal
     setPollQuestion('');
@@ -915,9 +754,7 @@ export default function CommunityContent({ categoryId, categoryName, channelId, 
       const data = await response.json();
       
       // Replace the temporary poll with the real one from the server
-      setMessages(prevMessages => 
-        prevMessages.map(msg => msg.id === tempId ? data.message : msg)
-      );
+      appendNewMessages([data.message]);
       
       // Update messages to ensure we have the latest data
       setTimeout(() => {
@@ -927,17 +764,10 @@ export default function CommunityContent({ categoryId, categoryName, channelId, 
     } catch (error) {
       console.error('Error creating poll:', error);
       // Mark the poll message as failed
-      setMessages(prevMessages => 
-        prevMessages.map(msg => {
-          if (msg.id === tempId) {
-            return {
-              ...msg,
-              sendFailed: true
-            };
-          }
-          return msg;
-        })
-      );
+      appendNewMessages([{
+        ...newPollMessage,
+        sendFailed: true
+      }]);
     }
   };
 
@@ -1017,7 +847,7 @@ export default function CommunityContent({ categoryId, categoryName, channelId, 
       };
       
       // Update messages state (optimistic update)
-      setMessages(updatedMessages);
+      updateMessages(updatedMessages);
       
       // Make API call to update the vote
       const response = await fetch('/api/community/polls/vote', {
@@ -1061,7 +891,7 @@ export default function CommunityContent({ categoryId, categoryName, channelId, 
       if (!messageToDelete) return;
 
       // First, optimistically update the UI by removing the message
-      setMessages(prevMessages => prevMessages.filter(m => m.id !== messageId));
+      updateMessages(messages.filter(m => m.id !== messageId));
 
       // Call the API to delete the message
       const response = await fetch(`/api/community/messages?messageId=${messageId}`, {
@@ -1107,7 +937,7 @@ export default function CommunityContent({ categoryId, categoryName, channelId, 
     if (!messageToRetry) return;
     
     // Remove the failed message
-    setMessages(prev => prev.filter(m => m.id !== messageId));
+    updateMessages(messages.filter(m => m.id !== messageId));
     
     // Create a new message with the same content and attachments
     const retryMessageObj = {
@@ -1119,7 +949,7 @@ export default function CommunityContent({ categoryId, categoryName, channelId, 
     };
     
     // Add the new message to the UI
-    setMessages(prev => [...prev, retryMessageObj]);
+    appendNewMessages([retryMessageObj]);
     
     // Try to send to the API
     try {
@@ -1142,9 +972,7 @@ export default function CommunityContent({ categoryId, categoryName, channelId, 
       const data = await response.json();
       
       // Replace the retry message with the real one from the server
-      setMessages(prevMessages => 
-        prevMessages.map(msg => msg.id === retryMessageObj.id ? data.message : msg)
-      );
+      appendNewMessages([data.message]);
       
       // Fetch latest messages to ensure everything is in sync
       setTimeout(() => {
@@ -1155,19 +983,21 @@ export default function CommunityContent({ categoryId, categoryName, channelId, 
       console.error('Error retrying message send:', error);
       
       // Mark as failed again
-      setMessages(prevMessages => 
-        prevMessages.map(msg => {
-          if (msg.id === retryMessageObj.id) {
-            return {
-              ...msg,
-              sendFailed: true
-            };
-          }
-          return msg;
-        })
-      );
+      appendNewMessages([{
+        ...retryMessageObj,
+        sendFailed: true
+      }]);
     }
   };
+
+  // Filter messages based on search query
+  const filteredMessages = searchQuery.trim().length === 0
+    ? messages
+    : messages.filter(
+        m =>
+          m.content?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          m.username?.toLowerCase().includes(searchQuery.toLowerCase())
+      );
 
   return (
     <div className="flex flex-col h-full bg-[#F6F8FA]">
@@ -1179,9 +1009,11 @@ export default function CommunityContent({ categoryId, categoryName, channelId, 
           <span className="text-sm text-gray-500">({categoryName})</span>
         </div>
         <div className="relative">
-          <input 
+          <input
             type="text"
             placeholder="Search"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
             className="bg-[#F6F8FA] text-gray-700 text-sm rounded-md px-3 py-1 w-48 focus:outline-none border border-[#E0DAF3]"
           />
           <Icon name="search" size={16} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
@@ -1196,7 +1028,7 @@ export default function CommunityContent({ categoryId, categoryName, channelId, 
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
             </div>
           ) : (
-            <div className="space-y-6 pb-4">
+            <div className="pb-4">
               {/* Channel Introduction Card */}
               <div className="bg-white rounded-lg p-5 mb-6 shadow-sm border border-[#E0DAF3]">
                 <div className="flex items-start gap-4">
@@ -1214,14 +1046,11 @@ export default function CommunityContent({ categoryId, categoryName, channelId, 
                   </div>
                 </div>
               </div>
-              
               {/* Messages */}
-              {messages.length === 0 ? (
-                <div className="bg-white rounded-lg p-5 shadow-sm border border-[#E0DAF3] text-center">
-                  <p className="text-gray-500">No messages yet. Be the first to start a conversation!</p>
-                </div>
+              {filteredMessages.length === 0 ? (
+                <div className="text-center text-gray-500 py-8">No messages found.</div>
               ) : (
-                messages.map((message) => (
+                filteredMessages.map((message) => (
                   <CommunityMessage
                     key={message.id}
                     id={message.id}

@@ -55,32 +55,30 @@ export default function SocialPost({
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [fullImageUrl, setFullImageUrl] = useState('');
-  const [imageHeight, setImageHeight] = useState(isDetailView ? 500 : 300);
+  const [imageHeight, setImageHeight] = useState(isDetailView ? 220 : 140);
   
   // Format the image URL properly
   useEffect(() => {
     if (!imageUrl) return;
     
-    // Log the incoming URL for debugging
-    console.log(`SocialPost received imageUrl: ${imageUrl}`);
-    
     try {
-      if (imageUrl.startsWith('/')) {
+      if (imageUrl.startsWith('/blob:')) {
+        // For blob URLs, just remove the leading slash
+        setFullImageUrl(imageUrl.slice(1));
+      } else if (imageUrl.startsWith('blob:')) {
+        // Use blob URLs as-is
+        setFullImageUrl(imageUrl);
+      } else if (imageUrl.startsWith('/')) {
         // For server-relative URLs like /uploads/file.jpg
         const origin = typeof window !== 'undefined' ? window.location.origin : '';
-        const fullUrl = `${origin}${imageUrl}`;
-        console.log(`Setting fullImageUrl to: ${fullUrl}`);
-        setFullImageUrl(fullUrl);
+        setFullImageUrl(`${origin}${imageUrl}`);
       } else if (imageUrl.startsWith('http')) {
         // For absolute URLs, use as is
-        console.log(`Using absolute URL: ${imageUrl}`);
         setFullImageUrl(imageUrl);
       } else {
         // For other cases, treat as relative and add a leading slash
         const origin = typeof window !== 'undefined' ? window.location.origin : '';
-        const fullUrl = `${origin}/${imageUrl}`;
-        console.log(`Treating as relative URL: ${fullUrl}`);
-        setFullImageUrl(fullUrl);
+        setFullImageUrl(`${origin}/${imageUrl}`);
       }
     } catch (error) {
       console.error('Error processing image URL:', error);
@@ -113,8 +111,56 @@ export default function SocialPost({
     });
   };
 
+  // Guard: If imageUrl is a blob URL, show a spinner/placeholder instead of the image
+  if (imageUrl && (imageUrl.startsWith('blob:') || imageUrl.startsWith('/blob:'))) {
+    return (
+      <div className={`bg-white rounded-xl border border-[#E0DAF3] p-5 ${className}`} style={{ maxWidth: '420px', margin: '24px 0' }}>
+        {/* User Info */}
+        <div className="flex items-center space-x-4 mb-4">
+          <div className="relative w-12 h-12 rounded-full overflow-hidden border-2 border-[#E0DAF3] flex-shrink-0">
+            <Image
+              src={user.image || getRandomProfileIcon()}
+              alt={user.name || 'User'}
+              width={48}
+              height={48}
+              className="w-full h-full object-cover rounded-full"
+            />
+            {user.verified && (
+              <div className="absolute -bottom-1 -right-1 bg-blue-500 rounded-full p-0.5">
+                <Icon name="verified" size={16} className="text-white" />
+              </div>
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <p className="font-medium text-[#202126] truncate">{user.name}</p>
+              {user.level && (
+                <div className="flex items-center justify-center bg-purple-100 rounded-full w-5 h-5">
+                  <span className="text-purple-700 text-xs font-medium">{user.level}</span>
+                </div>
+              )}
+            </div>
+            <p className="text-sm text-gray-500">{formatDate(createdAt)}</p>
+          </div>
+        </div>
+        {/* Content */}
+        {content && (
+          <p className="text-base text-gray-700 mb-4 whitespace-pre-line">{content}</p>
+        )}
+        {/* Image uploading spinner */}
+        <div className="flex justify-center items-center" style={{ minHeight: 180 }}>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+          <span className="ml-2 text-gray-500">Uploading image...</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className={`bg-white rounded-xl border border-[#E0DAF3] p-5 ${className}`}>
+    <div
+      className={`bg-white rounded-xl border border-[#E0DAF3] p-5 ${className}`}
+      style={{ maxWidth: '420px', margin: '24px 0' }}
+    >
       {/* User Info */}
       <div className="flex items-center space-x-4 mb-4">
         <div className="relative w-12 h-12 rounded-full overflow-hidden border-2 border-[#E0DAF3] flex-shrink-0">
@@ -153,9 +199,14 @@ export default function SocialPost({
       {imageUrl && (
         <div 
           className={`rounded-lg overflow-hidden bg-gray-100 ${imageError ? 'border border-red-200' : 'border border-[#E0DAF3]'}`}
+          style={{
+            maxWidth: '360px',
+            margin: '0 auto',
+            width: '100%'
+          }}
         >
           <div 
-            className="relative w-full flex justify-center items-center transition-opacity duration-300"
+            className="relative flex justify-center items-center transition-opacity duration-300"
             style={{ 
               minHeight: `${imageHeight}px`,
               opacity: imageLoaded ? 1 : 0.5
@@ -170,10 +221,12 @@ export default function SocialPost({
             <img
               src={fullImageUrl || '/images/placeholder-render.jpg'}
               alt={content || "Post image"}
-              className={`w-full h-auto object-contain max-h-[600px] transition-all duration-300 ${imageError ? 'opacity-60' : ''}`}
+              className={`block h-auto object-contain max-h-[180px] transition-all duration-300 ${imageError ? 'opacity-60' : ''}`}
               style={{
                 display: imageLoaded ? 'block' : 'none',
-                maxHeight: `${imageHeight * 2}px`
+                maxHeight: `${imageHeight * 2}px`,
+                maxWidth: '100%',
+                margin: '0 auto'
               }}
               onLoad={() => {
                 console.log(`Successfully loaded image: ${fullImageUrl}`);
@@ -206,7 +259,7 @@ export default function SocialPost({
               <div className="absolute bottom-3 right-3 flex space-x-2">
                 <button 
                   className="p-2 bg-black bg-opacity-60 rounded-full hover:bg-opacity-80 transition-all"
-                  onClick={() => setImageHeight(prevHeight => prevHeight === 300 ? 500 : 300)}
+                  onClick={() => setImageHeight(prevHeight => prevHeight === 140 ? 220 : 140)}
                 >
                   <Icon name="expand" size={20} className="text-white" />
                 </button>

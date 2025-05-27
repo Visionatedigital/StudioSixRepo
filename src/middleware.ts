@@ -39,6 +39,7 @@ export default withAuth(
       '/api/generate/test', // Image generation test endpoint
       '/sign-up',            // Sign up page
       '/verify-email',       // Verify email page
+      '/api/payments/mobilemoney/callback', // Mobile Money callback endpoint
     ];
     
     // Check if the request is for a static asset
@@ -71,14 +72,24 @@ export default withAuth(
     }
 
     // Check if email is verified - use either verified or email_verified flag
-    if (token && !token.verified && !token.email_verified) {
-      // If trying to access protected routes, redirect to verify-email page
-      if (!isPublicPage) {
+    if (token) {
+      // console.log("[MIDDLEWARE] Token verification status:", {
+      //   verified: token.verified,
+      //   email_verified: token.email_verified
+      // });
+
+      const isVerified = Boolean(token.verified || token.email_verified);
+      // console.log("[MIDDLEWARE] Is user verified:", isVerified);
+
+      if (!isVerified) {
+      if (!isPublicPage && !req.nextUrl.pathname.startsWith('/verify-email')) {
+          // console.log("[MIDDLEWARE] Redirecting to verify-email page");
         const verifyEmailUrl = new URL('/verify-email', req.url);
         if (token.email) {
           verifyEmailUrl.searchParams.set('email', token.email as string);
         }
         return NextResponse.redirect(verifyEmailUrl);
+        }
       }
     }
 

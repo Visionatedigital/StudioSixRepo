@@ -68,7 +68,7 @@ export async function POST(req: Request) {
     console.log('Verification token created');
 
     // Send verification email
-    const verificationUrl = `${process.env.NEXTAUTH_URL}/verify-email?token=${token}&email=${encodeURIComponent(email)}`;
+    const verificationUrl = `${process.env.NEXT_PUBLIC_APP_URL}/verify-email?token=${token}&email=${encodeURIComponent(email)}`;
     console.log('Verification URL:', verificationUrl);
     
     try {

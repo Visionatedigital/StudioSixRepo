@@ -4,12 +4,12 @@
 console.log('[DEBUG] Canvas module loading started');
 
 import './Canvas.css';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { KonvaEventObject } from 'konva/lib/Node';
 import { Vector2d } from 'konva/lib/types';
 import { Stage as KonvaStage } from 'konva/lib/Stage';
 // Import components directly
-  import { Stage, Layer, KonvaRect, KonvaCircle, KonvaLine, KonvaText, KonvaImage, KonvaTransformer, KonvaGroup, Path } from './KonvaComponents';
+import { Stage, Layer, Rect as KonvaRect, Circle as KonvaCircle, Line as KonvaLine, Text as KonvaText, Image as KonvaImage, Transformer as KonvaTransformer, Group as KonvaGroup, Path, Shape as KonvaShape } from 'react-konva';
   import Konva from 'konva/lib/index';
 import nextImage from 'next/image';
 
@@ -39,7 +39,8 @@ import {
   StickyNoteStyle,
   ElementType,
   DrawingElement,
-  StickyNoteProps
+  StickyNoteProps,
+  TableElement
 } from '@/types/canvas';
 import Board from './Board';
 import { v4 as uuidv4 } from 'uuid';
@@ -60,6 +61,15 @@ import { processFile } from '@/utils/imageProcessing';
 import { SiteAnalysisRequest as ServiceSiteAnalysisRequest } from '@/services/siteAnalysis';
 import TextFormatMenu from './TextFormatMenu';
 import DrawingMenu from './DrawingMenu';
+import DrawingToolsTray from './DrawingToolsTray';
+import SimpleStickyNoteMenu from './SimpleStickyNoteMenu';
+import { Context } from 'konva/lib/Context';
+import ShapePropertiesMenu from './ShapePropertiesMenu';
+import StickersMenu from './StickersMenu';
+import { Transformer } from 'konva/lib/shapes/Transformer';
+import UploadMenu from './UploadMenu';
+import AIPopupMenu from './AIPopupMenu';
+import TableFormatMenu from './TableFormatMenu';
 
 type ShapeType = 'rect' | 'circle';
 
@@ -256,6 +266,40 @@ interface TextFormatMenuProps {
   onDelete: () => void;
 }
 
+interface ShapeProperties {
+  fill: string;
+  stroke: string;
+  strokeWidth: number;
+  opacity: number;
+  rotation: number;
+}
+
+const DEFAULT_SHAPE_PROPERTIES: ShapeProperties = {
+  fill: '#FFD700',
+  stroke: '#000000',
+  strokeWidth: 1,
+  opacity: 1,
+  rotation: 0
+};
+
+// 1. Add types for mind map nodes and connections
+interface MindMapNode {
+  id: string;
+  type: 'mindmap-node';
+  x: number;
+  y: number;
+  text: string;
+  color: string;
+  parentId?: string;
+  childIds: string[];
+}
+interface MindMapConnection {
+  id: string;
+  type: 'mindmap-connection';
+  from: string; // node id
+  to: string;   // node id
+}
+
 export default function Canvas({ name, description, projectId }: Props) {
   console.log('[DEBUG] Canvas component rendering started with props:', { name, description, projectId });
   
@@ -278,7 +322,6 @@ export default function Canvas({ name, description, projectId }: Props) {
       title: '',
       message: '',
     });
-    const [stickyNotes, setStickyNotes] = useState<StickyNoteData[]>([]);
     const stageRef = useRef<KonvaStage | null>(null);
     const transformerRef = useRef(null);
     const [isChatOpen, setIsChatOpen] = useState(true);
@@ -357,6 +400,74 @@ export default function Canvas({ name, description, projectId }: Props) {
     const ctx = canvasRef.current?.getContext('2d');
     const [startPosition, setStartPosition] = useState<Position | null>(null);
     const [endPosition, setEndPosition] = useState<Position | null>(null);
+    // Add state for the new simpleDraw tool
+    const [simpleDrawLines, setSimpleDrawLines] = useState<any[]>([]);
+    const [simpleDrawCurrentLine, setSimpleDrawCurrentLine] = useState<any | null>(null);
+    const [simpleDrawActive, setSimpleDrawActive] = useState(false);
+    const [simpleDrawColor, setSimpleDrawColor] = useState('#000000');
+    const [simpleDrawWidth, setSimpleDrawWidth] = useState(2);
+    const [simpleDrawTool, setSimpleDrawTool] = useState<'pencil' | 'marker' | 'eraser'>('pencil');
+    // Selection/hover state for simpleDraw lines
+    const [selectedSimpleDrawLine, setSelectedSimpleDrawLine] = useState<number | null>(null);
+    const [hoveredSimpleDrawLine, setHoveredSimpleDrawLine] = useState<number | null>(null);
+    const [simpleDrawLineMenuPos, setSimpleDrawLineMenuPos] = useState<{ x: number; y: number } | null>(null);
+    const simpleDrawLineRefs = useRef<(any | null)[]>([]);
+    // Add state for simplestickynote tool
+    const [simpleStickyNotes, setSimpleStickyNotes] = useState<any[]>([]);
+    const [selectedSimpleStickyNote, setSelectedSimpleStickyNote] = useState<number | null>(null);
+    const [simpleStickyNoteMenuPos, setSimpleStickyNoteMenuPos] = useState<{ x: number; y: number } | null>(null);
+    // State for shape placement
+    const [pendingShape, setPendingShape] = useState<string | null>(null);
+    const [showShapesMenu, setShowShapesMenu] = useState(false);
+    const [selectedShape, setSelectedShape] = useState('square');
+    const [selectedShapeElementId, setSelectedShapeElementId] = useState<string | null>(null);
+    const [shapeMenuPosition, setShapeMenuPosition] = useState<{ x: number; y: number } | null>(null);
+    const [pendingStickerUrl, setPendingStickerUrl] = useState<string | null>(null);
+    const stickerTransformerRef = useRef<any>(null);
+    const [showStickersMenu, setShowStickersMenu] = useState(false);
+    const [showUploadMenu, setShowUploadMenu] = useState(false);
+    const [uploadMenuFiles, setUploadMenuFiles] = useState<{
+      id: string;
+      name: string;
+      type: string;
+      url: string;
+    }[]>([]);
+    // Add state for table resizing
+    const [tableResize, setTableResize] = useState<{
+      tableId: string | null;
+      type: 'col' | 'row' | null;
+      index: number | null;
+      startPos: number | null;
+      startSize: number | null;
+    }>(
+      { tableId: null, type: null, index: null, startPos: null, startSize: null }
+    );
+    const [tableCursor, setTableCursor] = useState<string>('default');
+    // Add state for table hover and cell hover
+    const [hoveredTableId, setHoveredTableId] = useState<string | null>(null);
+    const [hoveredCell, setHoveredCell] = useState<{ row: number; col: number; tableId: string } | null>(null);
+    const [rowMenuOpen, setRowMenuOpen] = useState<number | null>(null);
+    const [colMenuOpen, setColMenuOpen] = useState<number | null>(null);
+    // Add local hover state for dummy row/col
+    const [dummyRowHovered, setDummyRowHovered] = useState<string | null>(null);
+    const [dummyColHovered, setDummyColHovered] = useState<string | null>(null);
+    // Add state for drag-and-reorder
+    const [draggingRow, setDraggingRow] = useState<{ tableId: string; rowIdx: number } | null>(null);
+    const [dragOverRow, setDragOverRow] = useState<number | null>(null);
+    const [draggingCol, setDraggingCol] = useState<{ tableId: string; colIdx: number } | null>(null);
+    const [dragOverCol, setDragOverCol] = useState<number | null>(null);
+    const [rowMenuHovered, setRowMenuHovered] = useState<{ tableId: string; rowIdx: number } | null>(null);
+    const [colMenuHovered, setColMenuHovered] = useState<{ tableId: string; colIdx: number } | null>(null);
+    // Add state for selected cell
+    const [selectedCell, setSelectedCell] = useState<{ tableId: string; row: number; col: number } | null>(null);
+    // Add state for editingCell and editingCellValue
+    const [editingCell, setEditingCell] = useState<{ tableId: string; row: number; col: number } | null>(null);
+    const [editingCellValue, setEditingCellValue] = useState('');
+    // 2. Add state for mind map nodes and connections
+    const [mindMapNodes, setMindMapNodes] = useState<MindMapNode[]>([]);
+    const [mindMapConnections, setMindMapConnections] = useState<MindMapConnection[]>([]);
+    const [editingMindMapNodeId, setEditingMindMapNodeId] = useState<string | null>(null);
+    const [editingMindMapNodeValue, setEditingMindMapNodeValue] = useState('');
 
     // Get current canvas data with safety check
     const currentCanvas = canvasStack[currentCanvasIndex] || canvasStack[0];
@@ -523,6 +634,7 @@ export default function Canvas({ name, description, projectId }: Props) {
 
     // Track and broadcast cursor position
     const handleMouseMove = (e: KonvaEventObject<MouseEvent>) => {
+      console.log('[DEBUG] handleMouseMove triggered', e);
       const stage = e.target.getStage();
       if (!stage) return;
 
@@ -560,6 +672,7 @@ export default function Canvas({ name, description, projectId }: Props) {
         ...currentLine,
           points: newPoints,
         };
+        console.log('[DRAW] Update line points:', newPoints);
         setCurrentLine(updatedLine);
         
         setLines(prev => {
@@ -743,34 +856,88 @@ export default function Canvas({ name, description, projectId }: Props) {
       }, 5000);
     };
 
+    const handleMouseDown = (e: KonvaEventObject<MouseEvent>) => {
+      console.log('[DEBUG] handleMouseDown triggered', e);
+      // ... rest of handleCanvasClick logic ...
+    }
+
     const handleCanvasClick = (e: KonvaEventObject<MouseEvent>) => {
+      console.log('[DEBUG] handleCanvasClick TOP', { pendingShape, selectedTool });
       // Clear selection box on right click
       if (e.evt.button === 2) {
+        console.log('[DEBUG] handleCanvasClick: right click, returning early');
         setSelectionBox(null);
+        return;
+      }
+
+      // Get stage reference
+      const stage = e.target.getStage();
+      if (!stage) {
+        console.log('[DEBUG] handleCanvasClick: no stage, returning early');
+        return;
+      }
+      
+      // Get pointer position
+      const pointerPos = stage.getPointerPosition();
+      if (!pointerPos) {
+        console.log('[DEBUG] handleCanvasClick: no pointerPos, returning early');
+        return;
+      }
+      
+      // Convert to stage coordinates
+      const transform = stage.getAbsoluteTransform().copy().invert();
+      const pos = transform.point(pointerPos);
+      
+      // Check if clicking on the stage (not on an element)
+      const isClickOnStage = e.target === stage;
+
+      console.log('[DEBUG] handleCanvasClick', { pendingShape, selectedTool, isClickOnStage });
+
+      // Handle text tool first - this should take priority when that tool is active
+      if (selectedTool === 'text' && isClickOnStage) {
+        console.log('Creating new text element at:', pos.x, pos.y);
+        const newTextElement: TextElement = {
+          id: uuidv4(),
+          type: 'text',
+          x: pos.x,
+          y: pos.y,
+          text: 'Double click to edit',
+          fontSize: 16,
+          isBold: false,
+          textAlign: 'left',
+          fill: '#000000',
+          width: 200,
+          height: 30,
+          isLocked: false,
+          canvasId: currentCanvas.id,
+          rotation: 0
+        };
+        setElements(prev => [...prev, newTextElement]);
+        setSelectedId(newTextElement.id);
+        
+        // Automatically switch back to mouse tool after creating text
+        setTool('mouse');
+        setSelectedTool('mouse');
+        console.log('Switched back to mouse tool after text creation');
+        
         return;
       }
 
       // Handle drawing tools
       if (drawingMode) {
-        if (e.target === e.target.getStage()) {
+        if (isClickOnStage) {
           setCurrentLine(null);
         }
         return;
       }
 
       // Handle sticky note creation
-      if (selectedTool === 'sticky-note') {
-        const stage = e.target.getStage();
-        if (!stage) return;
-
-        const point = stage.getPointerPosition();
-        if (!point) return;
-
+      if (selectedTool === 'sticky-note' && isClickOnStage) {
         const newStickyNote: StickyNoteElement = {
           id: uuidv4(),
           type: 'sticky-note',
-          x: point.x,
-          y: point.y,
+          x: pos.x,
+          y: pos.y,
           width: 200,
           height: 200,
           rotation: 0,
@@ -789,27 +956,45 @@ export default function Canvas({ name, description, projectId }: Props) {
           return;
       }
 
-      // Clear text menu when clicking on stage
-      if (e.target === e.target.getStage()) {
-        setSelectedTextElement(null);
-        setSelectedStickyNote(null);
+      // Handle table tool
+      if (selectedTool === 'table' && isClickOnStage) {
+        const defaultRows = 3;
+        const defaultCols = 3;
+        const defaultCellWidth = 100;
+        const defaultCellHeight = 40;
+        const newTable = {
+          id: uuidv4(),
+          type: 'table' as const,
+          x: pos.x,
+          y: pos.y,
+          width: defaultCols * defaultCellWidth,
+          height: defaultRows * defaultCellHeight,
+          rows: defaultRows,
+          columns: defaultCols,
+          cellWidths: Array(defaultCols).fill(defaultCellWidth),
+          cellHeights: Array(defaultRows).fill(defaultCellHeight),
+          data: Array.from({ length: defaultRows }, () => Array(defaultCols).fill('')),
+          canvasId: currentCanvas.id,
+          rotation: 0
+        };
+        setElements(prev => [...prev, newTable]);
+        setTool('mouse');
+        setSelectedTool('mouse');
         return;
       }
 
-      // Early return if no stage ref
-      if (!stageRef.current) return;
-
-      // Get stage and validate click target
-      const clickedStage = stageRef.current;
-      const isClickOnStage = e.target === clickedStage;
-      
-      // Get pointer position
-      const pointerPos = clickedStage.getPointerPosition();
-      if (!pointerPos) return;
-
-      // Convert to stage coordinates
-      const transform = clickedStage.getAbsoluteTransform().copy().invert();
-      const pos = transform.point(pointerPos);
+      // Clear text menu when clicking on stage
+      if (isClickOnStage) {
+        console.log('[DEBUG] handleCanvasClick: isClickOnStage, returning early (default clear)');
+        setTextMenuPosition(null);
+        setSelectedTextElement(null);
+        setSelectedGroupId(null);
+        setSelectedDrawing(null);
+        setIsExplicitlySelected(false);
+        setSelectedCell(null); // Deselect cell/table
+        setSelectedId(null); // Deselect table
+        return;
+      }
 
       // Handle right-click for selection box
       if (e.evt.button === 2 && isClickOnStage) { // 2 is right mouse button
@@ -824,28 +1009,7 @@ export default function Canvas({ name, description, projectId }: Props) {
         return;
       }
 
-      // Handle text tool
-      if (tool === 'text' && isClickOnStage) {
-        const newTextElement: TextElement = {
-          id: uuidv4(),
-          type: 'text',
-          x: pos.x,
-          y: pos.y,
-          text: 'Double click to edit',
-          fontSize: 16,
-          isBold: false,
-          textAlign: 'left',
-          fill: '#000000',
-          width: 200,
-          height: 30,
-          isLocked: false,
-          canvasId: currentCanvas.id
-        };
-        setElements(prev => [...prev, newTextElement]);
-        return;
-      }
-
-      // Handle sticky note tool
+      // Handle note tool
       if (tool === 'note' && isClickOnStage) {
         const newStickyNote: StickyNoteElement = {
           id: uuidv4(),
@@ -870,6 +1034,7 @@ export default function Canvas({ name, description, projectId }: Props) {
 
       // Handle drawing tool
       if (tool === 'draw' && isClickOnStage) {
+        console.log('[DRAW] Start new line at:', pos.x, pos.y, 'color:', strokeColor, 'width:', strokeWidth);
         setIsDrawing(true);
         setCurrentLine({
           points: [pos.x, pos.y],
@@ -883,11 +1048,14 @@ export default function Canvas({ name, description, projectId }: Props) {
 
       // If clicking on stage (not an element), clear text menu and selection
       if (isClickOnStage) {
+        console.log('[DEBUG] handleCanvasClick: isClickOnStage, returning early (default clear)');
         setTextMenuPosition(null);
         setSelectedTextElement(null);
         setSelectedGroupId(null);
         setSelectedDrawing(null);
         setIsExplicitlySelected(false);
+        setSelectedCell(null); // Deselect cell/table
+        setSelectedId(null); // Deselect table
         return;
       }
 
@@ -920,180 +1088,81 @@ export default function Canvas({ name, description, projectId }: Props) {
           return;
         }
       }
-    };
 
-    const handleMouseUp = (e: KonvaEventObject<MouseEvent>) => {
-      const stage = e.target.getStage();
-      
-      // Handle selection box completion
-      if (selectionBox?.isSelecting) {
-        const transform = stage?.getAbsoluteTransform().copy().invert();
-        const point = stage?.getPointerPosition();
-        if (transform && point) {
-          const pos = transform.point(point);
-          setSelectionBox(prev => {
-            if (!prev) return null;
-            
-            // Calculate selection box bounds
-            const x = Math.min(prev.startX, pos.x);
-            const y = Math.min(prev.startY, pos.y);
-            const width = Math.abs(pos.x - prev.startX);
-            const height = Math.abs(pos.y - prev.startY);
-            
-            // Find elements within the selection box
-            const selectedElements = elements.filter(element => {
-              const elementX = element.x;
-              const elementY = element.y;
-              const elementWidth = element.width || 0;
-              const elementHeight = element.height || 0;
-              
-              return elementX >= x &&
-                     elementX + elementWidth <= x + width &&
-                     elementY >= y &&
-                     elementY + elementHeight <= y + height;
-            });
-            
-            // Update selected elements
-            if (selectedElements.length > 0) {
-              setSelectedId(selectedElements[0].id);
-              setIsExplicitlySelected(true);
-            }
-            
-            return null;
-          });
-        }
+      // Handle placing a circle shape (single placement, switch to select tool)
+      if (pendingShape === 'circle' && isClickOnStage) {
+        console.log('[DEBUG] Placing circle at', pos.x, pos.y);
+        const newId = uuidv4();
+        const newCircle: ShapeElement = {
+          id: newId,
+          type: 'shape',
+          shapeType: 'circle',
+          x: pos.x,
+          y: pos.y,
+          width: 80,
+          height: 80,
+          fill: DEFAULT_SHAPE_PROPERTIES.fill,
+          stroke: DEFAULT_SHAPE_PROPERTIES.stroke,
+          strokeWidth: DEFAULT_SHAPE_PROPERTIES.strokeWidth,
+          opacity: DEFAULT_SHAPE_PROPERTIES.opacity,
+          rotation: DEFAULT_SHAPE_PROPERTIES.rotation,
+          canvasId: currentCanvas.id
+        };
+        setElements(prev => [...prev, newCircle]);
+        setSelectedShapeElementId(newId);
+        setPendingShape(null);
+        setSelectedTool('mouse');
+        setTool('mouse');
         return;
       }
       
-      if (tool === 'mouse') {
-        setIsDraggingCanvas(false);
-        if (stage) {
-          stage.container().style.cursor = 'default';
-        }
-      }
-
-      if (isDrawing && currentLine) {
-        setLines(prev => [...prev, currentLine]);
-        setCurrentLine(null);
-        setIsDrawing(false);
-
-        if (!drawingMode) {
-          setTool('mouse');
-          setSelectedTool('mouse');
-        }
-      }
-    };
-
-    const handleMouseLeave = () => {
-      const stage = stageRef.current;
-      
-      if (isDrawing && currentLine) {
-        // Save the current line when leaving the canvas
-        setLines(prev => [...prev, currentLine]);
-      setCurrentLine(null);
-        setIsDrawing(false);
-      }
-      
-      setIsDraggingCanvas(false);
-      if (stage && tool === 'mouse') {
-        stage.container().style.cursor = 'default';
-      }
-    };
-
-    const handleStageMouseEnter = (e: KonvaEventObject<MouseEvent>) => {
-      const stage = e.target.getStage();
-      if (!stage) return;
-
-      // Set the cursor based on the current tool and dragging state
-      if (tool === 'mouse') {
-        stage.container().style.cursor = isDraggingCanvas ? 'grabbing' : 'default';
-      } else if (tool === 'draw') {
-        stage.container().style.cursor = 'crosshair';
-      } else {
-        stage.container().style.cursor = 'default';
-      }
-    };
-
-    const handleWheel = (e: KonvaEventObject<WheelEvent>) => {
-      e.evt.preventDefault();
-      const stage = e.target.getStage();
-      if (!stage) return;
-
-      const oldScale = stage.scaleX();
-      const mousePointTo = {
-        x: stage.getPointerPosition()?.x || 0,
-        y: stage.getPointerPosition()?.y || 0,
-      };
-
-      let newScale = e.evt.deltaY < 0 ? oldScale * 1.1 : oldScale / 1.1;
-      newScale = Math.max(0.1, Math.min(10, newScale));
-
-      setScale(newScale);
-      setPosition({
-        x: mousePointTo.x - (mousePointTo.x - stage.x()) * (newScale / oldScale),
-        y: mousePointTo.y - (mousePointTo.y - stage.y()) * (newScale / oldScale),
-      });
-    };
-
-    const handleDragStart = (e: KonvaEventObject<DragEvent>) => {
-      const id = e.target.id();
-      const element = elements.find(el => el.id === id);
-      
-      // Only set selectedId if the element is not a text element
-      if (element?.type !== 'text') {
-      setSelectedId(id);
+      // If clicking on stage (not an element), clear text menu and selection
+      if (isClickOnStage) {
+        console.log('[DEBUG] handleCanvasClick: isClickOnStage, returning early (default clear)');
+        setTextMenuPosition(null);
+        setSelectedTextElement(null);
+        setSelectedGroupId(null);
+        setSelectedDrawing(null);
         setIsExplicitlySelected(false);
+        setSelectedCell(null); // Deselect cell/table
+        setSelectedId(null); // Deselect table
+        return;
+      }
+
+      // Place sticker if pendingStickerUrl is set
+      if (pendingStickerUrl) {
+        const stage = e.target.getStage();
+        if (!stage) return;
+        const pointerPos = stage.getPointerPosition();
+        if (!pointerPos) return;
+        const transform = stage.getAbsoluteTransform().copy().invert();
+        const pos = transform.point(pointerPos);
+        const img = new window.Image();
+        img.src = pendingStickerUrl;
+        img.onload = () => {
+          const newSticker: UploadedElement = {
+            id: uuidv4(),
+            type: 'uploaded' as const,
+            x: pos.x - 40,
+            y: pos.y - 40,
+            width: 80,
+            height: 80,
+            image: img,
+            file: undefined as any,
+            canvasId: currentCanvas.id,
+            rotation: 0
+          };
+          setElements(prev => [...prev, newSticker]);
+        };
+        setPendingStickerUrl(null);
+        setSelectedTool('mouse');
+        setTool('mouse');
+        return;
       }
     };
 
-    const handleTransformEnd = (e: KonvaEventObject<Event>) => {
-      const node = e.target;
-      const scaleX = node.scaleX();
-      const scaleY = node.scaleY();
-
-      node.scaleX(1);
-      node.scaleY(1);
-
-      setElements(
-        elements.map((el) => {
-          if (el.id === node.id()) {
-            return {
-              ...el,
-              x: node.x(),
-              y: node.y(),
-              width: node.width() * scaleX,
-              height: node.height() * scaleY,
-              rotation: node.rotation(),
-            };
-          }
-          return el;
-        })
-      );
-    };
-
-    const handleMoveNote = (id: string, x: number, y: number) => {
-      setStickyNotes(prev => 
-        prev.map(note => 
-          note.id === id ? { ...note, x, y } : note
-        )
-      );
-    };
-
-    const handleUpdateNote = (id: string, content: string, style: any) => {
-      setStickyNotes(prev => 
-        prev.map(note => 
-          note.id === id ? { ...note, content, style } : note
-        )
-      );
-    };
-
-    const handleDeleteNote = (id: string) => {
-      setElements(prev => prev.filter(el => el.id !== id));
-      setSelectedId(null);
-    };
-
-    const handleToolSelect = (toolId: Tool, templateId?: string) => {
-      console.log('Tool selected:', toolId, 'Template:', templateId, 'Current tool:', selectedTool);
+    const handleToolSelect = (toolId: Tool, templateId?: string, drawingTool?: 'pencil' | 'marker' | 'eraser', color?: string, width?: number) => {
+      console.log('Tool selected:', toolId, 'Template:', templateId, 'DrawingTool:', drawingTool, 'Color:', color, 'Width:', width, 'Current tool:', selectedTool);
       
       if (toolId === 'container' && templateId) {
         setSelectedTemplateId(templateId);
@@ -1104,24 +1173,27 @@ export default function Canvas({ name, description, projectId }: Props) {
       
       // If clicking the currently selected tool, switch back to mouse tool
       if (toolId === selectedTool) {
-        console.log('Switching back to mouse tool');
         setSelectedTool('mouse');
         setTool('mouse');
         setDrawingMode(false);
         return;
       }
 
-      console.log('Setting new tool:', toolId);
       setSelectedTool(toolId);
       setTool(toolId);
       
       if (toolId === 'draw') {
         setDrawingMode(true);
+        if (drawingTool) {
+          // Optionally store the drawing tool type if you want to use it
+          // setDrawingTool(drawingTool); // Uncomment if you have this state
+        }
+        if (color) setStrokeColor(color);
+        if (width) setStrokeWidth(width);
       } else {
         setDrawingMode(false);
       }
       
-      // Handle special cases
       if (toolId === 'trash') {
         setSelectedId(null);
       }
@@ -1297,7 +1369,7 @@ export default function Canvas({ name, description, projectId }: Props) {
     };
 
     // Calculate the grid size based on scale
-    const gridSize = 20; // Base size of grid spacing
+    const gridSize = 32; // or your preferred spacing
     
     // Create grid pattern
     const renderGrid = () => {
@@ -1313,37 +1385,23 @@ export default function Canvas({ name, description, projectId }: Props) {
 
       // Add small buffer to prevent popping at edges
       const buffer = 100;
-      const startX = Math.floor((viewportLeft - buffer) / 16) * 16;
-      const endX = Math.ceil((viewportRight + buffer) / 16) * 16;
-      const startY = Math.floor((viewportTop - buffer) / 16) * 16;
-      const endY = Math.ceil((viewportBottom + buffer) / 16) * 16;
+      const startX = Math.floor((viewportLeft - buffer) / gridSize) * gridSize;
+      const endX = Math.ceil((viewportRight + buffer) / gridSize) * gridSize;
+      const startY = Math.floor((viewportTop - buffer) / gridSize) * gridSize;
+      const endY = Math.ceil((viewportBottom + buffer) / gridSize) * gridSize;
 
-      // Calculate dot size and spacing based on zoom level
-      let dotSize;
-      let dotSpacing;
-      if (scale >= 4) {
-        dotSize = 1.5;
-        dotSpacing = 32;
-      } else if (scale >= 2) {
-        dotSize = 1.25;
-        dotSpacing = 32;
-      } else if (scale >= 1) {
-        dotSize = 1;
-        dotSpacing = 32;
-      } else if (scale >= 0.5) {
-        dotSize = 0.75;
-        dotSpacing = 48;
-      } else {
-        dotSize = 0.5;
-        dotSpacing = 64;
-      }
-
-      // Calculate opacity based on zoom level
+      // Dot size and opacity
+      let dotSize = 1;
+      if (scale >= 4) dotSize = 1.5;
+      else if (scale >= 2) dotSize = 1.25;
+      else if (scale >= 1) dotSize = 1;
+      else if (scale >= 0.5) dotSize = 0.75;
+      else dotSize = 0.5;
       const opacity = scale < 0.2 ? 0.15 : scale < 0.5 ? 0.2 : 0.25;
 
-      // Create dots only for visible area with spacing
-      for (let x = startX; x <= endX; x += dotSpacing) {
-        for (let y = startY; y <= endY; y += dotSpacing) {
+      // Draw dots at grid intersections
+      for (let x = startX; x <= endX; x += gridSize) {
+        for (let y = startY; y <= endY; y += gridSize) {
           dots.push(
             <KonvaCircle
               key={`${x}-${y}`}
@@ -1593,91 +1651,31 @@ export default function Canvas({ name, description, projectId }: Props) {
 
     const handleDrop = (e: React.DragEvent) => {
       e.preventDefault();
-      e.stopPropagation();
-      setIsDragging(false);
-
-      const files = Array.from(e.dataTransfer.files);
-      if (files.length > 0) {
-        const file = files[0];
-        if (file.type.startsWith('image/')) {
-          const reader = new FileReader();
-          reader.onload = (event) => {
+      const url = e.dataTransfer.getData('text/plain');
+      if (url && url.startsWith('http')) {
+        // Use Konva Stage pointer position for accurate placement
+        if (stageRef.current) {
+          const stage = stageRef.current;
+          const pointer = stage.getPointerPosition();
+          if (pointer) {
           const img = new window.Image();
+            img.src = url;
             img.onload = () => {
-              console.log('Image loaded successfully:', {
-                width: img.width,
-                height: img.height,
-                src: img.src
-              });
-
-              // Calculate the position relative to the stage
-              const stage = stageRef.current;
-              if (!stage) {
-                console.error('Stage not found');
-                return;
-              }
-
-              const stagePoint = stage.getPointerPosition();
-              if (!stagePoint) {
-                console.error('Stage point not found');
-                return;
-              }
-
-              // Convert screen coordinates to stage coordinates
-              const x = (stagePoint.x - position.x) / scale;
-              const y = (stagePoint.y - position.y) / scale;
-
-              console.log('Drop coordinates:', {
-                stagePoint,
-                position,
-                scale,
-                calculatedX: x,
-                calculatedY: y,
-                imageWidth: img.width,
-                imageHeight: img.height
-              });
-
-              // Create a new element with the loaded image
-              const newElement: UploadedElement = {
-            id: `uploaded-${Date.now()}`,
-                type: 'uploaded',
-                x: x - img.width / 2,
-                y: y - img.height / 2,
-                width: img.width,
-                height: img.height,
-            rotation: 0,
+              const newSticker: UploadedElement = {
+                id: uuidv4(),
+                type: 'uploaded' as const,
+                x: pointer.x - 40,
+                y: pointer.y - 40,
+                width: 80,
+                height: 80,
                 image: img,
-                file: file,
-                canvasId: currentCanvas.id
+                file: undefined as any,
+                canvasId: currentCanvas.id,
+                rotation: 0
               };
-
-              console.log('New element created:', newElement);
-              
-              // Add the element to both the elements array and the canvas stack
-              setElements(prev => {
-                const newElements = [...prev, newElement];
-                console.log('Updated elements array:', newElements);
-                return newElements;
-              });
-
-              // Update the canvas stack to include the new element
-              setCanvasStack(prev => prev.map(canvas => 
-                canvas.id === currentCanvas.id 
-                  ? { ...canvas, elements: [...canvas.elements, newElement.id] }
-                  : canvas
-              ));
-
-              // Save the project data immediately
-              handleSave();
+              setElements(prev => [...prev, newSticker]);
             };
-
-            img.onerror = (error) => {
-              console.error('Error loading image:', error);
-            };
-
-            img.src = event.target?.result as string;
-          };
-          reader.readAsDataURL(file);
+          }
         }
       }
     };
@@ -1849,13 +1847,36 @@ export default function Canvas({ name, description, projectId }: Props) {
         }
         case 'uploaded': {
           const uploadImage = element as UploadedElement;
+          if (!(uploadImage.image instanceof window.Image)) return null;
           return (
             <KonvaImage
               key={uploadImage.id}
+              id={uploadImage.id}
               image={uploadImage.image}
               alt={uploadImage.alt}
+              x={uploadImage.x}
+              y={uploadImage.y}
               width={uploadImage.width}
               height={uploadImage.height}
+              draggable
+              onClick={() => setSelectedId(uploadImage.id)}
+              onDragEnd={e => {
+                const node = e.target;
+                handleElementChange(uploadImage.id, { x: node.x(), y: node.y() });
+              }}
+              onTransformEnd={e => {
+                const node = e.target;
+                const scaleX = node.scaleX();
+                const scaleY = node.scaleY();
+                handleElementChange(uploadImage.id, {
+                  x: node.x(),
+                  y: node.y(),
+                  width: Math.max(10, node.width() * scaleX),
+                  height: Math.max(10, node.height() * scaleY),
+                });
+                node.scaleX(1);
+                node.scaleY(1);
+              }}
               style={{
                 transform: `rotate(${uploadImage.rotation}deg)`,
                 transformOrigin: 'center center',
@@ -1865,6 +1886,7 @@ export default function Canvas({ name, description, projectId }: Props) {
         }
         case 'generated-image': {
           const genImage = element as GeneratedImageElement;
+          if (!(genImage.image instanceof window.Image)) return null;
           return (
             <KonvaImage
               key={genImage.id}
@@ -1891,7 +1913,7 @@ export default function Canvas({ name, description, projectId }: Props) {
                 y={containerElement.y}
                 rotation={containerElement.rotation}
                 draggable={selectedTool === 'mouse'}
-                onClick={handleCanvasClick}
+                onClick={handleMouseDown}
                 onTransformEnd={handleTransformEnd}
                 onDragEnd={handleTransformEnd}
               >
@@ -1913,28 +1935,387 @@ export default function Canvas({ name, description, projectId }: Props) {
           }
           return null;
         }
-        case 'sticky-note': {
-          const stickyNote = element as StickyNoteElement;
+        case 'table': {
+          const table = element as TableElement;
+          const { x, y, cellWidths, cellHeights, id, data } = table;
+          const isSelected = selectedId === id;
+          const isTableHovered = hoveredTableId === id;
+          // Menu is visible if table or menu is hovered
+          const isRowMenuVisible = isSelected && (isTableHovered || (rowMenuHovered?.tableId === id));
+          const isColMenuVisible = isSelected && (isTableHovered || (colMenuHovered?.tableId === id));
+
+          // Calculate total width/height
+          const totalWidth = cellWidths.reduce((a, b) => a + b, 0);
+          const totalHeight = cellHeights.reduce((a, b) => a + b, 0);
+
+          // Dummy row/column UI
+          const showDummyRow = isSelected && (hoveredTableId === id || dummyRowHovered === id);
+          const showDummyCol = isSelected && (hoveredTableId === id || dummyColHovered === id);
+
+          // Handlers for add row/column
+          const handleAddRow = (rowIdx: number) => {
+                      const newCellHeights = [...cellHeights];
+            newCellHeights.splice(rowIdx, 0, 40);
+            const newData = [...data];
+            newData.splice(rowIdx, 0, Array(cellWidths.length).fill(''));
+            handleElementChange(id, {
+              cellHeights: newCellHeights,
+              data: newData,
+              rows: table.rows + 1
+            });
+          };
+          const handleAddCol = (colIdx: number) => {
+            const newCellWidths = [...cellWidths];
+            newCellWidths.splice(colIdx, 0, 100);
+            const newData = data.map(row => {
+              const newRow = [...row];
+              newRow.splice(colIdx, 0, '');
+              return newRow;
+            });
+            handleElementChange(id, {
+              cellWidths: newCellWidths,
+              data: newData,
+              columns: table.columns + 1
+            });
+          };
+
+          // Render three-dot menu for row
+          const renderRowMenu = (rowIdx: number) => (
+            rowMenuOpen === rowIdx && (
+              <Html key={`row-menu-${rowIdx}`}> 
+                <div style={{
+                  position: 'absolute',
+                  left: totalWidth + 8,
+                  top: cellHeights.slice(0, rowIdx).reduce((a, b) => a + b, 0) + 4,
+                  background: '#fff',
+                  border: '1px solid #eee',
+                  borderRadius: 6,
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                  padding: 6,
+                  zIndex: 1000,
+                  minWidth: 120
+                }}>
+                  <div style={{ cursor: 'pointer', padding: 4 }} onClick={() => handleAddRow(rowIdx)}>Add row above</div>
+                  <div style={{ cursor: 'pointer', padding: 4 }} onClick={() => handleAddRow(rowIdx + 1)}>Add row below</div>
+                  <div style={{ borderTop: '1px solid #eee', margin: '4px 0' }} />
+                  <div style={{ cursor: 'grab', padding: 4, color: '#888' }}>Drag to reorder (coming soon)</div>
+                </div>
+              </Html>
+            )
+          );
+          // Render three-dot menu for column
+          const renderColMenu = (colIdx: number) => (
+            colMenuOpen === colIdx && (
+              <Html key={`col-menu-${colIdx}`}> 
+                <div style={{
+                  position: 'absolute',
+                  left: cellWidths.slice(0, colIdx).reduce((a, b) => a + b, 0) + 4,
+                  top: totalHeight + 8,
+                  background: '#fff',
+                  border: '1px solid #eee',
+                  borderRadius: 6,
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                  padding: 6,
+                  zIndex: 1000,
+                  minWidth: 120
+                }}>
+                  <div style={{ cursor: 'pointer', padding: 4 }} onClick={() => handleAddCol(colIdx)}>Add column left</div>
+                  <div style={{ cursor: 'pointer', padding: 4 }} onClick={() => handleAddCol(colIdx + 1)}>Add column right</div>
+                  <div style={{ borderTop: '1px solid #eee', margin: '4px 0' }} />
+                  <div style={{ cursor: 'grab', padding: 4, color: '#888' }}>Drag to reorder (coming soon)</div>
+                </div>
+              </Html>
+            )
+          );
+
+          // Helper: get mouse position relative to table
+          const getRelativePos = (evt: any) => {
+            const stage = evt.target.getStage();
+            const pointer = stage.getPointerPosition();
+            return {
+              x: pointer.x - x,
+              y: pointer.y - y
+            };
+          };
+
+          // Mouse move handler for border detection
+          const handleTableMouseMove = (evt: any) => {
+            if (!isSelected) return;
+            if (tableResize.tableId === id && tableResize.type) {
+              // If resizing, update size
+              const rel = getRelativePos(evt);
+              if (tableResize.type === 'col' && tableResize.index !== null && tableResize.startPos !== null && tableResize.startSize !== null) {
+                const delta = rel.x - tableResize.startPos;
+                const newWidths = [...cellWidths];
+                newWidths[tableResize.index] = Math.max(20, tableResize.startSize + delta);
+                handleElementChange(id, { cellWidths: newWidths });
+              } else if (tableResize.type === 'row' && tableResize.index !== null && tableResize.startPos !== null && tableResize.startSize !== null) {
+                const delta = rel.y - tableResize.startPos;
+                const newHeights = [...cellHeights];
+                newHeights[tableResize.index] = Math.max(20, tableResize.startSize + delta);
+                handleElementChange(id, { cellHeights: newHeights });
+              }
+              return;
+            }
+            // If not resizing, check proximity to borders
+            const rel = getRelativePos(evt);
+            let found = false;
+            // Check columns (vertical borders)
+            let accX = 0;
+            for (let i = 0; i < cellWidths.length - 1; i++) {
+              accX += cellWidths[i];
+              if (Math.abs(rel.x - accX) < 6 && rel.y > 0 && rel.y < totalHeight) {
+                setTableCursor('col-resize');
+                found = true;
+                break;
+              }
+            }
+            // Check rows (horizontal borders)
+            if (!found) {
+              let accY = 0;
+              for (let i = 0; i < cellHeights.length - 1; i++) {
+                accY += cellHeights[i];
+                if (Math.abs(rel.y - accY) < 6 && rel.x > 0 && rel.x < totalWidth) {
+                  setTableCursor('row-resize');
+                  found = true;
+                  break;
+                }
+              }
+            }
+            if (!found) setTableCursor('default');
+          };
+
+          // Mouse down handler to start resizing
+          const handleTableMouseDown = (evt: any) => {
+            if (!isSelected) return;
+            const rel = getRelativePos(evt);
+            // Check columns
+            let accX = 0;
+            for (let i = 0; i < cellWidths.length - 1; i++) {
+              accX += cellWidths[i];
+              if (Math.abs(rel.x - accX) < 6 && rel.y > 0 && rel.y < totalHeight) {
+                setTableResize({ tableId: id, type: 'col', index: i, startPos: accX, startSize: cellWidths[i] });
+                return;
+              }
+            }
+            // Check rows
+            let accY = 0;
+            for (let i = 0; i < cellHeights.length - 1; i++) {
+              accY += cellHeights[i];
+              if (Math.abs(rel.y - accY) < 6 && rel.x > 0 && rel.x < totalWidth) {
+                setTableResize({ tableId: id, type: 'row', index: i, startPos: accY, startSize: cellHeights[i] });
+                return;
+              }
+            }
+          };
+
+          // Mouse up handler to finish resizing
+          const handleTableMouseUp = (evt: any) => {
+            if (tableResize.tableId === id) {
+              setTableResize({ tableId: null, type: null, index: null, startPos: null, startSize: null });
+              setTableCursor('default');
+            }
+          };
+
+          // Mouse leave handler to reset cursor
+          const handleTableMouseLeave = () => {
+            setTableCursor('default');
+            if (tableResize.tableId === id) {
+              setTableResize({ tableId: null, type: null, index: null, startPos: null, startSize: null });
+            }
+          };
+
+          const cellStyle = (table.cellStyles && selectedCell && table.cellStyles[selectedCell.row]?.[selectedCell.col]) || {};
+
           return (
-            <StickyNote
-              key={stickyNote.id}
-              id={stickyNote.id}
-              x={stickyNote.x}
-              y={stickyNote.y}
-              text={stickyNote.content}
-              style={{
-                backgroundColor: stickyNote.style.backgroundColor || '#FFE4B5',
-                textColor: stickyNote.style.textColor || '#000000',
-                fontSize: typeof stickyNote.style.fontSize === 'string' ? parseInt(stickyNote.style.fontSize) : (stickyNote.style.fontSize || 14),
-                shadowColor: 'rgba(0, 0, 0, 0.1)'
+            <KonvaGroup
+              key={id}
+              x={x}
+              y={y}
+              draggable={tool === 'mouse'}
+              onDragEnd={e => {
+                const node = e.target;
+                handleElementChange(id, { x: node.x(), y: node.y() });
               }}
-              onUpdate={handleUpdateNote}
-              onDelete={handleDeleteNote}
-              onMove={handleMoveNote}
-              scale={scale}
-              isSelected={selectedId === stickyNote.id}
-              onSelect={(id) => setSelectedId(id)}
-            />
+              onClick={() => setSelectedId(id)}
+              onMouseEnter={() => setHoveredTableId(id)}
+              onMouseLeave={() => setHoveredTableId(null)}
+              onMouseMove={handleTableMouseMove}
+              onMouseDown={handleTableMouseDown}
+              onMouseUp={handleTableMouseUp}
+              listening={true}
+              style={{ cursor: isSelected ? tableCursor : 'default' }}
+            >
+              {/* Render cells */}
+              {cellHeights.map((rowHeight, rowIdx) => {
+                let cellX = 0;
+                const cells = cellWidths.map((colWidth, colIdx) => {
+                  const isCellSelected = selectedCell && selectedCell.tableId === id && selectedCell.row === rowIdx && selectedCell.col === colIdx;
+                  const cellY = cellHeights.slice(0, rowIdx).reduce((a, b) => a + b, 0);
+                  const style = (table.cellStyles && table.cellStyles[rowIdx]?.[colIdx]) || {};
+                  const isEditingCell = editingCell && editingCell.tableId === id && editingCell.row === rowIdx && editingCell.col === colIdx;
+                  const cellData = data[rowIdx][colIdx];
+
+                  let cell = null;
+                  if (isEditingCell) {
+                    // Only render the textarea overlay for the editing cell
+                    cell = (
+                      <Html key={`cell-edit-${rowIdx}-${colIdx}`}>
+                        <div
+                          style={{
+                            position: 'absolute',
+                            left: cellX,
+                            top: cellY,
+                            width: colWidth,
+                            height: rowHeight,
+                            background: 'white',
+                            border: '1px solid #814ADA',
+                            borderRadius: 4,
+                            zIndex: 20,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <textarea
+                            value={editingCellValue}
+                            onChange={e => setEditingCellValue(e.target.value)}
+                            onBlur={() => {
+                              // Save text to table.data
+                              const newData = data.map(row => [...row]);
+                              newData[rowIdx][colIdx] = editingCellValue;
+                              handleElementChange(id, { data: newData });
+                              setEditingCell(null);
+                              setEditingCellValue('');
+                            }}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault();
+                                const newData = data.map(row => [...row]);
+                                newData[rowIdx][colIdx] = editingCellValue;
+                                handleElementChange(id, { data: newData });
+                                setEditingCell(null);
+                                setEditingCellValue('');
+                              }
+                            }}
+                            style={{
+                              width: '100%',
+                              height: '100%',
+                              border: 'none',
+                              outline: 'none',
+                              fontSize: style.fontSize || table.fontSize || 14,
+                              fontFamily: style.fontFamily || table.fontFamily || 'Inter',
+                              padding: 4,
+                              resize: 'none',
+                              background: 'transparent',
+                            }}
+                            autoFocus
+                          />
+                        </div>
+                      </Html>
+                    );
+                  } else {
+                    // For all other cells, render as before
+                    cell = (
+                      <React.Fragment key={`cell-${rowIdx}-${colIdx}`}>
+                        <KonvaRect
+                          x={cellX}
+                          y={cellY}
+                          width={colWidth}
+                          height={rowHeight}
+                          stroke={isCellSelected ? '#814ADA' : (style.borderColor || table.borderColor || '#333')}
+                          strokeWidth={isCellSelected ? 2 : 1}
+                          fill={style.fill || table.cellFill || '#fff'}
+                          onClick={e => {
+                            e.cancelBubble = true;
+                            if (!isSelected) {
+                              setSelectedId(id);
+                              return;
+                            }
+                            if (!isCellSelected) {
+                              setSelectedCell({ tableId: id, row: rowIdx, col: colIdx });
+                              return;
+                            }
+                            // If already selected, enter edit mode
+                            setEditingCell({ tableId: id, row: rowIdx, col: colIdx });
+                            setEditingCellValue(cellData);
+                          }}
+                        />
+                        <KonvaText
+                          x={cellX + 4}
+                          y={cellY + 4}
+                          width={colWidth - 8}
+                          height={rowHeight - 8}
+                          text={cellData}
+                          fontSize={style.fontSize || table.fontSize || 14}
+                          fontFamily={style.fontFamily || table.fontFamily || 'Inter'}
+                          fill="#000"
+                          padding={4}
+                          listening={false}
+                        />
+                      </React.Fragment>
+                    );
+                  }
+                  cellX += colWidth; // <-- increment cellX for the next column
+                  return cell;
+                });
+                return cells;
+              })}
+              {/* Dummy row (add row) */}
+              {showDummyRow && (
+                <Html>
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: 0,
+                      top: totalHeight,
+                      width: totalWidth,
+                      height: 32,
+                      background: 'rgba(180,180,180,0.08)',
+                      border: '1px dashed #bbb',
+                      borderRadius: 6,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      zIndex: 10
+                    }}
+                    onMouseEnter={() => setDummyRowHovered(id)}
+                    onMouseLeave={() => setDummyRowHovered(null)}
+                    onClick={() => handleAddRow(cellHeights.length)}
+                  >
+                    <span style={{ fontSize: 20, color: '#888' }}>+</span>
+                  </div>
+                </Html>
+              )}
+              {/* Dummy column (add column) */}
+              {showDummyCol && (
+                <Html>
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: totalWidth,
+                      top: 0,
+                      width: 32,
+                      height: totalHeight,
+                      background: 'rgba(180,180,180,0.08)',
+                      border: '1px dashed #bbb',
+                      borderRadius: 6,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      zIndex: 10
+                    }}
+                    onMouseEnter={() => setDummyColHovered(id)}
+                    onMouseLeave={() => setDummyColHovered(null)}
+                    onClick={() => handleAddCol(cellWidths.length)}
+                  >
+                    <span style={{ fontSize: 20, color: '#888' }}>+</span>
+                  </div>
+                </Html>
+              )}
+            </KonvaGroup>
           );
         }
         default:
@@ -2404,18 +2785,28 @@ export default function Canvas({ name, description, projectId }: Props) {
       setEditingTextValue(element.text);
     };
 
-    const handleTextEditComplete = (element: TextElement) => {
-      if (!editingTextValue.trim()) {
-        handleDeleteTextElement(element.id);
-      } else {
-        const updatedElement = {
-          ...element,
-          text: editingTextValue
-        };
-        handleElementChange(element.id, updatedElement);
-      }
+    // Overload to handle both text and table editing
+    const handleTextEditComplete = (arg1: any, arg2?: number, arg3?: number) => {
+      if (typeof arg1 === 'object' && arg1.type === 'text') {
+        // Text element editing
+        const textElement = arg1;
+        handleElementChange(textElement.id, { text: editingTextValue });
       setEditingTextId(null);
       setEditingTextValue('');
+      } else if (typeof arg1 === 'string' && typeof arg2 === 'number' && typeof arg3 === 'number') {
+        // Table cell editing
+        const id = arg1;
+        const rowIdx = arg2;
+        const colIdx = arg3;
+        const table = elements.find(el => el.id === id) as TableElement;
+        if (table) {
+          const newData = [...table.data];
+          newData[rowIdx][colIdx] = editingTextValue;
+          handleElementChange(id, { data: newData });
+          setEditingTextId(null);
+          setEditingTextValue('');
+        }
+      }
     };
 
     const handleDeleteTextElement = (elementId: string) => {
@@ -2496,9 +2887,9 @@ export default function Canvas({ name, description, projectId }: Props) {
       const stage = stageRef.current;
       if (!stage) return;
 
-      // Calculate the center point of the text element
+      // Calculate the position directly above the text element
       const centerX = element.x + (element.width || 0) / 2;
-      const menuY = element.y - 30; // Position menu closer to the text
+      const menuY = element.y - 10; // Position menu just above the text (was -30)
 
       // Set the menu position
       setTextMenuPosition({
@@ -2570,8 +2961,666 @@ export default function Canvas({ name, description, projectId }: Props) {
       );
     };
 
+    // Add missing handler stubs if not already defined
+    const handleMouseUp = (e: KonvaEventObject<MouseEvent>) => {
+      console.log('[DEBUG] handleMouseUp triggered', e);
+      if (isDrawing && currentLine) {
+        console.log('[DRAW] Finish line:', currentLine);
+        setLines(prev => [...prev, currentLine]);
+        setCurrentLine(null);
+        setIsDrawing(false);
+      }
+    };
+    const handleTransformEnd = () => {};
+    const handleDragStart = () => {};
+    const handleWheel = () => {};
+    const handleStageMouseEnter = (e: KonvaEventObject<MouseEvent>) => {
+      const stage = e.target.getStage();
+      if (!stage) return;
+
+      // Set the cursor based on the current tool and dragging state
+      if (tool === 'mouse') {
+        stage.container().style.cursor = isDraggingCanvas ? 'grabbing' : 'default';
+      } else if (tool === 'draw') {
+        stage.container().style.cursor = 'crosshair';
+      } else {
+        stage.container().style.cursor = 'default';
+      }
+    };
+    const handleMouseLeave = () => {};
+    const handleUpdateNote = () => {};
+    const handleDeleteNote = () => {};
+    const handleMoveNote = () => {};
+
+    // Minimal handlers for simpleDraw
+    const handleSimpleDrawMouseDown = (e: any) => {
+      if (selectedTool !== 'simpleDraw') return;
+      const stage = e.target.getStage();
+      const pointerPos = stage.getPointerPosition();
+      if (!pointerPos) return;
+      setSimpleDrawActive(true);
+      setSimpleDrawCurrentLine({
+        tool: simpleDrawTool,
+        color: simpleDrawColor,
+        width: simpleDrawWidth,
+        points: [pointerPos.x, pointerPos.y],
+      });
+    };
+    const handleSimpleDrawMouseMove = (e: any) => {
+      if (!simpleDrawActive || !simpleDrawCurrentLine) return;
+      const stage = e.target.getStage();
+      const pointerPos = stage.getPointerPosition();
+      if (!pointerPos) return;
+      setSimpleDrawCurrentLine((prev: any) => prev ? {
+        ...prev,
+        points: [...prev.points, pointerPos.x, pointerPos.y],
+      } : prev);
+    };
+    const handleSimpleDrawMouseUp = (e: any) => {
+      if (!simpleDrawActive || !simpleDrawCurrentLine) return;
+      setSimpleDrawLines((prev) => [...prev, simpleDrawCurrentLine]);
+      setSimpleDrawCurrentLine(null);
+      setSimpleDrawActive(false);
+    };
+
+    // Add lock state to lines
+    const handleToggleLockSimpleDrawLine = (idx: number) => {
+      setSimpleDrawLines(prev => prev.map((line, i) => i === idx ? { ...line, locked: !line.locked } : line));
+    };
+    const handleDeleteSimpleDrawLine = (idx: number) => {
+      setSimpleDrawLines(prev => prev.filter((_, i) => i !== idx));
+      setSelectedSimpleDrawLine(null);
+      setSimpleDrawLineMenuPos(null);
+    };
+    // ... existing code ...
+    // Unselect on canvas click
+    const handleStageClick = (e: any) => {
+      // Only unselect if clicking on empty space
+      if (e.target === e.target.getStage()) {
+        setSelectedSimpleDrawLine(null);
+        setSimpleDrawLineMenuPos(null);
+      }
+    };
+
+    // Handle canvas click for simplestickynote
+    const handleSimpleStickyNoteCanvasClick = (e: any) => {
+      if (selectedTool !== 'simplestickynote') return;
+      const stage = e.target.getStage();
+      const pointerPos = stage.getPointerPosition();
+      if (!pointerPos) return;
+      const newNote = {
+        x: pointerPos.x,
+        y: pointerPos.y,
+        width: 200,
+        height: 200,
+        color: '#FFE066',
+        font: 'Inter',
+        align: 'center',
+        text: '',
+        rotation: 0, // always straight
+      };
+      setSimpleStickyNotes(prev => [...prev, newNote]);
+      setSelectedTool('mouse');
+      setTool('mouse');
+    };
+
+    // Handler for shape selection from the menu
+    const handleShapeSelect = (shapeId: string) => {
+      setSelectedShape(shapeId);
+      setPendingShape(shapeId);
+      setShowShapesMenu?.(false);
+    };
+
+    const handleShapePlacement = (e: KonvaEventObject<MouseEvent>) => {
+      if (!pendingShape) return;
+
+      const stage = stageRef.current;
+      if (!stage) return;
+
+      const pointerPos = stage.getPointerPosition();
+      if (!pointerPos) return;
+
+      const newId = uuidv4();
+      const newShape: ShapeElement = {
+        id: newId,
+        type: 'shape',
+        shapeType: pendingShape as 'square' | 'circle' | 'triangle' | 'diamond' | 'star',
+        x: pointerPos.x,
+        y: pointerPos.y,
+        width: 80,
+        height: 80,
+        fill: DEFAULT_SHAPE_PROPERTIES.fill,
+        stroke: DEFAULT_SHAPE_PROPERTIES.stroke,
+        strokeWidth: DEFAULT_SHAPE_PROPERTIES.strokeWidth,
+        opacity: DEFAULT_SHAPE_PROPERTIES.opacity,
+        rotation: DEFAULT_SHAPE_PROPERTIES.rotation,
+        canvasId: currentCanvas.id
+      };
+
+      setElements(prev => [...prev, newShape]);
+      setSelectedShapeElementId(newId);
+      setPendingShape(null);
+      setSelectedTool('mouse');
+      setTool('mouse');
+    };
+
+    const handleShapeClick = (e: KonvaEventObject<MouseEvent>, shape: ShapeElement) => {
+      if (tool === 'mouse') {
+        e.cancelBubble = true;
+        setSelectedId(shape.id);
+        setSelectedShapeElementId(shape.id);
+
+        // Show shape properties menu
+        const stage = stageRef.current;
+        if (stage) {
+          const pointerPos = stage.getPointerPosition();
+          if (pointerPos) {
+            setShapeMenuPosition({
+              x: pointerPos.x,
+              y: pointerPos.y
+            });
+          }
+        }
+      }
+    };
+
+    const handleShapePropertiesChange = (id: string, changes: Partial<ShapeElement>) => {
+      setElements(prev => prev.map(el => {
+        if (el.id === id && el.type === 'shape') {
+          return { ...el, ...changes } as ShapeElement;
+        }
+        return el;
+      }));
+    };
+
+    const handleShapeDelete = (id: string) => {
+      setElements(prev => prev.filter(el => el.id !== id));
+      setSelectedShapeElementId(null);
+      setShapeMenuPosition(null);
+    };
+
+    // Update renderShapeElement to use handleShapeClick
+    const renderShapeElement = (element: ShapeElement) => {
+      const isSelected = selectedId === element.id;
+      // Convert 'none' to 'transparent' for Konva, always use string
+      const fill: string = element.fill === 'none' ? 'transparent' : (element.fill || 'transparent');
+      const stroke: string = element.stroke === 'none' ? 'transparent' : (element.stroke || 'transparent');
+      const commonProps = {
+        x: element.x,
+        y: element.y,
+        width: element.width,
+        height: element.height,
+        fill,
+        stroke,
+        strokeWidth: element.strokeWidth,
+        opacity: element.opacity,
+        rotation: element.rotation,
+        draggable: tool === 'mouse',
+        onClick: (e: KonvaEventObject<MouseEvent>) => handleShapeClick(e, element),
+        onTransformEnd: (e: KonvaEventObject<Event>) => {
+                const node = e.target;
+          const scaleX = node.scaleX();
+          const scaleY = node.scaleY();
+
+                setElements(prev => prev.map(el =>
+            el.id === element.id
+              ? {
+                  ...el,
+                  x: node.x(),
+                  y: node.y(),
+                  width: Math.max(5, node.width() * scaleX),
+                  height: Math.max(5, node.height() * scaleY),
+                  rotation: node.rotation()
+                }
+              : el
+                ));
+
+          node.scaleX(1);
+          node.scaleY(1);
+        }
+      };
+
+      switch (element.shapeType) {
+        case 'square':
+          return <KonvaRect {...commonProps} />;
+        case 'circle':
+          return <KonvaCircle {...commonProps} radius={element.width / 2} />;
+        case 'triangle':
+          return (
+            <KonvaShape
+              {...commonProps}
+              sceneFunc={(context, shape) => {
+                context.beginPath();
+                context.moveTo(0, element.height);
+                context.lineTo(element.width / 2, 0);
+                context.lineTo(element.width, element.height);
+                context.closePath();
+                context.fillStrokeShape(shape);
+              }}
+            />
+          );
+        case 'diamond':
+          return (
+            <KonvaShape
+              {...commonProps}
+              sceneFunc={(context, shape) => {
+                context.beginPath();
+                context.moveTo(element.width / 2, 0);
+                context.lineTo(element.width, element.height / 2);
+                context.lineTo(element.width / 2, element.height);
+                context.lineTo(0, element.height / 2);
+                context.closePath();
+                context.fillStrokeShape(shape);
+              }}
+            />
+          );
+        case 'star':
+          return (
+            <KonvaShape
+              {...commonProps}
+              sceneFunc={(context, shape) => {
+                const spikes = 5;
+                const outerRadius = element.width / 2;
+                const innerRadius = outerRadius / 2;
+                const centerX = element.width / 2;
+                const centerY = element.height / 2;
+
+                context.beginPath();
+                for (let i = 0; i < spikes * 2; i++) {
+                  const radius = i % 2 === 0 ? outerRadius : innerRadius;
+                  const angle = (i * Math.PI) / spikes;
+                  const x = centerX + radius * Math.sin(angle);
+                  const y = centerY - radius * Math.cos(angle);
+                  if (i === 0) {
+                    context.moveTo(x, y);
+                  } else {
+                    context.lineTo(x, y);
+                  }
+                }
+                context.closePath();
+                context.fillStrokeShape(shape);
+              }}
+            />
+        );
+        default:
+      return null;
+      }
+    };
+
+    // Add drag-and-drop for stickers
+    const handleCanvasDragOver = (e: React.DragEvent) => {
+      e.preventDefault();
+    };
+    const handleCanvasDrop = (e: React.DragEvent) => {
+      e.preventDefault();
+      const url = e.dataTransfer.getData('text/plain');
+      if (url && url.startsWith('http') && stageRef.current) {
+        const stage = stageRef.current;
+        const containerRect = stage.container().getBoundingClientRect();
+        // Calculate position relative to the stage, then adjust for scale and pan
+        const x = (e.clientX - containerRect.left - position.x) / scale;
+        const y = (e.clientY - containerRect.top - position.y) / scale;
+        const img = new window.Image();
+        img.src = url;
+        img.onload = () => {
+          const newSticker: UploadedElement = {
+            id: uuidv4(),
+            type: 'uploaded' as const,
+            x: x - 40,
+            y: y - 40,
+            width: 80,
+            height: 80,
+            image: img,
+            file: undefined as any,
+            canvasId: currentCanvas.id,
+            rotation: 0
+          };
+          setElements(prev => [...prev, newSticker]);
+        };
+        // Close the sticker menu and switch back to mouse tool
+        setShowStickersMenu(false);
+        setSelectedTool('mouse');
+        setTool('mouse');
+      }
+    };
+
+    useEffect(() => {
+      if (!selectedId || !stickerTransformerRef.current) return;
+      const selectedElement = elements.find(el => el.id === selectedId && el.type === 'uploaded');
+      if (selectedElement && stageRef.current) {
+        const stage = stageRef.current;
+        if (!stage) return;
+        const node = stage.findOne(`#${selectedId}`);
+        if (node && typeof stickerTransformerRef.current.nodes === 'function') {
+          stickerTransformerRef.current.nodes([node]);
+          const layer = stickerTransformerRef.current.getLayer();
+          if (layer) layer.batchDraw();
+        }
+      }
+    }, [selectedId, elements]);
+
+    // Keydown handler for deleting selected sticker
+    useEffect(() => {
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if ((e.key === 'Backspace' || e.key === 'Delete') && selectedId) {
+          const selectedElement = elements.find(el => el.id === selectedId && el.type === 'uploaded');
+          if (selectedElement) {
+            setElements(prev => prev.filter(el => el.id !== selectedId));
+            setSelectedId(null);
+          }
+        }
+      };
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [selectedId, elements]);
+
+    // Attach transformer to selected sticker
+    useEffect(() => {
+      if (!selectedId || !stageRef.current || !stickerTransformerRef.current) return;
+      const node = stageRef.current.findOne(`#${selectedId}`);
+      if (node) {
+        stickerTransformerRef.current.nodes([node]);
+        stickerTransformerRef.current.getLayer()?.batchDraw();
+      }
+    }, [selectedId, elements]);
+
+    // When the stickers tool is selected, open the menu
+    useEffect(() => {
+      if (selectedTool === 'stickers') {
+        setShowStickersMenu(true);
+      } else {
+        setShowStickersMenu(false);
+      }
+    }, [selectedTool]);
+
+    // When the upload tool is selected, open the menu
+    useEffect(() => {
+      if (selectedTool === 'upload') {
+        setShowUploadMenu(true);
+      } else {
+        setShowUploadMenu(false);
+      }
+    }, [selectedTool]);
+
+    // Handler for uploading files
+    const handleUploadFiles = (files: FileList) => {
+      const newFiles = Array.from(files).map(file => {
+        const url = URL.createObjectURL(file);
+        return {
+          id: `${file.name}-${Date.now()}-${Math.random()}`,
+          name: file.name,
+          type: file.type,
+          url,
+        };
+      });
+      setUploadMenuFiles(prev => [...prev, ...newFiles]);
+    };
+
+    // Handler for removing files
+    const handleRemoveFile = (id: string) => {
+      setUploadMenuFiles(prev => prev.filter(file => file.id !== id));
+    };
+
+    const selectedTable = selectedId ? elements.find(el => el.id === selectedId && el.type === 'table') as TableElement : null;
+    let tableMenuPos = null;
+    if (selectedTable) {
+      // Calculate menu position: above the table, centered
+      const tableX = selectedTable.x;
+      const tableY = selectedTable.y;
+      const tableWidth = selectedTable.cellWidths.reduce((a, b) => a + b, 0);
+      const menuWidth = 280; // Set fixed menu width for centering
+      tableMenuPos = {
+        x: tableX + tableWidth / 2 - menuWidth / 2,
+        y: Math.max(0, tableY - 56), // 56px above table
+      };
+    }
+
+    // On mouse up, if draggingRow and dragOverRow are set, perform reorder
+    useEffect(() => {
+      if (draggingRow && dragOverRow !== null && draggingRow.rowIdx !== dragOverRow) {
+        const table = elements.find(el => el.id === draggingRow.tableId) as TableElement;
+        if (table) {
+          const newData = [...table.data];
+          const [movedRow] = newData.splice(draggingRow.rowIdx, 1);
+          newData.splice(dragOverRow, 0, movedRow);
+          const newHeights = [...table.cellHeights];
+          const [movedHeight] = newHeights.splice(draggingRow.rowIdx, 1);
+          newHeights.splice(dragOverRow, 0, movedHeight);
+          handleElementChange(table.id, { data: newData, cellHeights: newHeights });
+        }
+        setDraggingRow(null);
+        setDragOverRow(null);
+      }
+    }, [draggingRow, dragOverRow]);
+
+    // Repeat similar logic for columns (draggingCol, dragOverCol)
+    useEffect(() => {
+      if (draggingCol && dragOverCol !== null && draggingCol.colIdx !== dragOverCol) {
+        const table = elements.find(el => el.id === draggingCol.tableId) as TableElement;
+        if (table) {
+          const newData = [...table.data];
+          const [movedCol] = newData.map(row => row[draggingCol.colIdx]);
+          newData.forEach(row => row.splice(draggingCol.colIdx, 1));
+          newData.forEach(row => row.splice(dragOverCol, 0, movedCol));
+          const newWidths = [...table.cellWidths];
+          const [movedWidth] = newWidths.splice(draggingCol.colIdx, 1);
+          newWidths.splice(dragOverCol, 0, movedWidth);
+          handleElementChange(table.id, { data: newData, cellWidths: newWidths });
+        }
+        setDraggingCol(null);
+        setDragOverCol(null);
+      }
+    }, [draggingCol, dragOverCol]);
+
+    // 3. Handle canvas click for mindmap tool
+    const handleMindMapCanvasClick = (e: KonvaEventObject<MouseEvent>) => {
+      if (selectedTool !== 'mindmap') return;
+      const stage = e.target.getStage();
+      if (!stage) return;
+      const pointerPos = stage.getPointerPosition();
+      if (!pointerPos) return;
+      // Create a new node at the clicked position
+      const newNode: MindMapNode = {
+        id: uuidv4(),
+        type: 'mindmap-node',
+        x: pointerPos.x,
+        y: pointerPos.y,
+        text: '',
+        color: '#4CAF50', // Default green
+        childIds: []
+      };
+      setMindMapNodes(prev => [...prev, newNode]);
+      setEditingMindMapNodeId(newNode.id);
+      setEditingMindMapNodeValue('');
+    };
+
+    // 4. Add handler for '+' button click to create a new node in a direction
+    const handleAddMindMapNode = (fromNode: MindMapNode, direction: 'top' | 'right' | 'bottom' | 'left') => {
+      // Offset for new node
+      const offset = 120;
+      let dx = 0, dy = 0;
+      if (direction === 'top') dy = -offset;
+      if (direction === 'bottom') dy = offset;
+      if (direction === 'left') dx = -offset;
+      if (direction === 'right') dx = offset;
+      const newNode: MindMapNode = {
+        id: uuidv4(),
+        type: 'mindmap-node',
+        x: fromNode.x + dx,
+        y: fromNode.y + dy,
+        text: '',
+        color: '#F48FB1', // Pink for children
+        parentId: fromNode.id,
+        childIds: []
+      };
+      setMindMapNodes(prev => prev.map(n => n.id === fromNode.id ? { ...n, childIds: [...n.childIds, newNode.id] } : n).concat(newNode));
+      setMindMapConnections(prev => [...prev, { id: uuidv4(), type: 'mindmap-connection', from: fromNode.id, to: newNode.id }]);
+      setEditingMindMapNodeId(newNode.id);
+      setEditingMindMapNodeValue('');
+    };
+
+    // 5. Render mind map nodes and connections
+    const renderMindMap = () => (
+      <>
+        {/* Render connections */}
+        {mindMapConnections.map(conn => {
+          const fromNode = mindMapNodes.find(n => n.id === conn.from);
+          const toNode = mindMapNodes.find(n => n.id === conn.to);
+          if (!fromNode || !toNode) return null;
+          return (
+            <KonvaLine
+              key={conn.id}
+              points={[fromNode.x, fromNode.y, toNode.x, toNode.y]}
+              stroke="#F8BBD0"
+              strokeWidth={3}
+              lineCap="round"
+              lineJoin="round"
+            />
+          );
+        })}
+        {/* Render nodes */}
+        {mindMapNodes.map(node => {
+          const isEditing = editingMindMapNodeId === node.id;
+          const width = 140, height = 60;
+          return (
+            <KonvaGroup
+              key={node.id}
+              x={node.x - width / 2}
+              y={node.y - height / 2}
+              draggable
+              onDragEnd={e => {
+                const newX = e.target.x() + width / 2;
+                const newY = e.target.y() + height / 2;
+                setMindMapNodes(prev => prev.map(n => n.id === node.id ? { ...n, x: newX, y: newY } : n));
+              }}
+              onClick={e => {
+                e.cancelBubble = true;
+                setEditingMindMapNodeId(node.id);
+                setEditingMindMapNodeValue(node.text);
+              }}
+            >
+              <KonvaRect
+                width={width}
+                height={height}
+                fill={node.color}
+                cornerRadius={30}
+                shadowBlur={isEditing ? 10 : 4}
+                shadowColor="#888"
+                stroke={isEditing ? '#1976D2' : 'transparent'}
+                strokeWidth={isEditing ? 2 : 0}
+              />
+              <KonvaText
+                text={node.text || (isEditing ? '' : 'Main Topic')}
+                x={16}
+                y={height / 2 - 14}
+                width={width - 32}
+                height={28}
+                fontSize={28}
+                fontFamily="Inter"
+                fill="#333"
+                align="center"
+                verticalAlign="middle"
+                listening={false}
+                opacity={node.text ? 1 : 0.4}
+              />
+              {/* Render + buttons on all four sides */}
+              {(['top', 'right', 'bottom', 'left'] as const).map(dir => {
+                const btnSize = 28;
+                let btnX = width / 2 - btnSize / 2, btnY = -btnSize / 2;
+                if (dir === 'right') { btnX = width - btnSize / 2; btnY = height / 2 - btnSize / 2; }
+                if (dir === 'bottom') { btnX = width / 2 - btnSize / 2; btnY = height - btnSize / 2; }
+                if (dir === 'left') { btnX = -btnSize / 2; btnY = height / 2 - btnSize / 2; }
+                return (
+                  <KonvaGroup
+                    key={dir}
+                    x={btnX}
+                    y={btnY}
+                    onClick={e => {
+                      e.cancelBubble = true;
+                      handleAddMindMapNode(node, dir);
+                    }}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <KonvaCircle
+                      radius={btnSize / 2}
+                      fill="#fff"
+                      stroke="#888"
+                      strokeWidth={1}
+                      shadowBlur={2}
+                    />
+                    <KonvaText
+                      text="+"
+                      x={-btnSize / 2}
+                      y={-btnSize / 2 + 2}
+                      width={btnSize}
+                      height={btnSize}
+                      fontSize={22}
+                      fontFamily="Inter"
+                      fill="#888"
+                      align="center"
+                      verticalAlign="middle"
+                    />
+                  </KonvaGroup>
+                );
+              })}
+              {/* Render editable text overlay if editing */}
+              {isEditing && (
+                <Html>
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: 0,
+                      top: height / 2 - 18,
+                      width: width,
+                      height: 36,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      zIndex: 10
+                    }}
+                  >
+                    <input
+                      value={editingMindMapNodeValue}
+                      onChange={e => setEditingMindMapNodeValue(e.target.value)}
+                      onBlur={() => {
+                        setMindMapNodes(prev => prev.map(n => n.id === node.id ? { ...n, text: editingMindMapNodeValue } : n));
+                        setEditingMindMapNodeId(null);
+                        setEditingMindMapNodeValue('');
+                      }}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          setMindMapNodes(prev => prev.map(n => n.id === node.id ? { ...n, text: editingMindMapNodeValue } : n));
+                          setEditingMindMapNodeId(null);
+                          setEditingMindMapNodeValue('');
+                        }
+                      }}
+                      style={{
+                        width: '90%',
+                        height: 32,
+                        fontSize: 24,
+                        border: 'none',
+                        outline: 'none',
+                        borderRadius: 8,
+                        textAlign: 'center',
+                        background: 'rgba(255,255,255,0.8)'
+                      }}
+                      autoFocus
+                    />
+                  </div>
+                </Html>
+              )}
+            </KonvaGroup>
+          );
+        })}
+      </>
+    );
+
     return (
-      <div className="h-screen w-full relative bg-[#fafafa]">
+      <div
+        className="h-screen w-full relative bg-[#fafafa]"
+        onDragOver={handleCanvasDragOver}
+        onDrop={handleCanvasDrop}
+      >
         <CanvasHeader
           projectName={name}
           onInviteClick={() => setShowInviteModal(true)}
@@ -2605,27 +3654,23 @@ export default function Canvas({ name, description, projectId }: Props) {
             scaleY={scale}
             x={position.x}
             y={position.y}
-            onMouseDown={handleCanvasClick}
-            onMouseUp={handleMouseUp}
-            onMouseMove={handleMouseMove}
+            onMouseDown={e => { handleCanvasClick(e); handleSimpleDrawMouseDown(e); handleStageClick(e); handleSimpleStickyNoteCanvasClick(e); handleShapePlacement(e); handleMindMapCanvasClick(e); }}
+            onMouseUp={e => { handleMouseUp(e); handleSimpleDrawMouseUp(e); }}
+            onMouseMove={e => { handleMouseMove(e); handleSimpleDrawMouseMove(e); }}
             onWheel={handleWheel}
             onMouseEnter={handleStageMouseEnter}
             onMouseLeave={handleMouseLeave}
             ref={stageRef}
             draggable={isDraggingCanvas}
-            onClick={handleCanvasClick}
             onDragStart={handleDragStart}
             id="studio-canvas"
             style={{
               display: 'block',
-              backgroundColor: 'white',
-              backgroundImage: 'linear-gradient(rgba(0, 0, 0, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 0, 0, 0.05) 1px, transparent 1px)',
-              backgroundSize: `${gridSize * scale}px ${gridSize * scale}px`,
-              backgroundPosition: `-${position.x}px -${position.y}px`
+              backgroundColor: 'white'
             }}
           >
             <Layer>
-              {/* Remove the white background rect and let the grid span everything */}
+              {/* Restore the polka dot grid */}
               <KonvaGroup>
                 {renderGrid()}
               </KonvaGroup>
@@ -2646,7 +3691,6 @@ export default function Canvas({ name, description, projectId }: Props) {
                       setSelectedGroupId(group.id);
                       setSelectedId(null);
                       setIsExplicitlySelected(true);
-                      
                       // Set the selected drawing and show the menu
                       const stage = stageRef.current;
                       if (stage) {
@@ -2682,7 +3726,6 @@ export default function Canvas({ name, description, projectId }: Props) {
                       dash={[5, 5]}
                     />
                   )}
-                  
                   {/* Drawing lines */}
                   {group.lines.map((line, index) => (
                     <KonvaLine
@@ -2700,7 +3743,9 @@ export default function Canvas({ name, description, projectId }: Props) {
 
               {/* Current Drawing Layer */}
               <KonvaGroup>
-                {lines.map((line, index) => (
+                {lines.map((line, index) => {
+                  console.log('[DRAW] Render line', index, line);
+                  return (
                   <KonvaLine
                     key={`line-${index}`}
                     points={line.points}
@@ -2711,8 +3756,10 @@ export default function Canvas({ name, description, projectId }: Props) {
                     lineJoin="round"
                     globalCompositeOperation="source-over"
                   />
-                ))}
+                  );
+                })}
                 {currentLine && (
+                  console.log('[DRAW] Render currentLine', currentLine),
                   <KonvaLine
                     points={currentLine.points}
                     stroke={currentLine.color}
@@ -2768,50 +3815,245 @@ export default function Canvas({ name, description, projectId }: Props) {
                 />
               )}
             </Layer>
+            {/* SimpleDraw Layer - moved inside Stage */}
+            <Layer>
+              {simpleDrawLines.map((line, idx) => (
+                <KonvaLine
+                  key={idx}
+                  ref={el => simpleDrawLineRefs.current[idx] = el}
+                  points={line.points}
+                  stroke={line.color}
+                  strokeWidth={line.width}
+                  tension={0.5}
+                  lineCap="round"
+                  lineJoin="round"
+                  globalCompositeOperation="source-over"
+                  draggable={selectedSimpleDrawLine === idx && !line.locked}
+                  onMouseEnter={() => setHoveredSimpleDrawLine(idx)}
+                  onMouseLeave={() => setHoveredSimpleDrawLine(null)}
+                  onClick={e => {
+                    setSelectedSimpleDrawLine(idx);
+                    // Calculate bounding box for menu
+                    const node = simpleDrawLineRefs.current[idx];
+                    if (node) {
+                      const box = node.getClientRect();
+                      setSimpleDrawLineMenuPos({ x: box.x + box.width / 2, y: box.y });
+                    }
+                    // Optionally bring to front
+                    if (simpleDrawLineRefs.current[idx]) {
+                      simpleDrawLineRefs.current[idx].moveToTop();
+                    }
+                  }}
+                  onDragEnd={e => {
+                    // Move all points by the drag offset
+                    const node = e.target;
+                    const dx = node.x() - (node._lastPos?.x || 0);
+                    const dy = node.y() - (node._lastPos?.y || 0);
+                    setSimpleDrawLines(prev => prev.map((l, i) => {
+                      if (i !== idx) return l;
+                      const newPoints = [];
+                      for (let j = 0; j < l.points.length; j += 2) {
+                        newPoints.push(l.points[j] + dx, l.points[j + 1] + dy);
+                      }
+                      return { ...l, points: newPoints };
+                    }));
+                    node.position({ x: 0, y: 0 });
+                  }}
+                />
+              ))}
+              {simpleDrawCurrentLine && (
+                <KonvaLine
+                  points={simpleDrawCurrentLine.points}
+                  stroke={simpleDrawCurrentLine.color}
+                  strokeWidth={simpleDrawCurrentLine.width}
+                  tension={0.5}
+                  lineCap="round"
+                  lineJoin="round"
+                  globalCompositeOperation="source-over"
+                />
+              )}
+              {/* Transformer for hovered or selected line */}
+              {(hoveredSimpleDrawLine !== null || selectedSimpleDrawLine !== null) && (
+                <KonvaTransformer
+                  ref={transformerRef}
+                  nodes={[
+                    simpleDrawLineRefs.current[
+                      selectedSimpleDrawLine !== null ? selectedSimpleDrawLine : hoveredSimpleDrawLine!
+                    ]
+                  ].filter(Boolean)}
+                  enabledAnchors={[]}
+                  borderEnabled={true}
+                  rotateEnabled={false}
+                  anchorSize={6}
+                  anchorStroke="#814ADA"
+                  anchorFill="#fff"
+                  borderStroke="#814ADA"
+                  borderDash={[4, 4]}
+                />
+              )}
+            </Layer>
+            {/* SimpleStickyNote Layer */}
+            <Layer>
+              {simpleStickyNotes.map((note, idx) => (
+                <KonvaGroup
+                  key={idx}
+              x={note.x}
+              y={note.y}
+                  rotation={note.rotation}
+                  draggable
+                  onClick={e => {
+                    setSelectedSimpleStickyNote(idx);
+                    setSimpleStickyNoteMenuPos({ x: note.x + note.width / 2, y: note.y });
+                  }}
+                  onDragEnd={e => {
+                    const node = e.target;
+                    setSimpleStickyNotes(prev => prev.map((n, i) => i === idx ? { ...n, x: node.x(), y: node.y() } : n));
+                  }}
+                >
+                  {/* Main note rectangle with sharp corners and simple shadow */}
+                  <KonvaRect
+                    width={note.width}
+                    height={note.height}
+                    fill={note.color}
+                    shadowColor="#000"
+                    shadowBlur={4}
+                    shadowOpacity={0.08}
+                    shadowOffset={{ x: 0, y: 8 }}
+                    cornerRadius={0}
+                  />
+                  {/* Folded corner triangle */}
+                  <KonvaShape
+                    sceneFunc={(context: Context, shape: any) => {
+                      const size = 32;
+                      context.beginPath();
+                      context.moveTo(note.width, note.height);
+                      context.lineTo(note.width, note.height - size);
+                      context.lineTo(note.width - size, note.height);
+                      context.closePath();
+                      context.fillStrokeShape(shape);
+                    }}
+                    fill={darkenColor(note.color, 0.15)}
+                  />
+                  <KonvaText
+                    text={note.text || 'Write...'}
+                    width={note.width - 32}
+                    height={note.height - 32}
+                    x={16}
+                    y={16}
+                    fontSize={20}
+                    fontFamily={note.font}
+                    align={note.align}
+                    fill="#333"
+                    verticalAlign="middle"
+                    draggable={false}
+                    onDblClick={() => {
+                      // Optionally implement editing
+                    }}
+                  />
+                </KonvaGroup>
+              ))}
+              {/* Floating menu for selected note */}
+              {selectedSimpleStickyNote !== null && simpleStickyNoteMenuPos && (
+                <Html>
+                  <SimpleStickyNoteMenu
+                    position={simpleStickyNoteMenuPos}
+                    note={simpleStickyNotes[selectedSimpleStickyNote]}
+                    onChange={(changes: any) => setSimpleStickyNotes(prev => prev.map((n, i) => i === selectedSimpleStickyNote ? { ...n, ...changes } : n))}
+                    onDelete={() => {
+                      setSimpleStickyNotes(prev => prev.filter((_, i) => i !== selectedSimpleStickyNote));
+                      setSelectedSimpleStickyNote(null);
+                      setSimpleStickyNoteMenuPos(null);
+                    }}
+                    onUnselect={() => {
+                      setSelectedSimpleStickyNote(null);
+                      setSimpleStickyNoteMenuPos(null);
+                    }}
+            />
+                </Html>
+              )}
+            </Layer>
+            {/* Render shape elements (only circle for now) */}
+            <Layer>
+            {elements.filter(el => el.type === 'shape').map(el => renderShapeElement(el as ShapeElement))}
+            </Layer>
+            {/* In the Layer that renders uploaded elements (stickers): */}
+            <Layer>
+              {elements.filter(el => el.type === 'uploaded').map(uploadImage => {
+                const element = uploadImage as UploadedElement;
+                if (!(element.image instanceof window.Image)) return null;
+                return (
+                  <KonvaImage
+                    key={element.id}
+                    id={element.id}
+                    image={element.image}
+                    alt={element.alt}
+                    x={element.x}
+                    y={element.y}
+                    width={element.width}
+                    height={element.height}
+                    draggable
+                    onClick={() => setSelectedId(element.id)}
+                    onDragEnd={e => {
+                      const node = e.target;
+                      handleElementChange(element.id, { x: node.x(), y: node.y() });
+                    }}
+                    onTransformEnd={e => {
+                      const node = e.target;
+                      const scaleX = node.scaleX();
+                      const scaleY = node.scaleY();
+                      handleElementChange(element.id, {
+                        x: node.x(),
+                        y: node.y(),
+                        width: Math.max(10, node.width() * scaleX),
+                        height: Math.max(10, node.height() * scaleY),
+                      });
+                      node.scaleX(1);
+                      node.scaleY(1);
+                    }}
+                    style={{
+                      transform: `rotate(${element.rotation}deg)`,
+                      transformOrigin: 'center center',
+                    }}
+                  />
+                );
+              })}
+              {/* Single transformer for stickers */}
+              {(() => {
+                const selectedElement = elements.find(el => el.id === selectedId && el.type === 'uploaded');
+                return selectedElement ? (
+                  <KonvaTransformer
+                    ref={stickerTransformerRef}
+                    enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
+                    borderEnabled={true}
+                    rotateEnabled={true}
+                    anchorSize={6}
+                    anchorStroke="#814ADA"
+                    anchorFill="#fff"
+                    borderStroke="#814ADA"
+                    borderDash={[4, 4]}
+                  />
+                ) : null;
+              })()}
+            </Layer>
+            {/* Render mind map nodes and connections */}
+            <Layer>
+              {renderMindMap()}
+            </Layer>
           </Stage>
-        </div>
+      </div>
 
         {/* Tools Panel */}
         <div className="fixed left-4 top-20 z-40">
-          <ToolsPanel onToolSelect={handleToolSelect} selectedTool={selectedTool as any} />
+          <ToolsPanel
+            onToolSelect={handleToolSelect}
+            selectedTool={selectedTool as any}
+            showShapesMenu={showShapesMenu}
+            setShowShapesMenu={setShowShapesMenu}
+            selectedShape={selectedShape}
+            onShapeSelect={handleShapeSelect}
+          />
         </div>
 
-        {/* Move Sticky Notes Layer above everything else */}
-      {/* Move Sticky Notes Layer above everything else */}
-      <div 
-        className="fixed inset-0 pointer-events-none"
-        style={{
-          transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
-          transformOrigin: '0 0',
-          width: dimensions.width - (isChatOpen ? 400 : 0),
-          height: dimensions.height,
-          zIndex: 100 // Increase z-index to be above other elements
-        }}
-      >
-        {stickyNotes.map((note) => (
-          <div key={note.id} className="pointer-events-auto absolute" style={{ zIndex: 101 }}>
-            <StickyNote
-              key={note.id}
-              id={note.id}
-              x={note.x}
-              y={note.y}
-              text={note.content}
-              style={{
-                backgroundColor: note.style.backgroundColor || '#FFE4B5',
-                textColor: note.style.color || '#000000',
-                fontSize: typeof note.style.fontSize === 'string' ? parseInt(note.style.fontSize) : (note.style.fontSize || 14),
-                shadowColor: 'rgba(0, 0, 0, 0.1)'
-              }}
-              onUpdate={handleUpdateNote}
-              onDelete={handleDeleteNote}
-              onMove={handleMoveNote}
-              scale={scale}
-              isSelected={selectedId === note.id}
-              onSelect={(id) => setSelectedId(id)}
-            />
-          </div>
-        ))}
-      </div>
       <Notification
         show={notification.show}
         type={notification.type}
@@ -3085,71 +4327,36 @@ export default function Canvas({ name, description, projectId }: Props) {
       {/* Render sticky notes */}
       {elements.map(element => {
         if (element.type === 'sticky-note') {
+          const stickyNote = element as StickyNoteElement;
           return (
-            <KonvaGroup
-              key={element.id}
-              x={element.x}
-              y={element.y}
-              rotation={element.rotation}
-              onClick={() => setSelectedStickyNote(element)}
-              draggable
-              onDragEnd={(e) => {
-                const node = e.target;
-                setElements(prev => prev.map(el => 
-                  el.id === element.id 
-                    ? { ...el, x: node.x(), y: node.y() } 
-                    : el
-                ));
+            <StickyNote
+              key={stickyNote.id}
+              id={stickyNote.id}
+              x={stickyNote.x}
+              y={stickyNote.y}
+              text={stickyNote.content}
+              style={{
+                backgroundColor: stickyNote.style.backgroundColor || '#FFE4B5',
+                textColor: stickyNote.style.textColor || '#000000',
+                fontSize: typeof stickyNote.style.fontSize === 'string' ? parseInt(stickyNote.style.fontSize) : (stickyNote.style.fontSize || 14),
+                shadowColor: 'rgba(0, 0, 0, 0.1)'
               }}
-            >
-                  <KonvaRect
-                width={element.width}
-                height={element.height}
-                fill={element.style.backgroundColor}
-                shadowColor={element.style.shadowColor}
-                shadowBlur={10}
-                shadowOffset={{ x: 2, y: 2 }}
-                cornerRadius={10}
+              onUpdate={handleStickyNoteUpdate}
+              onDelete={handleStickyNoteDelete}
+              onMove={handleElementMove}
+              scale={scale}
+              isSelected={selectedId === stickyNote.id}
+              onSelect={(id) => {
+                setSelectedId(id);
+                setSelectedStickyNote(stickyNote);
+              }}
               />
-              <KonvaText
-                text={element.content}
-                width={element.width - 20}
-                height={element.height - 20}
-                x={10}
-                y={10}
-                fill={element.style.textColor}
-                fontSize={element.style.fontSize}
-                padding={10}
-              />
-                        </KonvaGroup>
           );
         }
         return null;
       })}
 
-      {/* Render sticky note menu */}
-      {selectedStickyNote && (
-        <StickyNote
-          id={selectedStickyNote.id}
-          x={selectedStickyNote.x}
-          y={selectedStickyNote.y}
-          text={selectedStickyNote.content}
-          style={selectedStickyNote.style}
-          onUpdate={(id: string, text: string, style: Partial<StickyNoteStyle>) => {
-            handleStickyNoteContentChange(id, text);
-            handleStickyNoteStyleChange(id, style);
-          }}
-          onDelete={handleStickyNoteDelete}
-          onMove={(id: string, x: number, y: number) => {
-            setElements(prev => prev.map(el => 
-              el.id === id ? { ...el, x, y } : el
-            ));
-          }}
-          isSelected={true}
-          onSelect={() => {}}
-          scale={scale}
-        />
-      )}
+      {/* Remove the duplicate sticky note rendering */}
       {textMenuPosition && selectedTextElement && isExplicitlySelected && (
         <TextFormatMenu
           fontSize={selectedTextElement.fontSize}
@@ -3162,6 +4369,127 @@ export default function Canvas({ name, description, projectId }: Props) {
           onAlignChange={handleAlignChange}
           onLockToggle={handleLockToggle}
           onDelete={() => handleDeleteTextElement(selectedTextElement.id)}
+        />
+      )}
+      {/* Use DrawingToolsTray for simpleDraw tool */}
+      {selectedTool === 'simpleDraw' && (
+        <DrawingToolsTray
+          selectedTool={simpleDrawTool}
+          selectedColor={simpleDrawColor}
+          strokeWidth={simpleDrawWidth}
+          onToolSelect={(tool) => setSimpleDrawTool(tool)}
+          onColorSelect={(color) => setSimpleDrawColor(color)}
+          onStrokeWidthChange={(width) => setSimpleDrawWidth(width)}
+        />
+      )}
+      {/* Floating menu for selected simpleDraw line */}
+      {selectedSimpleDrawLine !== null && simpleDrawLineMenuPos && (
+        <div
+          className="absolute z-50 bg-white rounded-lg shadow-lg border border-gray-200 p-2 flex items-center gap-2"
+          style={{
+            left: simpleDrawLineMenuPos.x * scale + position.x,
+            top: simpleDrawLineMenuPos.y * scale + position.y - 40,
+            transform: 'translate(-50%, -100%)',
+            pointerEvents: 'auto'
+          }}
+        >
+          <button
+            onClick={() => handleToggleLockSimpleDrawLine(selectedSimpleDrawLine)}
+            className={`p-1 rounded ${simpleDrawLines[selectedSimpleDrawLine].locked ? 'bg-gray-200' : ''}`}
+            title={simpleDrawLines[selectedSimpleDrawLine].locked ? 'Unlock' : 'Lock'}
+          >
+            {/* Lock/Unlock icon */}
+            {simpleDrawLines[selectedSimpleDrawLine].locked ? (
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m0-6a2 2 0 00-2 2v2a2 2 0 002 2h0a2 2 0 002-2v-2a2 2 0 00-2-2zm0 0V9a4 4 0 118 0v2" /></svg>
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m0-6a2 2 0 00-2 2v2a2 2 0 002 2h0a2 2 0 002-2v-2a2 2 0 00-2-2zm0 0V9a4 4 0 118 0v2" /></svg>
+            )}
+          </button>
+          <button
+            onClick={() => handleDeleteSimpleDrawLine(selectedSimpleDrawLine)}
+            className="p-1 rounded hover:bg-red-100 text-red-500"
+            title="Delete"
+          >
+            {/* Delete icon */}
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+      )}
+
+      {/* Shape Properties Menu */}
+      {shapeMenuPosition && selectedShapeElementId && (
+        <ShapePropertiesMenu
+          position={shapeMenuPosition}
+          shape={elements.find(el => el.id === selectedShapeElementId) as ShapeElement}
+          onChange={(changes) => handleShapePropertiesChange(selectedShapeElementId, changes)}
+          onDelete={() => handleShapeDelete(selectedShapeElementId)}
+          onClose={() => setShapeMenuPosition(null)}
+        />
+      )}
+      {selectedTool === 'stickers' && (
+        <StickersMenu onSelectSticker={(url) => setPendingStickerUrl(url)} />
+      )}
+      {/* Render StickersMenu only if showStickersMenu is true */}
+      {showStickersMenu && (
+        <StickersMenu onSelectSticker={(url) => setPendingStickerUrl(url)} />
+      )}
+      {/* Render UploadMenu only if showUploadMenu is true */}
+      {showUploadMenu && (
+        <UploadMenu files={uploadMenuFiles} onUpload={handleUploadFiles} onRemove={handleRemoveFile} />
+      )}
+      {/* Render AIPopupMenu only if the AI tool is active */}
+      {selectedTool === 'ai' && (
+        <AIPopupMenu
+          onAddToCanvas={(imageUrl, prompt) => {
+            // Center the image in the visible canvas area
+            const img = new window.Image();
+            img.src = imageUrl;
+            img.onload = () => {
+              const width = img.width;
+              const height = img.height;
+              // Center using current dimensions and scale
+              const centerX = (dimensions.width - width) / 2 / scale - position.x / scale;
+              const centerY = (dimensions.height - height) / 2 / scale - position.y / scale;
+              const newElement: GeneratedImageElement = {
+                id: uuidv4(),
+                type: 'generated-image',
+                x: centerX,
+                y: centerY,
+                width,
+                height,
+                src: imageUrl,
+                image: img,
+                prompt,
+                canvasId: currentCanvas.id,
+                showInfo: false
+              };
+              setElements(prev => [...prev, newElement]);
+            };
+          }}
+        />
+      )}
+      {tableMenuPos && selectedTable && (
+        <TableFormatMenu
+          position={tableMenuPos}
+          table={selectedTable}
+          selectedCell={selectedCell}
+          cellStyle={(selectedTable.cellStyles && selectedCell && selectedTable.cellStyles[selectedCell.row]?.[selectedCell.col]) || {}}
+          onChange={changes => {
+            if (selectedCell && selectedCell.tableId === selectedTable.id) {
+              // Update only the selected cell's style
+              const newCellStyles = selectedTable.cellStyles ? selectedTable.cellStyles.map((row: any[]) => [...row]) : Array.from({ length: selectedTable.rows }, () => Array(selectedTable.columns).fill({}));
+              newCellStyles[selectedCell.row][selectedCell.col] = {
+                ...newCellStyles[selectedCell.row][selectedCell.col],
+                ...changes
+              };
+              handleElementChange(selectedTable.id, { cellStyles: newCellStyles });
+            } else {
+              // Update table style as before
+              handleElementChange(selectedTable.id, changes);
+            }
+          }}
+          onLock={() => handleElementChange(selectedTable.id, { isLocked: !selectedTable.isLocked })}
+          onDelete={() => handleDeleteElement(selectedTable.id)}
         />
       )}
     </div>
@@ -3185,3 +4513,24 @@ export default function Canvas({ name, description, projectId }: Props) {
   );
 } 
 }
+
+// Add this helper function at the top or bottom of the file:
+function darkenColor(hex: string, amount: number) {
+  // Clamp amount between 0 and 1
+  amount = Math.max(0, Math.min(1, amount));
+  // Remove # if present
+  hex = hex.replace('#', '');
+  // Parse r, g, b
+  let r = parseInt(hex.substring(0, 2), 16);
+  let g = parseInt(hex.substring(2, 4), 16);
+  let b = parseInt(hex.substring(4, 6), 16);
+  // Darken each channel
+  r = Math.floor(r * (1 - amount));
+  g = Math.floor(g * (1 - amount));
+  b = Math.floor(b * (1 - amount));
+  // Return new hex
+  return `#${r.toString(16).padStart(2, '0')}${g
+    .toString(16)
+    .padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+}
+

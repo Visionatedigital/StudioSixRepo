@@ -82,8 +82,8 @@ function SignInForm() {
           setError("Failed to sign in after registration");
           console.error("Sign in error after registration:", signInResult.error);
         } else {
-          // Redirect to dashboard for all users
-          router.push('/dashboard');
+          // New users should always go to onboarding
+          router.push('/onboarding');
           router.refresh();
         }
       } else {
@@ -101,9 +101,28 @@ function SignInForm() {
           setError("Invalid email or password");
           console.error("Sign in error:", result.error);
         } else {
-          // Always redirect to dashboard
-          router.push('/dashboard');
-          router.refresh();
+          try {
+            // Check if user has completed onboarding
+            const userResponse = await fetch('/api/user/me');
+            if (!userResponse.ok) {
+              throw new Error('Failed to fetch user data');
+            }
+            const userData = await userResponse.json();
+            console.log('User data:', userData);
+            
+            if (!userData.hasCompletedOnboarding) {
+              console.log('User has not completed onboarding, redirecting to onboarding');
+              router.push('/onboarding');
+            } else {
+              console.log('User has completed onboarding, redirecting to dashboard');
+              router.push('/dashboard');
+            }
+            router.refresh();
+          } catch (error) {
+            console.error('Error fetching user data:', error);
+            setError('Failed to fetch user data. Please try again.');
+            setIsLoading(false);
+          }
         }
       }
     } catch (error) {
@@ -116,7 +135,7 @@ function SignInForm() {
 
   const handleGoogleSignIn = () => {
     setIsLoading(true);
-    signIn("google", { callbackUrl: '/dashboard' });
+    signIn("google", { callbackUrl: '/api/auth/check-onboarding' });
   };
 
   return (

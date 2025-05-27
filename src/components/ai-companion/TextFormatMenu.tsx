@@ -38,7 +38,7 @@ export default function TextFormatMenu({
         left: `${position.x}px`,
         top: `${position.y}px`,
         transform: 'translate(-50%, -100%)',
-        marginTop: '-8px'
+        marginTop: '-4px'
       }}
     >
       <div className="flex items-center gap-1">

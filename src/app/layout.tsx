@@ -4,6 +4,8 @@ import type { Metadata } from 'next'
 import { Providers } from './providers'
 import ClientScrollProvider from '@/components/ClientScrollProvider'
 import AuthProvider from '@/components/AuthProvider'
+import { NotificationProvider } from '@/contexts/NotificationContext'
+import ToastContainer from '@/components/notifications/ToastContainer'
 
 // Load Google Fonts
 const inter = Inter({
@@ -61,7 +63,10 @@ export default function RootLayout({
       <body className="bg-[#F6F8FA] min-h-screen overflow-x-auto">
         <AuthProvider>
           <ClientScrollProvider>
-            <Providers>{children}</Providers>
+            <NotificationProvider>
+              <Providers>{children}</Providers>
+              <ToastContainer />
+            </NotificationProvider>
           </ClientScrollProvider>
         </AuthProvider>
       </body>

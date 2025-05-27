@@ -3,7 +3,6 @@ import { NextResponse } from 'next/server';
 // Mobile Money API Credentials
 const API_KEY = '73ec69dc-c821-4c9a-a725-d7116e699ab8';
 const API_SECRET = 'f03f6651-750b-4168-8d96-09c13ad83d3c';
-const CALLBACK_SECRET = 'tmLnzdWRfUbY6YLAAHfp2On4/DCj5vSzoBkWYhN8tGs='; // Updated with the real callback secret
 const BASE_URL = 'https://pay.eirmondserv.com/test-api'; // Using test API during testing phase
 const OAUTH_URL = 'https://pay.eirmondserv.com/oauth/token';
 
@@ -163,18 +162,35 @@ export async function getPaymentStatus(paymentId: string) {
       try {
         console.log(`Trying to check payment status at: ${endpoint}`);
         const result = await fetch(endpoint, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
-    });
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Accept': 'application/json'
+          },
+        });
+
+        // Log the response headers for debugging
+        console.log('Response headers:', {
+          status: result.status,
+          contentType: result.headers.get('content-type'),
+          contentLength: result.headers.get('content-length')
+        });
 
         if (result.ok) {
-          response = result;
-          break;
+          const contentType = result.headers.get('content-type');
+          if (contentType?.includes('application/json')) {
+            response = result;
+            break;
+          } else {
+            console.log(`Endpoint ${endpoint} returned non-JSON response:`, contentType);
+          }
         } else {
-          const errorData = await result.json();
-          console.log(`Endpoint ${endpoint} failed:`, errorData);
+          const text = await result.text();
+          console.log(`Endpoint ${endpoint} failed:`, {
+            status: result.status,
+            statusText: result.statusText,
+            response: text.substring(0, 200) // Log first 200 chars of response
+          });
         }
       } catch (err) {
         error = err;
@@ -196,6 +212,7 @@ export async function getPaymentStatus(paymentId: string) {
     }
 
     const data = await response.json();
+    console.log('Payment status response:', data);
     return data;
   } catch (error) {
     console.error('Error checking payment status:', error);
@@ -211,36 +228,22 @@ export async function getPaymentStatus(paymentId: string) {
   }
 }
 
-/**
- * Verify callback signature
- * @param signatureHeader The X-Content-Signature header value
- * @param rawBody The raw request body
- */
-export function verifyCallbackSignature(signatureHeader: string, rawBody: string): boolean {
-  try {
-    const crypto = require('crypto');
-    const computedSignature = crypto
-      .createHmac('sha256', CALLBACK_SECRET)
-      .update(rawBody)
-      .digest('hex');
-      
-    return crypto.timingSafeEqual(
-      Buffer.from(signatureHeader), 
-      Buffer.from(computedSignature)
-    );
-  } catch (error) {
-    console.error('Error verifying signature:', error);
-    return false;
-  }
-}
-
 // Credit packages
 export const CREDIT_PACKAGES = [
-  { id: 'basic', credits: 100, amount: 20000, name: 'Basic' },
-  { id: 'standard', credits: 500, amount: 90000, name: 'Standard' },
-  { id: 'premium', credits: 1000, amount: 170000, name: 'Premium' },
+  { id: 'basic', credits: 100, amount: 20000, usd: 5, name: 'Basic' },
+  { id: 'standard', credits: 500, amount: 90000, usd: 20, name: 'Standard' },
+  { id: 'premium', credits: 1000, amount: 170000, usd: 35, name: 'Premium' },
 ];
 
-export function getCreditPackage(packageId: string) {
-  return CREDIT_PACKAGES.find(pkg => pkg.id === packageId);
+export function getCreditPackage(packageId: string, exchangeRate?: number) {
+  const pkg = CREDIT_PACKAGES.find(pkg => pkg.id === packageId);
+  if (!pkg) return undefined;
+  if (exchangeRate) {
+    // Convert USD price to UGX using the provided exchange rate
+    return {
+      ...pkg,
+      amount: Math.round(pkg.usd * exchangeRate),
+    };
+  }
+  return pkg;
 } 

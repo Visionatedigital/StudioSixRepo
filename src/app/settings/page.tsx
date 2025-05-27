@@ -20,6 +20,9 @@ export default function SettingsPage() {
     confirmPassword: '••••••••',
     weeklyNewsletter: true
   });
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<string | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -75,9 +78,43 @@ export default function SettingsPage() {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    // Process form data here
-    // console.log('Form submitted:', formData);
+    setIsSaving(true);
+    setSaveStatus(null);
+    try {
+      const res = await fetch('/api/user/preferences', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSaveStatus('success');
+      } else {
+        setSaveStatus('error');
+      }
+    } catch (err) {
+      setSaveStatus('error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteAccount = () => {
+    setShowDeleteModal(true);
+  };
+
+  const confirmDelete = async () => {
+    setShowDeleteModal(false);
+    try {
+      const res = await fetch('/api/user/delete', { method: 'DELETE' });
+      if (res.ok) {
+        router.push('/goodbye');
+      } else {
+        alert('Failed to delete account.');
+      }
+    } catch (err) {
+      alert('Failed to delete account.');
+    }
   };
 
   const renderTabContent = () => {
@@ -165,7 +202,22 @@ export default function SettingsPage() {
                 }`}
               >
                 {formData.weeklyNewsletter && (
-                  <Icon name="check" className="w-4 h-4 text-white" />
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 20 20"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="w-4 h-4 text-white"
+                  >
+                    <path
+                      d="M5 10.5L9 14.5L15 7.5"
+                      stroke="white"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
                 )}
               </button>
               <span className="text-[#1B1464] font-medium">Weekly Newsletters</span>
@@ -174,10 +226,17 @@ export default function SettingsPage() {
             {/* Save Button */}
             <button
               type="submit"
-              className="w-full py-4 bg-gradient-to-r from-[#814ADA] to-[#392CA0] text-white font-medium rounded-xl hover:opacity-90 transition-opacity"
+              className="w-full py-4 bg-gradient-to-r from-[#814ADA] to-[#392CA0] text-white font-medium rounded-xl hover:opacity-90 transition-opacity disabled:opacity-60"
+              disabled={isSaving}
             >
-              Save Changes
+              {isSaving ? 'Saving...' : 'Save Changes'}
             </button>
+            {saveStatus === 'success' && (
+              <div className="text-green-600 text-center mt-2">Settings updated!</div>
+            )}
+            {saveStatus === 'error' && (
+              <div className="text-red-600 text-center mt-2">Failed to update settings.</div>
+            )}
           </form>
         );
 
@@ -211,7 +270,10 @@ export default function SettingsPage() {
               <p className="text-gray-600 mb-8">
                 Manage payment method, change plan and more.
               </p>
-              <button className="px-6 py-3 bg-[#814ADA] text-white font-medium rounded-lg flex items-center gap-2 hover:opacity-90 transition-opacity">
+              <button
+                className="px-6 py-3 bg-[#814ADA] text-white font-medium rounded-lg flex items-center gap-2 hover:opacity-90 transition-opacity"
+                onClick={() => router.push('/subscription')}
+              >
                 <Icon name="profile" className="w-5 h-5" />
                 Manage Subscriptions
               </button>
@@ -223,7 +285,10 @@ export default function SettingsPage() {
               <p className="text-gray-600 mb-8">
                 Deleting your account will remove all of your information from our database. This cannot be undone.
               </p>
-              <button className="px-6 py-3 bg-white text-[#1B1464] font-medium rounded-lg flex items-center gap-2 border border-[#E0DAF3] hover:bg-gray-50 transition-colors">
+              <button
+                className="px-6 py-3 bg-white text-[#1B1464] font-medium rounded-lg flex items-center gap-2 border border-[#E0DAF3] hover:bg-gray-50 transition-colors"
+                onClick={handleDeleteAccount}
+              >
                 <Icon name="delete-user" className="w-5 h-5" />
                 Delete Account
               </button>
@@ -270,6 +335,33 @@ export default function SettingsPage() {
 
           {/* Tab Content */}
           {renderTabContent()}
+
+          {/* Custom Delete Confirmation Modal */}
+          {showDeleteModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+              <div className="bg-white rounded-xl p-8 shadow-lg max-w-md w-full">
+                <h2 className="text-xl font-bold mb-4 text-[#1B1464]">Delete Account</h2>
+                <p className="mb-6 text-gray-700">
+                  Are you sure you want to delete your account? <br />
+                  <span className="text-red-600 font-semibold">This cannot be undone.</span>
+                </p>
+                <div className="flex justify-end gap-3">
+                  <button
+                    className="px-4 py-2 rounded-lg border border-[#E0DAF3] text-[#1B1464] hover:bg-gray-50"
+                    onClick={() => setShowDeleteModal(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="px-4 py-2 rounded-lg bg-red-600 text-white font-semibold hover:bg-red-700"
+                    onClick={confirmDelete}
+                  >
+                    Yes, Delete
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </DashboardLayout>

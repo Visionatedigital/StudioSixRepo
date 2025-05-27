@@ -46,6 +46,12 @@ export default function MessageInbox({ onClose, initialConversation }: MessageIn
   // Fetch conversations
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+
+  // Add message cache
+  const messageCache = useRef<{ [key: string]: Message[] }>({});
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -99,21 +105,43 @@ export default function MessageInbox({ onClose, initialConversation }: MessageIn
 
   // Fetch messages for selected conversation
   useEffect(() => {
+    let isCurrent = true; // Track if this fetch is the latest
+
     const fetchMessages = async () => {
-      if (!selectedConversation) return;
+      if (!selectedConversation) {
+        setMessages([]);
+        setIsLoading(false);
+        return;
+      }
+
+      setIsLoading(true);
+      setError(null);
 
       try {
         const response = await fetch(`/api/messages?userId=${selectedConversation.userId}`);
-        if (response.ok) {
-          const data = await response.json();
-          setMessages(data.messages);
+        if (!response.ok) throw new Error('Failed to fetch messages');
+        const data = await response.json();
+
+        if (isCurrent) {
+          setMessages(data.messages || []);
         }
       } catch (error) {
-        console.error('Error fetching messages:', error);
+        if (isCurrent) {
+          setError('Failed to load messages. Please try again.');
+        }
+      } finally {
+        if (isCurrent) {
+          setIsLoading(false);
+        }
       }
     };
 
     fetchMessages();
+
+    // Cleanup function to mark this fetch as outdated if conversation changes
+    return () => {
+      isCurrent = false;
+    };
   }, [selectedConversation]);
 
   // Update selected conversation when initialConversation changes
@@ -141,30 +169,35 @@ export default function MessageInbox({ onClose, initialConversation }: MessageIn
   const handleSendMessage = async () => {
     if (!messageInput.trim() || !selectedConversation) return;
 
+    const newMessage = {
+      content: messageInput.trim(),
+      senderId: session?.user?.id || '',
+      receiverId: selectedConversation.userId,
+      conversationId: selectedConversation.id,
+      createdAt: new Date()
+    };
+
     try {
-      const response = await fetch('/api/messages/send', {
+      setError(null);
+      const response = await fetch('/api/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          content: messageInput,
-          receiverId: selectedConversation.userId,
-        }),
+        body: JSON.stringify(newMessage),
       });
 
-      if (response.ok) {
-        // Add message to the UI
-        const newMessage: Message = {
-          id: Date.now().toString(), // Temporary ID until we get the real one
-          content: messageInput,
-          senderId: session?.user?.id || '',
-          receiverId: selectedConversation.userId,
-          createdAt: new Date(),
-        };
-        setMessages([...messages, newMessage]);
-        setMessageInput('');
-      }
+      if (!response.ok) throw new Error('Failed to send message');
+
+      const sentMessage = await response.json();
+      
+      // Update messages and cache
+      const updatedMessages = [...messages, sentMessage];
+      setMessages(updatedMessages);
+      messageCache.current[selectedConversation.id] = updatedMessages;
+      
+      setMessageInput('');
     } catch (error) {
       console.error('Error sending message:', error);
+      setError('Failed to send message');
     }
   };
 
@@ -238,11 +271,6 @@ export default function MessageInbox({ onClose, initialConversation }: MessageIn
                         fill
                         className="rounded-full object-cover"
                       />
-                      {conversation.unreadCount > 0 && (
-                        <span className="absolute -top-1 -right-1 bg-purple-600 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">
-                          {conversation.unreadCount}
-                        </span>
-                      )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <h3 className="font-medium text-[#202126]">{conversation.userName}</h3>
@@ -280,27 +308,41 @@ export default function MessageInbox({ onClose, initialConversation }: MessageIn
 
                 {/* Messages */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                  {messages.map((message) => (
-                    <div
-                      key={message.id}
-                      className={`flex ${
-                        message.senderId === session?.user?.id ? 'justify-end' : 'justify-start'
-                      }`}
-                    >
+                  {isInitialLoad && isLoading ? (
+                    <div className="flex items-center justify-center h-full">
+                      <div className="w-8 h-8 border-4 border-purple-400 border-t-transparent rounded-full animate-spin" />
+                    </div>
+                  ) : error ? (
+                    <div className="text-center text-red-500 p-4">
+                      {error}
+                    </div>
+                  ) : messages.length === 0 ? (
+                    <div className="text-center text-gray-500 p-4">
+                      No messages yet. Start the conversation!
+                    </div>
+                  ) : (
+                    messages.map((message) => (
                       <div
-                        className={`max-w-[60%] rounded-xl px-3 py-1.5 text-sm ${
-                          message.senderId === session?.user?.id
-                            ? 'bg-purple-100 text-purple-900'
-                            : 'bg-gray-100 text-[#202126]'
+                        key={message.id}
+                        className={`flex ${
+                          message.senderId === session?.user?.id ? 'justify-end' : 'justify-start'
                         }`}
                       >
-                        <p className="leading-relaxed">{message.content}</p>
-                        <span className="text-[10px] opacity-60 mt-1 block">
-                          {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
+                        <div
+                          className={`max-w-[60%] rounded-xl px-3 py-1.5 text-sm ${
+                            message.senderId === session?.user?.id
+                              ? 'bg-purple-100 text-purple-900'
+                              : 'bg-gray-100 text-[#202126]'
+                          }`}
+                        >
+                          <p className="leading-relaxed">{message.content}</p>
+                          <span className="text-[10px] opacity-60 mt-1 block">
+                            {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
 
                 {/* Message Input */}

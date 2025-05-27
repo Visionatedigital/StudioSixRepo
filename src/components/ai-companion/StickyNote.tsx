@@ -28,16 +28,19 @@ export interface StickyNoteProps {
 }
 
 export default function StickyNote({ id, x, y, text, style, onUpdate, onDelete, onMove, isSelected, onSelect, scale }: StickyNoteProps) {
-  const [content, setContent] = useState('');
+  const [content, setContent] = useState(text);
   const [position, setPosition] = useState<{ x: number; y: number }>({ x, y });
   const [isDragging, setIsDragging] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
   const noteRef = useRef<HTMLDivElement>(null);
   const dragStart = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     setPosition({ x, y });
   }, [x, y]);
+
+  useEffect(() => {
+    setContent(text);
+  }, [text]);
 
   const handleDragStart = (e: React.MouseEvent) => {
     if (e.target instanceof HTMLTextAreaElement) return;
@@ -114,19 +117,12 @@ export default function StickyNote({ id, x, y, text, style, onUpdate, onDelete, 
         }}
         placeholder="Write your note here..."
         onClick={(e) => e.stopPropagation()}
-        readOnly={!isEditing}
+        readOnly={!isSelected}
       />
       
       {/* Toolbar */}
       {isSelected && (
         <div className="absolute -top-10 left-1/2 transform -translate-x-1/2 bg-white rounded-lg shadow-lg px-2 py-1 flex items-center gap-1">
-          <button
-            className="p-1 hover:bg-gray-100 rounded"
-            onClick={() => setIsEditing(!isEditing)}
-          >
-            <PencilIcon className="w-4 h-4 text-gray-600" />
-          </button>
-          <div className="w-px h-4 bg-gray-200" />
           <button
             className="p-1 hover:bg-gray-100 rounded"
             onClick={(e) => {

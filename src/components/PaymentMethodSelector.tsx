@@ -124,7 +124,7 @@ export default function PaymentMethodSelector({
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-white rounded-2xl w-full max-w-md p-6 relative">
-        {/* Close button */}
+        {/* Only show the close button in the top right */}
         <button
           onClick={onClose}
           className="absolute right-4 top-4 text-gray-400 hover:text-gray-600"
@@ -217,14 +217,11 @@ export default function PaymentMethodSelector({
                       </button>
                       <button
                         type="button"
-                        onClick={() => setSelectedProvider('airtel')}
-                        className={`flex-1 flex items-center justify-center gap-2 p-2 rounded-lg border ${
-                          selectedProvider === 'airtel' 
-                            ? 'border-purple-500 bg-white' 
-                            : 'border-gray-200 bg-white'
-                        }`}
+                        disabled
+                        title="Airtel is currently not available"
+                        className={`flex-1 flex items-center justify-center gap-2 p-2 rounded-lg border bg-gray-100 cursor-not-allowed opacity-60 border-gray-200`}
                       >
-                        <div className="relative w-10 h-10">
+                        <div className="relative w-10 h-10 grayscale">
                           <Image
                             src="/icons/Payment images/airtel.png"
                             alt="Airtel Money"

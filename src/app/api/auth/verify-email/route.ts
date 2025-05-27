@@ -8,27 +8,45 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 export async function POST(request: Request) {
   try {
     const { email } = await request.json();
+    console.log('Verification request for email:', email);
+
+    // Check if user exists
+    const user = await prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (!user) {
+      console.log('User not found:', email);
+      return NextResponse.json(
+        { error: 'User not found' },
+        { status: 404 }
+      );
+    }
 
     // Generate a random verification token
     const token = randomBytes(32).toString('hex');
     const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
-    // Create or update verification token
-    await prisma.verificationToken.upsert({
-      where: {
-        identifier_token: {
-          identifier: email,
-          token: token
-        }
-      },
-      update: { token, expires },
-      create: { identifier: email, token, expires },
+    // Delete any existing verification tokens for this email
+    await prisma.verificationToken.deleteMany({
+      where: { identifier: email },
     });
 
+    // Create new verification token
+    await prisma.verificationToken.create({
+      data: {
+        identifier: email,
+        token,
+        expires,
+      },
+    });
+    console.log('Created new verification token for:', email);
+
     // Send verification email
-    const verificationUrl = `${process.env.NEXT_PUBLIC_APP_URL}/verify-email?token=${token}`;
+    const verificationUrl = `${process.env.NEXT_PUBLIC_APP_URL}/verify-email?token=${token}&email=${encodeURIComponent(email)}`;
+    console.log('Sending verification email to:', email);
     
-    await resend.emails.send({
+    const emailResult = await resend.emails.send({
       from: 'StudioSix <noreply@studiosix.ai>',
       to: email,
       subject: 'Verify your StudioSix account',
@@ -44,8 +62,12 @@ export async function POST(request: Request) {
         </div>
       `,
     });
+    console.log('Verification email sent:', emailResult);
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ 
+      success: true,
+      message: 'Verification email sent'
+    });
   } catch (error) {
     console.error('Error sending verification email:', error);
     return NextResponse.json(

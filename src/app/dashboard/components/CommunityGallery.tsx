@@ -137,7 +137,7 @@ export default function CommunityGallery() {
         </button>
       </div>
       
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 w-full overflow-visible pb-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 w-full overflow-visible pb-4">
         {images.slice(0, 6).map((image, index) => {
           let gridSpan;
           if (index === 0) {
@@ -153,11 +153,12 @@ export default function CommunityGallery() {
           return (
             <div 
               key={image.id} 
-              className={`${gridSpan} group relative overflow-hidden rounded-xl shadow-sm hover:shadow-md transition-shadow duration-300`}
+              className={`${gridSpan} group relative overflow-hidden rounded-xl shadow-sm hover:shadow-md transition-shadow duration-300 touch-manipulation`}
               style={{
                 aspectRatio: index === 0 ? '2/2' : 
                              index === 3 ? '2/1' : '1/1',
-                minHeight: index === 0 ? '300px' : '150px'
+                minHeight: index === 0 ? '180px' : '100px',
+                maxHeight: '320px'
               }}
             >
               <Image

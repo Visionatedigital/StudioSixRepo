@@ -157,11 +157,6 @@ export default function CommunityMessage({
         <div className="flex items-center gap-2 mb-1">
           <span className="font-medium text-[#202126]">{username || 'User'}</span>
           {userVerified && <VerifiedBadge size={16} className="-translate-y-0.5" />}
-          <div className="flex items-center gap-1">
-            <div className="w-4 h-4 rounded-full bg-purple-600 flex items-center justify-center">
-              <span className="text-white text-[8px]">{userLevel || 1}</span>
-            </div>
-          </div>
           <span className="text-xs text-gray-500">{formatTimestamp(timestamp || createdAt || '')}</span>
           
           {/* Error indicator */}

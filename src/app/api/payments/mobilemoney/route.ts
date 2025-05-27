@@ -20,8 +20,20 @@ export async function POST(req: NextRequest) {
     // Parse the request body
     const { packageId, phoneNumber } = await req.json();
 
-    // Validate the package ID
-    const packageDetails = getCreditPackage(packageId);
+    // Fetch latest USD/UGX exchange rate
+    let exchangeRate = 4000; // fallback default
+    try {
+      const fxRes = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
+      const fxData = await fxRes.json();
+      if (fxData && fxData.rates && fxData.rates.UGX) {
+        exchangeRate = fxData.rates.UGX;
+      }
+    } catch (e) {
+      console.error('Failed to fetch exchange rate, using fallback:', e);
+    }
+
+    // Validate the package ID and convert to UGX
+    const packageDetails = getCreditPackage(packageId, exchangeRate);
     if (!packageDetails) {
       return NextResponse.json(
         { error: 'Invalid package ID' },
@@ -44,7 +56,8 @@ export async function POST(req: NextRequest) {
     // Create initial metadata
     const metadata = JSON.stringify({
       packageId,
-      phoneNumber
+      phoneNumber,
+      exchangeRateUsed: exchangeRate
     });
 
     // Create a payment record in the database using raw SQL

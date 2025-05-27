@@ -2,34 +2,31 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { getPaymentStatus } from '@/lib/mobilemoney';
 
 /**
  * This endpoint checks the status of a Mobile Money payment.
+ * It only checks the local database and does NOT contact the provider.
+ * If the payment is still pending after 30 seconds, it is automatically marked as failed.
  */
 export async function GET(req: NextRequest) {
   try {
     // Get the current user session
     const session = await getServerSession(authOptions);
-    
     if (!session?.user?.id) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
       );
     }
-
     // Get the payment ID from the URL
     const { searchParams } = new URL(req.url);
     const paymentId = searchParams.get('paymentId');
-
     if (!paymentId) {
       return NextResponse.json(
         { error: 'Payment ID is required' },
         { status: 400 }
       );
     }
-
     // First try to find by provider payment ID
     let payment = await prisma.payment.findFirst({
       where: {
@@ -37,7 +34,6 @@ export async function GET(req: NextRequest) {
         providerPaymentId: paymentId
       }
     });
-
     // If not found, try to find by our internal payment ID
     if (!payment) {
       payment = await prisma.payment.findFirst({
@@ -47,59 +43,17 @@ export async function GET(req: NextRequest) {
         }
       });
     }
-
     if (!payment) {
-      return NextResponse.json(
-        { error: 'Payment not found' },
-        { status: 404 }
-      );
+      // Instead of 404, return pending so frontend keeps polling
+      return NextResponse.json({
+        success: false,
+        payment: {
+          status: 'pending'
+        }
+      });
     }
-
-    // Get the provider payment ID for checking status
-    const providerPaymentId = payment.providerPaymentId || '';
-
-    try {
-      // Check the payment status with the provider if we have a provider payment ID
-      if (providerPaymentId) {
-        const statusResponse = await getPaymentStatus(providerPaymentId);
-        
-        // Update the payment record with the latest status
-        await prisma.payment.update({
-          where: { id: payment.id },
-          data: {
-            providerStatus: statusResponse.status,
-            updatedAt: new Date()
-          }
-        });
-
-        return NextResponse.json({
-          success: true,
-          payment: {
-            id: payment.id,
-            provider_id: payment.providerPaymentId,
-            status: statusResponse.status,
-            amount: payment.amount,
-            created_at: payment.createdAt
-          },
-          provider_response: statusResponse
-        });
-      } else {
-        // If we don't have a provider payment ID, just return the current status
-        return NextResponse.json({
-          success: true,
-          payment: {
-            id: payment.id,
-            provider_id: payment.providerPaymentId,
-            status: payment.status,
-            amount: payment.amount,
-            created_at: payment.createdAt
-          }
-        });
-      }
-    } catch (error) {
-      console.error('Error checking provider status:', error);
-      
-      // Return the current status from our database if provider check fails
+    // If payment is not pending, return DB status immediately
+    if (payment.status !== 'PENDING') {
       return NextResponse.json({
         success: true,
         payment: {
@@ -109,9 +63,47 @@ export async function GET(req: NextRequest) {
           amount: payment.amount,
           created_at: payment.createdAt
         },
-        error: 'Failed to check provider status, using local status'
+        provider_response: null
       });
     }
+    // If payment is still pending, check if more than 30 seconds have passed
+    const now = new Date();
+    const createdAt = new Date(payment.createdAt);
+    const secondsElapsed = (now.getTime() - createdAt.getTime()) / 1000;
+    if (secondsElapsed > 30) {
+      // Automatically mark as failed
+      await prisma.payment.update({
+        where: { id: payment.id },
+        data: {
+          status: 'FAILED',
+          providerStatus: 'timeout',
+          updatedAt: new Date()
+        }
+      });
+      return NextResponse.json({
+        success: true,
+        payment: {
+          id: payment.id,
+          provider_id: payment.providerPaymentId,
+          status: 'FAILED',
+          amount: payment.amount,
+          created_at: payment.createdAt
+        },
+        provider_response: null
+      });
+    }
+    // Still pending and within timeout
+    return NextResponse.json({
+      success: true,
+      payment: {
+        id: payment.id,
+        provider_id: payment.providerPaymentId,
+        status: payment.status,
+        amount: payment.amount,
+        created_at: payment.createdAt
+      },
+      provider_response: null
+    });
   } catch (error) {
     console.error('Error checking Mobile Money payment status:', error);
     return NextResponse.json(

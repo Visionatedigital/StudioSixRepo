@@ -4,6 +4,7 @@ import Image from 'next/image';
 import { useState } from 'react';
 import clsx from 'clsx';
 import DrawingToolsTray from './DrawingToolsTray';
+import { Fragment } from 'react';
 
 interface ContainerTemplate {
   id: string;
@@ -11,7 +12,7 @@ interface ContainerTemplate {
   description?: string;
 }
 
-type Tool = 'text' | 'board' | 'container' | 'note' | 'image' | 'upload' | 'draw' | 'trash' | 'prompt';
+type Tool = 'text' | 'simplestickynote' | 'simpleDraw' | 'board' | 'container' | 'note' | 'image' | 'upload' | 'draw' | 'trash' | 'prompt' | 'table';
 
 interface ToolDefinition {
   id: Tool;
@@ -23,6 +24,10 @@ interface ToolDefinition {
 interface ToolsPanelProps {
   onToolSelect: (toolId: Tool, templateId?: string, drawingTool?: 'pencil' | 'marker' | 'eraser') => void;
   selectedTool: Tool;
+  showShapesMenu?: boolean;
+  setShowShapesMenu?: (show: boolean) => void;
+  selectedShape?: string;
+  onShapeSelect?: (shapeId: string) => void;
 }
 
 function ContainerSubmenu({ onSelect, onClose }: { 
@@ -54,7 +59,40 @@ function ContainerSubmenu({ onSelect, onClose }: {
   );
 }
 
-export default function ToolsPanel({ onToolSelect, selectedTool }: ToolsPanelProps) {
+const SHAPES = [
+  { id: 'line', label: 'Line', icon: '/icons/line-svgrepo-com.svg' },
+  { id: 'arrow', label: 'Arrow', icon: '/icons/arrow-up-right-svgrepo-com.svg' },
+  { id: 'elbow', label: 'Elbow', icon: '/icons/arrow-elbow-right-fill-svgrepo-com.svg' },
+  { id: 'bent-arrow', label: 'Bent Arrow', icon: '/icons/curved-arrow-svgrepo-com.svg' },
+  { id: 'square', label: 'Square', icon: '/icons/square-svgrepo-com.svg' },
+  { id: 'circle', label: 'Circle', icon: '/icons/circle-svgrepo-com.svg' },
+  { id: 'diamond', label: 'Diamond', icon: '/icons/diamond-round-880-svgrepo-com.svg' },
+  { id: 'star', label: 'Star', icon: '/icons/star-svgrepo-com.svg' },
+  { id: 'triangle', label: 'Triangle', icon: '/icons/triangle-svgrepo-com.svg' },
+  { id: 'speech', label: 'Speech Bubble', icon: '/icons/speech-bubble-15-svgrepo-com.svg' },
+];
+
+function ShapesMenu({ selectedShape, onSelectShape }: { selectedShape: string; onSelectShape: (id: string) => void }) {
+  return (
+    <div className="absolute left-[80px] top-1/2 -translate-y-1/2 bg-white rounded-lg shadow-lg p-4 w-[320px] z-50 border border-blue-400" style={{ minHeight: 220 }}>
+      <div className="grid grid-cols-4 gap-3 mb-3">
+        {SHAPES.map(shape => (
+          <button
+            key={shape.id}
+            onClick={() => onSelectShape(shape.id)}
+            className={`flex flex-col items-center justify-center p-2 rounded-lg border ${selectedShape === shape.id ? 'border-blue-500 bg-blue-50' : 'border-transparent hover:bg-gray-50'}`}
+          >
+            <img src={shape.icon} alt={shape.label} className="w-7 h-7 mb-1" />
+            <span className="text-xs text-gray-700">{shape.label}</span>
+          </button>
+        ))}
+      </div>
+      <button className="w-full py-2 rounded bg-gray-100 text-gray-700 text-base font-medium mt-2">More shapes</button>
+    </div>
+  );
+}
+
+export default function ToolsPanel({ onToolSelect, selectedTool, showShapesMenu, setShowShapesMenu, selectedShape, onShapeSelect }: ToolsPanelProps) {
   const [showContainerSubmenu, setShowContainerSubmenu] = useState(false);
   const [selectedDrawingTool, setSelectedDrawingTool] = useState<'pencil' | 'marker' | 'eraser'>('pencil');
   const [selectedColor, setSelectedColor] = useState('#000000');
@@ -80,7 +118,19 @@ export default function ToolsPanel({ onToolSelect, selectedTool }: ToolsPanelPro
     // Here you would also update the canvas stroke width
   };
 
-  const tools: ToolDefinition[] = [
+  const tools = [
+    {
+      id: 'mouse',
+      name: 'Select',
+      icon: '/icons/pointer-tool-svgrepo-com.svg',
+      activeIcon: '/icons/pointer-tool-white-svgrepo-com.svg'
+    },
+    {
+      id: 'ai',
+      name: 'AI',
+      icon: '/icons/effect-magic-sparkles-svgrepo-com.svg',
+      activeIcon: '/icons/effect-magic-sparkles-white.svg'
+    },
     {
       id: 'text',
       name: 'Text',
@@ -88,74 +138,84 @@ export default function ToolsPanel({ onToolSelect, selectedTool }: ToolsPanelPro
       activeIcon: '/icons/text-white-icon.svg'
     },
     {
-      id: 'draw',
+      id: 'simpleDraw',
       name: 'Draw',
-      icon: '/icons/edit-pen-icon.svg',
-      activeIcon: '/icons/edit-pen-icon-white.svg'
+      icon: '/icons/prompt-icon.svg',
+      activeIcon: '/icons/prompt-icon white.svg'
     },
     {
-      id: 'note',
-      name: 'Note',
+      id: 'simplestickynote',
+      name: 'Sticky Note',
       icon: '/icons/sticky-note-icon.svg',
       activeIcon: '/icons/sticky-note-white-icon.svg'
     },
     {
-      id: 'prompt',
-      name: 'Imagine',
-      icon: '/icons/visualize-icon.svg',
-      activeIcon: '/icons/visualize-white-icon.svg'
+      id: 'shapes',
+      name: 'Shapes',
+      icon: '/icons/shapes-svgrepo-com.svg',
+      activeIcon: '/icons/shapes-white-svgrepo-com.svg'
     },
     {
-      id: 'board',
-      name: 'Board',
-      icon: '/icons/library-icon.svg'
-    },
-    {
-      id: 'container',
-      name: 'Template',
-      icon: '/icons/container-icon.svg',
-      activeIcon: '/icons/container-white-icon.svg'
-    },
-    {
-      id: 'image',
-      name: 'Add Image',
-      icon: '/icons/image-icon.svg'
+      id: 'stickers',
+      name: 'Stickers',
+      icon: '/icons/sticker-smile-circle-2-svgrepo-com.svg',
+      activeIcon: '/icons/sticker-smile-circle-2-white-svgrepo-com.svg'
     },
     {
       id: 'upload',
       name: 'Upload',
-      icon: '/icons/download-icon.svg'
+      icon: '/icons/upload-minimalistic-svgrepo-com.svg',
+      activeIcon: '/icons/upload-minimalistic-white-svgrepo-com.svg'
+    },
+    {
+      id: 'table',
+      name: 'Table',
+      icon: '/icons/container-icon.svg',
+      activeIcon: '/icons/container-white-icon.svg'
+    },
+    {
+      id: 'mindmap',
+      name: 'Mind map',
+      icon: '/icons/mindmap-map-svgrepo-com.svg',
+      activeIcon: '/icons/mindmap-map-white-svgrepo-com.svg'
     },
     {
       id: 'trash',
-      name: 'Trash',
-      icon: '/icons/trash-icon.svg'
+      name: 'Delete',
+      icon: '/icons/trash-icon.svg',
+      activeIcon: '/icons/trash-white-icon.svg'
     }
   ];
 
   return (
     <>
-      <div className="fixed left-0 bg-white shadow-lg rounded-lg p-2 flex flex-col gap-2 w-[68px]" style={{ top: '50%', transform: 'translateY(-50%)' }}>
+      <div className="fixed left-0 bg-white shadow-lg rounded-lg p-1.5 flex flex-col gap-1.5 w-[60px]" style={{ top: '50%', transform: 'translateY(-50%)' }}>
         {tools.map((tool) => (
           <button
             key={tool.id}
             onClick={() => {
               if (tool.id === 'container') {
                 setShowContainerSubmenu(!showContainerSubmenu);
-              } else {
-                onToolSelect(tool.id);
+                setShowShapesMenu?.(false);
+              } else if (tool.id === 'shapes') {
+                setShowShapesMenu?.(true);
                 setShowContainerSubmenu(false);
+                onToolSelect(tool.id as Tool);
+              } else {
+                onToolSelect(tool.id as Tool);
+                setShowContainerSubmenu(false);
+                setShowShapesMenu?.(false);
               }
             }}
             className={clsx(
-              'w-12 h-12 rounded-lg transition-colors relative group flex items-center justify-center',
+              'w-11 h-11 rounded-lg transition-colors relative group flex items-center justify-center',
               selectedTool === tool.id
                 ? 'bg-gradient-to-r from-[#814ADA] to-[#4130A7]'
                 : 'hover:bg-gray-50'
             )}
             title={tool.name}
           >
-            <div className="w-8 h-8 relative">
+            <div className="w-7 h-7 relative">
               <Image
                 src={selectedTool === tool.id && tool.activeIcon ? tool.activeIcon : tool.icon}
                 alt={tool.name}
@@ -176,6 +236,9 @@ export default function ToolsPanel({ onToolSelect, selectedTool }: ToolsPanelPro
             onSelect={handleContainerSelect}
             onClose={() => setShowContainerSubmenu(false)}
           />
+        )}
+        {showShapesMenu && (
+          <ShapesMenu selectedShape={selectedShape || 'square'} onSelectShape={onShapeSelect!} />
         )}
       </div>
 

@@ -29,7 +29,7 @@ export default function DashboardLayout({ children, currentPage }: DashboardLayo
   const router = useRouter();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isMessagesOpen, setIsMessagesOpen] = useState(false);
-  const [isAiToolsExpanded, setIsAiToolsExpanded] = useState(false);
+  const [isAiToolsExpanded, setIsAiToolsExpanded] = useState(true);
   const [credits, setCredits] = useState<number | null>(null);
   const profileRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<HTMLDivElement>(null);

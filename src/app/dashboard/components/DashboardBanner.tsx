@@ -94,7 +94,7 @@ export default function DashboardBanner() {
   return (
     <div className="space-y-6">
       {/* Banner Carousel */}
-      <div className="relative h-[400px] rounded-2xl overflow-hidden group">
+      <div className="relative h-48 sm:h-64 md:h-[400px] rounded-2xl overflow-hidden group">
         <div
           className="absolute inset-0 transition-transform duration-500 ease-in-out"
           style={{ transform: `translateX(-${currentSlide * 100}%)` }}
@@ -113,12 +113,12 @@ export default function DashboardBanner() {
                 priority={tools.indexOf(tool) === currentSlide}
               />
               <div className="absolute inset-0 bg-gradient-to-r from-black/60 to-transparent">
-                <div className="absolute bottom-12 left-12 text-white max-w-lg">
-                  <h2 className="text-4xl font-bold mb-4">{tool.title}</h2>
-                  <p className="text-lg text-white/90 mb-8">{tool.description}</p>
+                <div className="absolute bottom-6 left-4 sm:bottom-12 sm:left-12 text-white max-w-xs sm:max-w-lg">
+                  <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-2 sm:mb-4">{tool.title}</h2>
+                  <p className="text-base sm:text-lg text-white/90 mb-4 sm:mb-8">{tool.description}</p>
                   <Link
                     href={tool.href}
-                    className="inline-flex items-center px-6 py-3 bg-white text-[#1B1464] rounded-xl hover:bg-white/90 transition-colors font-medium"
+                    className="inline-flex items-center px-4 sm:px-6 py-2 sm:py-3 bg-white text-[#1B1464] rounded-xl hover:bg-white/90 transition-colors font-medium text-sm sm:text-base"
                   >
                     Try Now
                     <Icon name="arrow-right" size={20} className="ml-2" />
@@ -132,20 +132,20 @@ export default function DashboardBanner() {
         {/* Navigation Buttons */}
         <button
           onClick={prevSlide}
-          className="absolute left-6 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/20 p-3 rounded-full backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity"
+          className="absolute left-2 sm:left-6 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/20 p-2 sm:p-3 rounded-full backdrop-blur-sm opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
         >
           <Icon name="chevron-left" size={32} className="text-white" />
         </button>
 
         <button
           onClick={nextSlide}
-          className="absolute right-6 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/20 p-3 rounded-full backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity"
+          className="absolute right-2 sm:right-6 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/20 p-2 sm:p-3 rounded-full backdrop-blur-sm opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
         >
           <Icon name="chevron-right" size={32} className="text-white" />
         </button>
 
         {/* Dots */}
-        <div className="absolute bottom-8 right-8 flex gap-2">
+        <div className="absolute bottom-2 right-2 sm:bottom-8 sm:right-8 flex gap-2">
           {tools.map((_, index) => (
             <button
               key={index}
@@ -161,7 +161,7 @@ export default function DashboardBanner() {
       </div>
 
       {/* Quick Action Buttons */}
-      <div className="grid grid-cols-4 gap-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6 w-full">
         {tools.slice(0, 8).map((tool) => (
           <Link
             key={tool.id}

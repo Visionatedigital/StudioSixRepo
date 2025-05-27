@@ -1,4 +1,21 @@
-export type Tool = 'mouse' | 'todo' | 'text' | 'board' | 'column' | 'container' | 'note' | 'image' | 'upload' | 'draw' | 'trash' | 'prompt' | 'sticky-note';
+export type Tool =
+  | 'mouse'
+  | 'text'
+  | 'draw'
+  | 'simpleDraw'
+  | 'simplestickynote'
+  | 'shapes'
+  | 'container'
+  | 'prompt'
+  | 'trash'
+  | 'note'
+  | 'sticky-note'
+  | 'image'
+  | 'upload'
+  | 'board'
+  | 'stickers'
+  | 'ai'
+  | 'table';
 
 export type ElementType =
   | 'text'
@@ -13,7 +30,8 @@ export type ElementType =
   | 'container'
   | 'generated-content'
   | 'sticky-note'
-  | 'drawing';
+  | 'drawing'
+  | 'table';
 
 export interface BaseElement {
   id: string;
@@ -78,8 +96,17 @@ export interface BoardElement extends BaseElement {
 
 export interface ShapeElement extends BaseElement {
   type: 'shape';
-  shapeType: string;
+  shapeType: 'square' | 'circle' | 'triangle' | 'diamond' | 'star';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
   fill: string;
+  stroke: string;
+  strokeWidth: number;
+  opacity: number;
+  rotation: number;
+  canvasId: string;
 }
 
 export interface LineElement extends BaseElement {
@@ -261,6 +288,26 @@ export interface DrawingElement extends BaseElement {
   stroke: string;
 }
 
+export interface TableElement extends BaseElement {
+  type: 'table';
+  rows: number;
+  columns: number;
+  cellWidths: number[]; // length = columns
+  cellHeights: number[]; // length = rows
+  data: string[][]; // [row][col]
+  borderColor?: string;
+  cellFill?: string;
+  fontFamily?: string;
+  fontSize?: number;
+  isLocked?: boolean;
+  cellStyles?: Array<Array<{
+    borderColor?: string;
+    fill?: string;
+    fontFamily?: string;
+    fontSize?: number;
+  }>>;
+}
+
 export interface StickyNoteProps {
   id: string;
   x: number;
@@ -287,7 +334,8 @@ export type CanvasElement =
   | ContainerElement
   | GeneratedContentElement
   | StickyNoteElement
-  | DrawingElement;
+  | DrawingElement
+  | TableElement;
 
 export interface CanvasData {
   id: string;

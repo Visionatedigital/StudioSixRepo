@@ -36,12 +36,12 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
-          console.log("[AUTH] Missing email or password");
+          // console.log("[AUTH] Missing email or password");
           return null;
         }
 
         try {
-          console.log("[AUTH] Attempting to find user with email:", credentials.email);
+          // console.log("[AUTH] Attempting to find user with email:", credentials.email);
           const user = await prisma.user.findUnique({
             where: {
               email: credentials.email
@@ -55,40 +55,47 @@ export const authOptions: NextAuthOptions = {
               credits: true,
               level: true,
               verified: true,
+              emailVerified: true,
               subscriptionStatus: true,
-              hashedPassword: true
+              hashedPassword: true,
+              hasCompletedOnboarding: true,
             }
           });
 
           if (!user?.hashedPassword || !user.email) {
-            console.log("[AUTH] User not found or missing hashedPassword");
+            // console.log("[AUTH] User not found or missing hashedPassword");
             return null;
           }
 
-          console.log("[AUTH] User found, comparing passwords");
+          // console.log("[AUTH] User found, comparing passwords");
           const passwordsMatch = await bcrypt.compare(credentials.password, user.hashedPassword);
 
           if (!passwordsMatch) {
-            console.log("[AUTH] Password does not match");
+            // console.log("[AUTH] Password does not match");
             return null;
           }
 
-          console.log("[AUTH] Authentication successful for user:", { id: user.id, email: user.email });
+          // console.log("[AUTH] Authentication successful for user:", { 
+          //   id: user.id, 
+          //   email: user.email,
+          //   verified: user.verified,
+          //   emailVerified: user.emailVerified
+          // });
           
           const { hashedPassword, ...userWithoutPassword } = user;
           return userWithoutPassword as any;
         } catch (error) {
-          console.error("[AUTH] Detailed error during authorization:", {
-            error: error instanceof Error ? {
-              message: error.message,
-              stack: error.stack,
-              name: error.name
-            } : error,
-            credentials: {
-              email: credentials?.email,
-              hasPassword: !!credentials?.password
-            }
-          });
+          // console.error("[AUTH] Detailed error during authorization:", {
+          //   error: error instanceof Error ? {
+          //     message: error.message,
+          //     stack: error.stack,
+          //     name: error.name
+          //   } : error,
+          //   credentials: {
+          //     email: credentials?.email,
+          //     hasPassword: !!credentials?.password
+          //   }
+          // });
           return null;
         }
       }
@@ -101,16 +108,22 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, user, trigger, session }) {
       if (trigger === "update" && session) {
-        // Handle session update
+        // console.log("[AUTH] Session update triggered:", session);
         return { ...token, ...session.user };
       }
 
       if (user) {
         // Initial sign in
         const dbUser = user as DatabaseUser;
+        // console.log("[AUTH] Initial sign in - User data:", {
+        //   id: dbUser.id,
+        //   email: dbUser.email,
+        //   verified: dbUser.verified,
+        //   emailVerified: dbUser.emailVerified
+        // });
         
         // Add lastChecked timestamp for tracking when we last verified data
-        return {
+        const tokenData = {
           ...token,
           id: dbUser.id,
           email: dbUser.email,
@@ -119,11 +132,19 @@ export const authOptions: NextAuthOptions = {
           bannerImage: dbUser.bannerImage,
           credits: dbUser.credits,
           level: dbUser.level,
-          verified: dbUser.verified || !!dbUser.emailVerified,
+          verified: Boolean(dbUser.verified),
           email_verified: dbUser.emailVerified,
           subscriptionStatus: dbUser.subscriptionStatus,
+          hasCompletedOnboarding: dbUser.hasCompletedOnboarding,
           lastChecked: Date.now()
         };
+
+        // console.log("[AUTH] Generated token data:", {
+        //   verified: tokenData.verified,
+        //   email_verified: tokenData.email_verified
+        // });
+
+        return tokenData;
       }
 
       // Only check for updates every 5 minutes to reduce DB queries
@@ -133,7 +154,7 @@ export const authOptions: NextAuthOptions = {
       
       // Check if we need to update email verification status
       if (token.email && shouldRefresh) {
-        console.log("[AUTH] Refreshing user data from database (5-minute interval)");
+        // console.log("[AUTH] Refreshing user data from database (5-minute interval)");
         try {
           const user = await prisma.user.findUnique({
             where: { email: token.email },
@@ -142,31 +163,43 @@ export const authOptions: NextAuthOptions = {
               credits: true,
               level: true,
               verified: true,
-              subscriptionStatus: true
+              subscriptionStatus: true,
+              hasCompletedOnboarding: true,
             }
           });
           
           if (user) {
+            // console.log("[AUTH] User data from refresh:", {
+            //   verified: user.verified,
+            //   emailVerified: user.emailVerified
+            // });
+
+            // Update verification status
             token.email_verified = user.emailVerified;
+            token.verified = Boolean(user.verified);
             token.credits = user.credits;
             token.level = user.level;
-            token.verified = user.verified || !!user.emailVerified;
             token.subscriptionStatus = user.subscriptionStatus;
+            token.hasCompletedOnboarding = user.hasCompletedOnboarding;
             token.lastChecked = Date.now();
+
+            // console.log("[AUTH] Updated token data:", {
+            //   verified: token.verified,
+            //   email_verified: token.email_verified
+            // });
           }
         } catch (error) {
-          console.error("[AUTH] Error refreshing user data:", error);
+          // console.error("[AUTH] Error refreshing user data:", error);
           // Don't update lastChecked on error to try again next time
         }
       }
 
-      // On subsequent requests, token already has the user info
       return token;
     },
     async session({ session, token }) {
       if (!token.email) return session;
 
-      return {
+      const sessionData = {
         ...session,
         user: {
           ...session.user,
@@ -177,10 +210,19 @@ export const authOptions: NextAuthOptions = {
           bannerImage: token.bannerImage as string | null,
           credits: token.credits as number,
           level: token.level as number,
-          verified: token.verified as boolean,
-          subscriptionStatus: token.subscriptionStatus as AuthUser['subscriptionStatus']
+          verified: Boolean(token.verified),
+          email_verified: token.email_verified as Date | null,
+          subscriptionStatus: token.subscriptionStatus as AuthUser['subscriptionStatus'],
+          hasCompletedOnboarding: token.hasCompletedOnboarding,
         },
       };
+
+      // console.log("[AUTH] Session data:", {
+      //   verified: sessionData.user.verified,
+      //   email_verified: sessionData.user.email_verified
+      // });
+
+      return sessionData;
     },
     async redirect({ url, baseUrl }) {
       // If the url is relative, prepend the base URL
@@ -214,7 +256,8 @@ export async function updateSession(token: JWT): Promise<JWT> {
       level: true,
       verified: true, 
       emailVerified: true,
-      subscriptionStatus: true
+      subscriptionStatus: true,
+      hasCompletedOnboarding: true,
     }
   });
 
@@ -233,6 +276,7 @@ export async function updateSession(token: JWT): Promise<JWT> {
     level: dbUser.level,
     verified: dbUser.verified || !!dbUser.emailVerified,
     email_verified: dbUser.emailVerified,
-    subscriptionStatus: dbUser.subscriptionStatus
+    subscriptionStatus: dbUser.subscriptionStatus,
+    hasCompletedOnboarding: dbUser.hasCompletedOnboarding,
   };
 } 

@@ -7,6 +7,7 @@ export async function GET(
 ) {
   try {
     const { token } = params;
+    console.log('Verifying token:', token);
 
     // Find the verification token
     const verificationToken = await prisma.verificationToken.findUnique({
@@ -14,6 +15,7 @@ export async function GET(
     });
 
     if (!verificationToken) {
+      console.log('Invalid token:', token);
       return NextResponse.json(
         { error: 'Invalid verification token' },
         { status: 400 }
@@ -22,6 +24,7 @@ export async function GET(
 
     // Check if token has expired
     if (verificationToken.expires < new Date()) {
+      console.log('Token expired:', token);
       await prisma.verificationToken.delete({
         where: { token },
       });
@@ -31,7 +34,21 @@ export async function GET(
       );
     }
 
+    // Find the user
+    const user = await prisma.user.findUnique({
+      where: { email: verificationToken.identifier },
+    });
+
+    if (!user) {
+      console.log('User not found for token:', token);
+      return NextResponse.json(
+        { error: 'User not found' },
+        { status: 404 }
+      );
+    }
+
     // Update user's email verification status
+    console.log('Updating user verification status:', user.email);
     await prisma.user.update({
       where: { email: verificationToken.identifier },
       data: { 
@@ -44,8 +61,12 @@ export async function GET(
     await prisma.verificationToken.delete({
       where: { token },
     });
+    console.log('Token verification successful for:', user.email);
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ 
+      success: true,
+      message: 'Email verified successfully'
+    });
   } catch (error) {
     console.error('Error verifying email:', error);
     return NextResponse.json(

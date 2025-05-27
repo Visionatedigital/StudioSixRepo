@@ -110,6 +110,8 @@ type Transaction = {
   createdAt: string;
 };
 
+const FIXED_USD_TO_UGX = 3870;
+
 export default function WalletPage() {
   const { data: session } = useSession();
   const [credits, setCredits] = useState<number | null>(null);
@@ -126,9 +128,9 @@ export default function WalletPage() {
   const router = useRouter();
 
   // Extract the fetchCredits function for reuse
-  const fetchCredits = async () => {
+  const fetchCredits = async (showLoading = true) => {
     try {
-      setLoading(true);
+      if (showLoading) setLoading(true);
       const response = await fetch('/api/credits/balance');
       const data = await response.json();
       if (response.ok) {
@@ -138,7 +140,7 @@ export default function WalletPage() {
     } catch (error) {
       console.error('Error fetching credits:', error);
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
@@ -240,6 +242,18 @@ export default function WalletPage() {
           
           const toastId = toast.loading('Initiating mobile money payment...');
           
+          // Calculate UGX amount
+          let ugxAmount = 0;
+          if (selectedCurrency === 'UGX') {
+            // Use the package's UGX price
+            if (selectedPackage.credits === 100) ugxAmount = 20000;
+            else if (selectedPackage.credits === 500) ugxAmount = 90000;
+            else if (selectedPackage.credits === 1000) ugxAmount = 170000;
+          } else {
+            // Convert USD price to UGX using fixed rate
+            ugxAmount = Math.round(selectedPackage.priceUSD * FIXED_USD_TO_UGX);
+          }
+          
           // Call the Mobile Money API endpoint
           const response = await fetch('/api/payments/mobilemoney', {
             method: 'POST',
@@ -249,7 +263,8 @@ export default function WalletPage() {
             body: JSON.stringify({
               packageId: selectedPackage.credits === 100 ? 'basic' : 
                          selectedPackage.credits === 500 ? 'standard' : 'premium',
-              phoneNumber: data.phoneNumber
+              phoneNumber: data.phoneNumber,
+              ugxAmount
             }),
           });
           
@@ -280,9 +295,12 @@ export default function WalletPage() {
   };
 
   const handleMobileMoneySuccess = () => {
+    fetchCredits(false);
     toast.success('Payment successful! Your credits have been added.');
-    fetchCredits();
-    router.refresh();
+    setTimeout(() => {
+      setShowMobileMoneyLoading(false);
+      router.refresh();
+    }, 2000);
   };
 
   const handleMobileMoneyFailure = (error: string) => {
@@ -466,8 +484,8 @@ export default function WalletPage() {
           <MobileMoneyLoadingScreen
             isOpen={showMobileMoneyLoading}
             onClose={() => setShowMobileMoneyLoading(false)}
-            paymentId={mobileMoneyPaymentId}
             provider={mobileMoneyProvider}
+            paymentId={mobileMoneyPaymentId}
             onSuccess={handleMobileMoneySuccess}
             onFailure={handleMobileMoneyFailure}
           />
