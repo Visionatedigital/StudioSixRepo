@@ -29,7 +29,7 @@ export default function DashboardLayout({ children, currentPage }: DashboardLayo
   const router = useRouter();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isMessagesOpen, setIsMessagesOpen] = useState(false);
-  const [isAiToolsExpanded, setIsAiToolsExpanded] = useState(true);
+  const [isAiToolsExpanded, setIsAiToolsExpanded] = useState(false);
   const [credits, setCredits] = useState<number | null>(null);
   const profileRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
@@ -124,13 +124,13 @@ export default function DashboardLayout({ children, currentPage }: DashboardLayo
     <>
       <div className="flex h-screen overflow-hidden bg-[#F6F8FA]">
         {/* Sidebar */}
-        <div className="fixed left-0 top-0 bottom-0 w-[302px] bg-white border-r border-[#E0DAF3] z-40">
-          <div className="ml-8 mt-6 w-[270px] h-[724px] bg-white rounded-lg p-8">
+        <div className="fixed left-0 top-0 bottom-0 w-[302px] bg-gradient-to-b from-[#F8F9FF] via-[#F0F2FF] to-[#E8EBFF] border-r border-[#E0DAF3] z-40 flex items-center justify-center">
+          <div className="w-[270px] bg-gradient-to-br from-white/90 via-white/95 to-white/80 backdrop-blur-sm rounded-2xl p-8 shadow-xl border border-white/20">
             {/* Profile Section */}
-            <div className="flex flex-col p-2.5 gap-2.5 w-[206px] bg-gradient-to-r from-[#814ADA] to-[#4130A7] rounded-lg">
+            <div className="flex flex-col p-2.5 gap-2.5 w-[206px] bg-gradient-to-r from-[#814ADA] via-[#9B5DE5] to-[#B366F0] rounded-xl shadow-lg">
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-[13.93px] bg-white overflow-hidden">
+                  <div className="w-9 h-9 rounded-[13.93px] bg-white/20 backdrop-blur-sm overflow-hidden border border-white/30">
                     <Image
                       src={session?.user?.image || defaultAvatar}
                       alt="Profile"
@@ -141,24 +141,24 @@ export default function DashboardLayout({ children, currentPage }: DashboardLayo
                   </div>
                   <div className="flex flex-col">
                     <div className="flex items-center gap-1">
-                      <span className="text-white font-inter font-semibold text-lg">
+                      <span className="text-white font-inter font-semibold text-lg drop-shadow-sm">
                         {session?.user?.name?.split(' ')[0] || 'Designer'}
                       </span>
                       {session?.user?.verified && <VerifiedBadge className="ml-1" />}
                     </div>
-                    <span className="text-white font-inter text-xs">Level 1 Designer</span>
+                    <span className="text-white/90 font-inter text-xs">Level 1 Designer</span>
                   </div>
                 </div>
               </div>
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-0.5">
                   <Icon name="coins" size={20} className="text-white" />
-                  <span className="text-white font-inter text-xs">
+                  <span className="text-white/90 font-inter text-xs">
                     {credits !== null ? `${credits} Credits` : 'Loading...'}
                   </span>
                 </div>
-                <button className="px-1.5 py-1 bg-white rounded-[30px]">
-                  <span className="text-xs font-roboto bg-gradient-to-r from-[#854BDC] to-[#AB4FF0] bg-clip-text text-transparent">
+                <button className="px-1.5 py-1 bg-gradient-to-r from-pink-500 to-pink-600 backdrop-blur-sm rounded-[30px] border border-pink-400/30 hover:from-pink-600 hover:to-pink-700 transition-all duration-200 shadow-lg shadow-pink-500/20 flex items-center justify-center">
+                  <span className="text-xs font-roboto text-white font-medium">
                     Upgrades
                   </span>
                 </button>
@@ -167,7 +167,7 @@ export default function DashboardLayout({ children, currentPage }: DashboardLayo
 
             {/* Menu Items */}
             <div className="mt-6 flex flex-col gap-2.5">
-              <Link href="/dashboard" className={`flex flex-row items-center px-3 py-2.5 gap-1 w-full h-10 rounded-[10px] ${currentPage === 'Dashboard' ? 'bg-white border border-[#D3BBFB] shadow-[0px_2px_3px_rgba(0,0,0,0.01),0px_2px_2px_rgba(135,80,255,0.06)]' : ''}`}>
+              <Link href="/dashboard" className={`flex flex-row items-center px-3 py-2.5 gap-1 w-full h-10 rounded-xl transition-all duration-200 ${currentPage === 'Dashboard' ? 'bg-gradient-to-r from-[#844BDC]/10 to-[#AB4FF0]/10 border border-[#844BDC]/20 shadow-lg shadow-[#844BDC]/10' : 'hover:bg-gradient-to-r hover:from-[#844BDC]/5 hover:to-[#AB4FF0]/5'}`}>
                 <Icon name="home" size={20} isActive={currentPage === 'Dashboard'} />
                 <span className={`font-roboto font-medium text-sm ${currentPage === 'Dashboard' ? 'bg-gradient-to-b from-[#2A0856] to-[#3E0B80] bg-clip-text text-transparent' : 'text-[#202126]'}`}>
                   Home
@@ -178,17 +178,17 @@ export default function DashboardLayout({ children, currentPage }: DashboardLayo
               <div className="flex flex-col">
                 <button 
                   onClick={() => setIsAiToolsExpanded(!isAiToolsExpanded)}
-                  className={`flex flex-row items-center px-3 py-2.5 gap-1 w-full h-10 rounded-[10px] ${pathname.startsWith('/generate') ? 'bg-white border border-[#D3BBFB] shadow-[0px_2px_3px_rgba(0,0,0,0.01),0px_2px_2px_rgba(135,80,255,0.06)]' : ''}`}
+                  className={`flex flex-row items-center px-3 py-2.5 gap-1 w-full h-10 rounded-xl transition-all duration-200 ${(pathname || '').startsWith('/generate') ? 'bg-gradient-to-r from-[#844BDC]/10 to-[#AB4FF0]/10 border border-[#844BDC]/20 shadow-lg shadow-[#844BDC]/10' : 'hover:bg-gradient-to-r hover:from-[#844BDC]/5 hover:to-[#AB4FF0]/5'}`}
                 >
                   <div className="w-6 h-6 relative">
                     <Image
                       src="/icons/Ai-tools-icon.svg"
                       alt=""
                       fill
-                      className={pathname.startsWith('/generate') ? 'text-[#844BDC]' : 'text-[#202126]'}
+                      className={(pathname || '').startsWith('/generate') ? 'text-[#844BDC]' : 'text-[#202126]'}
                     />
                   </div>
-                  <span className={`font-roboto font-medium text-sm flex-grow text-left ${pathname.startsWith('/generate') ? 'bg-gradient-to-b from-[#2A0856] to-[#3E0B80] bg-clip-text text-transparent' : 'text-[#202126]'}`}>
+                  <span className={`font-roboto font-medium text-sm flex-grow text-left ${(pathname || '').startsWith('/generate') ? 'bg-gradient-to-b from-[#2A0856] to-[#3E0B80] bg-clip-text text-transparent' : 'text-[#202126]'}`}>
                     AI Tools
                   </span>
                   <Icon 
@@ -204,23 +204,19 @@ export default function DashboardLayout({ children, currentPage }: DashboardLayo
                     { id: 'exterior', title: 'Exterior AI', path: '/generate?tool=exterior', icon: 'exterior' },
                     { id: 'interior', title: 'Interior AI', path: '/generate?tool=interior', icon: 'interior' },
                     { id: 'enhancer', title: 'Render Enhancer', path: '/generate?tool=enhancer', icon: 'enhancer' },
-                    { id: 'landscape', title: 'Landscape AI', path: '/generate?tool=landscape', icon: 'landscape' },
-                    { id: 'site-analysis', title: 'Site Analysis AI', path: '/generate?tool=site-analysis', iconPath: '/icons/site-analysis.svg' },
-                    { id: 'case-studies', title: 'Case Studies', path: '/case-studies', iconPath: '/icons/case-studies.svg' },
-                    { id: 'concept', title: 'Concept Generator AI', path: '/generate/concept', iconPath: '/icons/concept.svg' },
-                    { id: 'floor-plan', title: 'Floor Plan AI', path: '/generate/floor-plan', iconPath: '/icons/floor-plan.svg' },
                     { id: 'video', title: 'Video Generator AI', path: '/generate/video', icon: 'video' }
                   ].map((item: Tool) => {
+                    const safePathname = pathname || '';
                     const isActive = item.path.startsWith('/generate?') 
-                      ? pathname === '/generate' && new URLSearchParams(item.path.split('?')[1]).get('tool') === new URLSearchParams(window.location.search).get('tool')
-                      : pathname === item.path;
+                      ? safePathname === '/generate' && new URLSearchParams(item.path.split('?')[1]).get('tool') === new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '').get('tool')
+                      : safePathname === item.path;
 
                     return (
                     <Link
                         key={item.id}
                         href={item.path}
-                        className={`flex flex-row items-center px-3 py-2.5 gap-1 w-full h-10 rounded-[10px] hover:bg-[#F6F8FA] transition-colors
-                          ${isActive ? 'bg-white border border-[#D3BBFB] shadow-[0px_2px_3px_rgba(0,0,0,0.01),0px_2px_2px_rgba(135,80,255,0.06)]' : ''}`}
+                        className={`flex flex-row items-center px-3 py-2.5 gap-1 w-full h-10 rounded-xl transition-all duration-200 hover:bg-gradient-to-r hover:from-[#844BDC]/5 hover:to-[#AB4FF0]/5
+                          ${isActive ? 'bg-gradient-to-r from-[#844BDC]/10 to-[#AB4FF0]/10 border border-[#844BDC]/20 shadow-lg shadow-[#844BDC]/10' : ''}`}
                     >
                         <div className="w-6 h-6 relative">
                           {item.iconPath ? (
@@ -247,45 +243,60 @@ export default function DashboardLayout({ children, currentPage }: DashboardLayo
                 </div>
               </div>
 
-              <Link href="/ai-design-assistant" className={`flex flex-row items-center px-3 py-2.5 gap-1 w-full h-10 rounded-[10px] ${currentPage === 'AI Design Assistant' ? 'bg-white border border-[#D3BBFB] shadow-[0px_2px_3px_rgba(0,0,0,0.01),0px_2px_2px_rgba(135,80,255,0.06)]' : ''}`}>
-                <Icon name="prompt" size={20} isActive={currentPage === 'AI Design Assistant'} />
-                <span className={`font-roboto font-medium text-sm ${currentPage === 'AI Design Assistant' ? 'bg-gradient-to-b from-[#2A0856] to-[#3E0B80] bg-clip-text text-transparent' : 'text-[#202126]'}`}>
-                  AI Design Assistant
+              {/* Client Hub Tool */}
+              <Link href="/client-hub" className={`flex flex-row items-center px-3 py-2.5 gap-1 w-full h-10 rounded-xl transition-all duration-200 ${currentPage === 'Client Hub' ? 'bg-gradient-to-r from-[#844BDC]/10 to-[#AB4FF0]/10 border border-[#844BDC]/20 shadow-lg shadow-[#844BDC]/10' : 'hover:bg-gradient-to-r hover:from-[#844BDC]/5 hover:to-[#AB4FF0]/5'}`}>
+                <div className="w-6 h-6 relative">
+                  <Image
+                    src="/icons/client-svgrepo-com.svg"
+                    alt="Client Hub"
+                    fill
+                    className={currentPage === 'Client Hub' ? 'text-[#844BDC]' : 'text-[#202126]'}
+                  />
+                </div>
+                <span className={`font-roboto font-medium text-sm ${currentPage === 'Client Hub' ? 'bg-gradient-to-b from-[#2A0856] to-[#3E0B80] bg-clip-text text-transparent' : 'text-[#202126]'}`}>
+                  Client Hub
                 </span>
               </Link>
-              <div className="w-full border-t border-dashed border-[#CDD0D5] my-2.5" />
-              <Link href="/library" className={`flex flex-row items-center px-3 py-2.5 gap-1 w-full h-10 rounded-[10px] ${currentPage === 'Library' ? 'bg-white border border-[#D3BBFB] shadow-[0px_2px_3px_rgba(0,0,0,0.01),0px_2px_2px_rgba(135,80,255,0.06)]' : ''}`}>
+
+              <Link href="/ai-design-assistant" className={`flex flex-row items-center px-3 py-2.5 gap-1 w-full h-10 rounded-xl transition-all duration-200 ${currentPage === 'Design Studio' ? 'bg-gradient-to-r from-[#844BDC]/10 to-[#AB4FF0]/10 border border-[#844BDC]/20 shadow-lg shadow-[#844BDC]/10' : 'hover:bg-gradient-to-r hover:from-[#844BDC]/5 hover:to-[#AB4FF0]/5'}`}>
+                <Icon name="prompt" size={20} isActive={currentPage === 'Design Studio'} />
+                <span className={`font-roboto font-medium text-sm ${currentPage === 'Design Studio' ? 'bg-gradient-to-b from-[#2A0856] to-[#3E0B80] bg-clip-text text-transparent' : 'text-[#202126]'}`}>
+                  Design Studio
+                </span>
+              </Link>
+              <div className="w-full border-t border-dashed border-[#CDD0D5]/50 my-2.5" />
+              <Link href="/library" className={`flex flex-row items-center px-3 py-2.5 gap-1 w-full h-10 rounded-xl transition-all duration-200 ${currentPage === 'Library' ? 'bg-gradient-to-r from-[#844BDC]/10 to-[#AB4FF0]/10 border border-[#844BDC]/20 shadow-lg shadow-[#844BDC]/10' : 'hover:bg-gradient-to-r hover:from-[#844BDC]/5 hover:to-[#AB4FF0]/5'}`}>
                 <Icon name="library" size={20} isActive={currentPage === 'Library'} />
                 <span className={`font-roboto font-medium text-sm ${currentPage === 'Library' ? 'bg-gradient-to-b from-[#2A0856] to-[#3E0B80] bg-clip-text text-transparent' : 'text-[#202126]'}`}>
                   Community
                 </span>
               </Link>
-              <Link href="/wallet" className={`flex flex-row items-center px-3 py-2.5 gap-1 w-full h-10 rounded-[10px] ${currentPage === 'Wallet' ? 'bg-white border border-[#D3BBFB] shadow-[0px_2px_3px_rgba(0,0,0,0.01),0px_2px_2px_rgba(135,80,255,0.06)]' : ''}`}>
+              <Link href="/wallet" className={`flex flex-row items-center px-3 py-2.5 gap-1 w-full h-10 rounded-xl transition-all duration-200 ${currentPage === 'Wallet' ? 'bg-gradient-to-r from-[#844BDC]/10 to-[#AB4FF0]/10 border border-[#844BDC]/20 shadow-lg shadow-[#844BDC]/10' : 'hover:bg-gradient-to-r hover:from-[#844BDC]/5 hover:to-[#AB4FF0]/5'}`}>
                 <Icon name="wallet" size={20} isActive={currentPage === 'Wallet'} />
                 <span className={`font-roboto font-medium text-sm ${currentPage === 'Wallet' ? 'bg-gradient-to-b from-[#2A0856] to-[#3E0B80] bg-clip-text text-transparent' : 'text-[#202126]'}`}>
                   My Wallet
                 </span>
               </Link>
-              <Link href="/subscription" className={`flex flex-row items-center px-3 py-2.5 gap-1 w-full h-10 rounded-[10px] ${currentPage === 'Subscription' ? 'bg-white border border-[#D3BBFB] shadow-[0px_2px_3px_rgba(0,0,0,0.01),0px_2px_2px_rgba(135,80,255,0.06)]' : ''}`}>
+              <Link href="/subscription" className={`flex flex-row items-center px-3 py-2.5 gap-1 w-full h-10 rounded-xl transition-all duration-200 ${currentPage === 'Subscription' ? 'bg-gradient-to-r from-[#844BDC]/10 to-[#AB4FF0]/10 border border-[#844BDC]/20 shadow-lg shadow-[#844BDC]/10' : 'hover:bg-gradient-to-r hover:from-[#844BDC]/5 hover:to-[#AB4FF0]/5'}`}>
                 <Icon name="subscription" size={20} isActive={currentPage === 'Subscription'} />
                 <span className={`font-roboto font-medium text-sm ${currentPage === 'Subscription' ? 'bg-gradient-to-b from-[#2A0856] to-[#3E0B80] bg-clip-text text-transparent' : 'text-[#202126]'}`}>
                   Subscription
                 </span>
               </Link>
-              <div className="w-full border-t border-dashed border-[#C7CCD8] my-2.5" />
-              <Link href="/pricing" className={`flex flex-row items-center px-3 py-2.5 gap-1 w-full h-10 rounded-[10px] ${currentPage === 'Pricing' ? 'bg-white border border-[#D3BBFB] shadow-[0px_2px_3px_rgba(0,0,0,0.01),0px_2px_2px_rgba(135,80,255,0.06)]' : ''}`}>
+              <div className="w-full border-t border-dashed border-[#C7CCD8]/50 my-2.5" />
+              <Link href="/pricing" className={`flex flex-row items-center px-3 py-2.5 gap-1 w-full h-10 rounded-xl transition-all duration-200 ${currentPage === 'Pricing' ? 'bg-gradient-to-r from-[#844BDC]/10 to-[#AB4FF0]/10 border border-[#844BDC]/20 shadow-lg shadow-[#844BDC]/10' : 'hover:bg-gradient-to-r hover:from-[#844BDC]/5 hover:to-[#AB4FF0]/5'}`}>
                 <Icon name="premium" size={20} isActive={currentPage === 'Pricing'} />
                 <span className={`font-roboto font-medium text-sm ${currentPage === 'Pricing' ? 'bg-gradient-to-b from-[#2A0856] to-[#3E0B80] bg-clip-text text-transparent' : 'text-[#202126]'}`}>
                   Premium Plans
                 </span>
               </Link>
-              <Link href="/settings" className={`flex flex-row items-center px-3 py-2.5 gap-1 w-full h-10 rounded-[10px] ${currentPage === 'Settings' ? 'bg-white border border-[#D3BBFB] shadow-[0px_2px_3px_rgba(0,0,0,0.01),0px_2px_2px_rgba(135,80,255,0.06)]' : ''}`}>
+              <Link href="/settings" className={`flex flex-row items-center px-3 py-2.5 gap-1 w-full h-10 rounded-xl transition-all duration-200 ${currentPage === 'Settings' ? 'bg-gradient-to-r from-[#844BDC]/10 to-[#AB4FF0]/10 border border-[#844BDC]/20 shadow-lg shadow-[#844BDC]/10' : 'hover:bg-gradient-to-r hover:from-[#844BDC]/5 hover:to-[#AB4FF0]/5'}`}>
                 <Icon name="settings" size={20} isActive={currentPage === 'Settings'} />
                 <span className={`font-roboto font-medium text-sm ${currentPage === 'Settings' ? 'bg-gradient-to-b from-[#2A0856] to-[#3E0B80] bg-clip-text text-transparent' : 'text-[#202126]'}`}>
                   Settings
                 </span>
               </Link>
-              <Link href="/help" className={`flex flex-row items-center px-3 py-2.5 gap-1 w-full h-10 rounded-[10px] ${currentPage === 'Help' ? 'bg-white border border-[#D3BBFB] shadow-[0px_2px_3px_rgba(0,0,0,0.01),0px_2px_2px_rgba(135,80,255,0.06)]' : ''}`}>
+              <Link href="/help" className={`flex flex-row items-center px-3 py-2.5 gap-1 w-full h-10 rounded-xl transition-all duration-200 ${currentPage === 'Help' ? 'bg-gradient-to-r from-[#844BDC]/10 to-[#AB4FF0]/10 border border-[#844BDC]/20 shadow-lg shadow-[#844BDC]/10' : 'hover:bg-gradient-to-r hover:from-[#844BDC]/5 hover:to-[#AB4FF0]/5'}`}>
                 <Icon name="help" size={20} isActive={currentPage === 'Help'} />
                 <span className={`font-roboto font-medium text-sm ${currentPage === 'Help' ? 'bg-gradient-to-b from-[#2A0856] to-[#3E0B80] bg-clip-text text-transparent' : 'text-[#202126]'}`}>
                   FAQ & Help
@@ -296,15 +307,15 @@ export default function DashboardLayout({ children, currentPage }: DashboardLayo
             {/* Footer */}
             <div className="mt-6 flex flex-col gap-3.5">
               <div className="flex justify-between items-center">
-                <span className="text-[#202126] font-inter font-medium text-sm">Terms</span>
-                <span className="text-[#202126] font-inter font-medium text-sm">|</span>
-                <span className="text-[#202126] font-inter font-medium text-sm">DMCA</span>
-                <span className="text-[#202126] font-inter font-medium text-sm">|</span>
-                <span className="text-[#202126] font-inter font-medium text-sm">Affiliates</span>
+                <span className="text-[#202126]/70 font-inter font-medium text-sm hover:text-[#844BDC] transition-colors cursor-pointer">Terms</span>
+                <span className="text-[#202126]/30 font-inter font-medium text-sm">|</span>
+                <span className="text-[#202126]/70 font-inter font-medium text-sm hover:text-[#844BDC] transition-colors cursor-pointer">DMCA</span>
+                <span className="text-[#202126]/30 font-inter font-medium text-sm">|</span>
+                <span className="text-[#202126]/70 font-inter font-medium text-sm hover:text-[#844BDC] transition-colors cursor-pointer">Affiliates</span>
               </div>
               <div className="flex justify-between items-center">
                 {['facebook', 'blogger', 'messenger', 'youtube', 'whatsapp'].map((icon) => (
-                  <button key={icon} className="w-5 h-5 opacity-60">
+                  <button key={icon} className="w-5 h-5 opacity-60 hover:opacity-100 hover:text-[#844BDC] transition-all duration-200">
                     <Icon name={icon} size={20} />
                   </button>
                 ))}
@@ -316,7 +327,7 @@ export default function DashboardLayout({ children, currentPage }: DashboardLayo
         {/* Main Content Area */}
         <div className="flex-1 ml-[302px] flex flex-col h-screen overflow-hidden">
           {/* Fixed Header */}
-          <div className="fixed top-0 right-0 left-[302px] bg-[#F6F8FA] z-40">
+          <div className="fixed top-0 right-0 left-[302px] bg-gradient-to-r from-[#F8F9FF] via-[#F7F8FD] to-[#F6F8FA] z-40">
             <div className="flex items-center justify-between px-5 py-6">
               <div className="flex items-center gap-2.5">
                 {/* Navigation Arrows */}
@@ -417,7 +428,7 @@ export default function DashboardLayout({ children, currentPage }: DashboardLayo
           </div>
 
           {/* Scrollable Content Area */}
-          <div ref={contentRef} className="flex-1 mt-[88px] overflow-y-auto">
+          <div ref={contentRef} className="flex-1 mt-[88px] overflow-y-auto bg-gradient-to-r from-[#F8F9FF] via-[#F7F8FD] to-[#F6F8FA]">
             <div className="h-full">
               {children}
             </div>

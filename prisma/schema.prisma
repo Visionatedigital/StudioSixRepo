@@ -146,6 +146,7 @@ model Project {
   name          String
   description   String?
   userId        String
+  clientId      String
   canvasData    Json                  @default("{\"elements\": [], \"canvasStack\": [{\"id\": \"root\", \"name\": \"Root Canvas\", \"elements\": [], \"parentId\": null}]}")
   createdAt     DateTime              @default(now())
   updatedAt     DateTime              @updatedAt
@@ -153,8 +154,12 @@ model Project {
   messages      ChatMessage[]
   user          User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   collaborators ProjectCollaborator[]
+  thumbnail     String?
+  client        Client                @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  milestones    Milestone[]
 
   @@index([userId])
+  @@index([clientId])
 }
 
 model ProjectCollaborator {
@@ -427,6 +432,33 @@ model CollectionPost {
   @@unique([postId, collectionId])
   @@index([collectionId])
   @@index([postId])
+}
+
+model Client {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  phone     String
+  address   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  projects  Project[]
+}
+
+model Milestone {
+  id          String   @id @default(cuid())
+  projectId   String
+  title       String
+  description String?
+  start       DateTime
+  end         DateTime
+  color       String   @default("#8b5cf6") // default purple
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
 }
 
 enum TransactionType {

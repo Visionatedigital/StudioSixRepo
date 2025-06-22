@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 278 254">
+  <defs>
+    <style>
+      .cls-1 {
+        font-family: MyriadPro-Regular, 'Myriad Pro';
+        font-size: 113.8px;
+      }
+
+      .cls-2 {
+        fill: none;
+        stroke: #000;
+        stroke-miterlimit: 10;
+        stroke-width: 10px;
+      }
+    </style>
+  </defs>
+  <!-- Generator: Adobe Illustrator 28.6.0, SVG Export Plug-In . SVG Version: 1.2.0 Build 709)  -->
+  <g>
+    <g id="Layer_1">
+      <text class="cls-1" transform="translate(156.3 126.6)"><tspan x="0" y="0">A</tspan></text>
+      <g>
+        <polyline class="cls-2" points="139 126.6 77.4 126.6 28.2 215.5"/>
+        <polygon points="8.5 166.7 18.2 164.3 30.1 212.1 77 196.8 80.1 206.3 23 225 8.5 166.7"/>
+      </g>
+    </g>
+  </g>
+</svg>

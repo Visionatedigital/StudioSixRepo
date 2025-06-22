@@ -4,15 +4,15 @@ import Image from 'next/image';
 import { useState } from 'react';
 import clsx from 'clsx';
 import DrawingToolsTray from './DrawingToolsTray';
+import LibraryPanel from './LibraryPanel';
 import { Fragment } from 'react';
+import { Tool } from '@/types/canvas';
 
 interface ContainerTemplate {
   id: string;
   name: string;
   description?: string;
 }
-
-type Tool = 'text' | 'simplestickynote' | 'simpleDraw' | 'board' | 'container' | 'note' | 'image' | 'upload' | 'draw' | 'trash' | 'prompt' | 'table';
 
 interface ToolDefinition {
   id: Tool;
@@ -94,6 +94,7 @@ function ShapesMenu({ selectedShape, onSelectShape }: { selectedShape: string; o
 
 export default function ToolsPanel({ onToolSelect, selectedTool, showShapesMenu, setShowShapesMenu, selectedShape, onShapeSelect }: ToolsPanelProps) {
   const [showContainerSubmenu, setShowContainerSubmenu] = useState(false);
+  const [showLibraryPanel, setShowLibraryPanel] = useState(false);
   const [selectedDrawingTool, setSelectedDrawingTool] = useState<'pencil' | 'marker' | 'eraser'>('pencil');
   const [selectedColor, setSelectedColor] = useState('#000000');
   const [strokeWidth, setStrokeWidth] = useState(2);
@@ -118,6 +119,19 @@ export default function ToolsPanel({ onToolSelect, selectedTool, showShapesMenu,
     // Here you would also update the canvas stroke width
   };
 
+  const handleLibraryAssetSelect = (asset: any) => {
+    // This prop will be passed to the Canvas to handle adding the asset
+    console.log('Library asset selected in ToolsPanel:', asset);
+    // We can also close the panel on selection if desired
+    // setShowLibraryPanel(false);
+  };
+
+  const handleLibraryClose = () => {
+    setShowLibraryPanel(false);
+    // Switch back to mouse tool when closing library
+    onToolSelect('mouse');
+  };
+
   const tools = [
     {
       id: 'mouse',
@@ -132,6 +146,18 @@ export default function ToolsPanel({ onToolSelect, selectedTool, showShapesMenu,
       activeIcon: '/icons/effect-magic-sparkles-white.svg'
     },
     {
+      id: 'spatialPlanning',
+      name: 'Spatial Planning',
+      icon: '/icons/set-square-geometry-svgrepo-com.svg',
+      activeIcon: '/icons/set-square-geometry-svgrepo-com (1).svg'
+    },
+    {
+      id: 'libraries',
+      name: 'Libraries',
+      icon: '/icons/cube-alt-2-svgrepo-com.svg',
+      activeIcon: '/icons/cube-alt-2-svgrepo-com white.svg'
+    },
+    {
       id: 'text',
       name: 'Text',
       icon: '/icons/text-icon.svg',
@@ -140,8 +166,8 @@ export default function ToolsPanel({ onToolSelect, selectedTool, showShapesMenu,
     {
       id: 'simpleDraw',
       name: 'Draw',
-      icon: '/icons/prompt-icon.svg',
-      activeIcon: '/icons/prompt-icon white.svg'
+      icon: '/icons/pencil-svgrepo-com (2).svg',
+      activeIcon: '/icons/pencil-svgrepo-com (3).svg'
     },
     {
       id: 'simplestickynote',
@@ -174,12 +200,6 @@ export default function ToolsPanel({ onToolSelect, selectedTool, showShapesMenu,
       activeIcon: '/icons/container-white-icon.svg'
     },
     {
-      id: 'mindmap',
-      name: 'Mind map',
-      icon: '/icons/mindmap-map-svgrepo-com.svg',
-      activeIcon: '/icons/mindmap-map-white-svgrepo-com.svg'
-    },
-    {
       id: 'trash',
       name: 'Delete',
       icon: '/icons/trash-icon.svg',
@@ -197,14 +217,22 @@ export default function ToolsPanel({ onToolSelect, selectedTool, showShapesMenu,
               if (tool.id === 'container') {
                 setShowContainerSubmenu(!showContainerSubmenu);
                 setShowShapesMenu?.(false);
+                setShowLibraryPanel(false);
               } else if (tool.id === 'shapes') {
                 setShowShapesMenu?.(true);
                 setShowContainerSubmenu(false);
+                setShowLibraryPanel(false);
+                onToolSelect(tool.id as Tool);
+              } else if (tool.id === 'libraries') {
+                setShowLibraryPanel(!showLibraryPanel);
+                setShowContainerSubmenu(false);
+                setShowShapesMenu?.(false);
                 onToolSelect(tool.id as Tool);
               } else {
                 onToolSelect(tool.id as Tool);
                 setShowContainerSubmenu(false);
                 setShowShapesMenu?.(false);
+                setShowLibraryPanel(false);
               }
             }}
             className={clsx(
@@ -215,7 +243,7 @@ export default function ToolsPanel({ onToolSelect, selectedTool, showShapesMenu,
             )}
             title={tool.name}
           >
-            <div className="w-7 h-7 relative">
+            <div className={`relative ${tool.id === 'simpleDraw' ? 'w-9 h-9' : 'w-7 h-7'}`}>
               <Image
                 src={selectedTool === tool.id && tool.activeIcon ? tool.activeIcon : tool.icon}
                 alt={tool.name}
@@ -239,6 +267,12 @@ export default function ToolsPanel({ onToolSelect, selectedTool, showShapesMenu,
         )}
         {showShapesMenu && (
           <ShapesMenu selectedShape={selectedShape || 'square'} onSelectShape={onShapeSelect!} />
+        )}
+        {showLibraryPanel && (
+          <LibraryPanel
+            onAssetSelect={handleLibraryAssetSelect}
+            onClose={handleLibraryClose}
+          />
         )}
       </div>
 

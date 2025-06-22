@@ -20,7 +20,7 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
-    const { messages = [], selectedElement } = parsedBody;
+    const { messages = [], screenshots } = parsedBody;
     
     // Validate messages array
     if (!Array.isArray(messages)) {
@@ -73,46 +73,53 @@ This helps users understand how they can implement your suggestions.`
     // Add unique messages to chat
     chatMessages.push(...Array.from(uniqueMessages.values()));
 
-    // If there's a selected element with an image, add it to the messages
-    if (selectedElement?.type === 'image' || selectedElement?.type === 'upload' || selectedElement?.type === 'generated') {
-      let imageUrl = selectedElement.image;
-      
-      // Log the image data for debugging
-      console.log('Processing image data:', {
-        type: typeof imageUrl,
-        length: imageUrl?.length,
-        isBase64: imageUrl?.startsWith('data:image'),
-        isUrl: imageUrl?.startsWith('http'),
-        elementType: selectedElement.type,
-        hasImage: !!imageUrl
+    // If there are screenshots, add them to the messages
+    if (screenshots && Array.isArray(screenshots) && screenshots.length > 0) {
+      console.log('Processing screenshots:', {
+        count: screenshots.length,
+        screenshots: screenshots.map(s => ({
+          id: s.id,
+          hasData: !!s.data,
+          dataLength: s.data?.length,
+          area: s.area
+        }))
       });
+      
+      // Create content array for the message
+      const content: any[] = [{
+        type: "text",
+        text: `Please analyze these ${screenshots.length} screenshot${screenshots.length > 1 ? 's' : ''} from my canvas design. I'd like detailed feedback on the composition, visual elements, color harmony, and any suggestions for improvement.`
+      }];
+
+      // Add each screenshot as an image
+      screenshots.forEach((screenshot: any, index: number) => {
+        let imageUrl = screenshot.data;
 
       // Ensure the image URL is properly formatted
-      if (!imageUrl.startsWith('data:image') && !imageUrl.startsWith('http')) {
-        imageUrl = `data:image/png;base64,${imageUrl}`;
+        if (!imageUrl.startsWith('data:image')) {
+          imageUrl = `data:image/jpeg;base64,${imageUrl}`;
       }
 
-      // Create a detailed analysis request based on the canvas element
-      const analysisRequest = {
-        role: "user",
-        content: [
-          { 
-            type: "text", 
-            text: `Please analyze this design element. It is a ${selectedElement.type} element with the following properties:
-- Position: x=${selectedElement.x}, y=${selectedElement.y}
-- Size: width=${selectedElement.width}, height=${selectedElement.height}
-- Rotation: ${selectedElement.rotation || 0} degrees
-
-Please provide detailed feedback on its composition, style, and potential improvements.`
-          },
-          { 
+        content.push({
             type: "image_url",
             image_url: {
               url: imageUrl,
               detail: "high"
             }
-          }
-        ]
+        });
+
+        // Add area info if available
+        if (screenshot.area) {
+          content.push({
+            type: "text",
+            text: `Screenshot ${index + 1} shows a ${screenshot.area.width}×${screenshot.area.height} area from the canvas.`
+          });
+        }
+      });
+
+      const analysisRequest = {
+        role: "user",
+        content: content
       };
 
       chatMessages.push(analysisRequest);
@@ -126,7 +133,7 @@ Please provide detailed feedback on its composition, style, and potential improv
       });
     }
 
-    console.log("Selected element:", selectedElement);
+    console.log("Screenshots:", screenshots);
     console.log("Sending request to OpenAI with messages:", JSON.stringify(chatMessages, null, 2));
 
     const response = await openai.chat.completions.create(
@@ -147,7 +154,7 @@ Please provide detailed feedback on its composition, style, and potential improv
       role: 'assistant',
       content: response.choices[0].message.content || "I'm not sure how to respond to that.",
       hasGenerateAction: checkForGenerateAction(response.choices[0].message.content || ""),
-      selectedElement: selectedElement
+      screenshots: screenshots
     };
 
     return NextResponse.json(responseMessage);

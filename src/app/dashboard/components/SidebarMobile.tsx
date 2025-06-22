@@ -2,7 +2,14 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { XMarkIcon, Bars3Icon } from '@heroicons/react/24/outline';
 
-const navLinks = [
+interface NavLink {
+  label: string;
+  icon: string;
+  href?: string;
+  isSection?: boolean;
+}
+
+const navLinks: NavLink[] = [
   { label: 'Home', icon: 'home', href: '/dashboard' },
   { label: 'AI Tools', icon: 'sparkles', isSection: true },
   { label: 'Exterior AI', icon: 'building', href: '/generate/exterior' },
@@ -60,15 +67,15 @@ export default function SidebarMobile() {
         />
         {/* Sidebar */}
         <aside
-          className={`absolute left-0 top-0 h-full w-72 max-w-[90vw] bg-white shadow-xl transition-transform duration-300 ${open ? 'translate-x-0' : '-translate-x-full'}`}
+          className={`absolute left-0 top-0 h-full w-72 max-w-[90vw] bg-gradient-to-b from-[#F8F9FF] via-[#F0F2FF] to-[#E8EBFF] shadow-xl transition-transform duration-300 ${open ? 'translate-x-0' : '-translate-x-full'}`}
         >
-          <div className="flex items-center justify-between px-4 py-4 border-b">
-            <span className="font-bold text-lg text-[#1B1464]">StudioSix</span>
-            <button onClick={() => setOpen(false)} aria-label="Close sidebar">
-              <XMarkIcon className="w-7 h-7 text-[#1B1464]" />
+          <div className="flex items-center justify-between px-4 py-4 border-b border-[#E0DAF3] bg-gradient-to-r from-white/90 to-white/80 backdrop-blur-sm">
+            <span className="font-bold text-lg bg-gradient-to-r from-[#814ADA] to-[#AB4FF0] bg-clip-text text-transparent">StudioSix</span>
+            <button onClick={() => setOpen(false)} aria-label="Close sidebar" className="p-1 rounded-lg hover:bg-white/50 transition-colors">
+              <XMarkIcon className="w-7 h-7 text-[#844BDC]" />
             </button>
           </div>
-          <nav className="flex flex-col gap-1 px-2 py-4">
+          <nav className="flex flex-col gap-1 px-2 py-4 bg-gradient-to-br from-white/90 via-white/95 to-white/80 backdrop-blur-sm">
             {navLinks.map((link, idx) =>
               link.isSection ? (
                 <div key={idx} className="flex items-center gap-2 px-2 py-2 text-[#844BDC] font-semibold text-base">
@@ -78,8 +85,8 @@ export default function SidebarMobile() {
               ) : (
                 <Link
                   key={idx}
-                  href={link.href}
-                  className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-[#F6F8FA] transition-colors text-[#1B1464] text-base"
+                  href={link.href || '#'}
+                  className="flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-gradient-to-r hover:from-[#844BDC]/5 hover:to-[#AB4FF0]/5 transition-all duration-200 text-[#1B1464] text-base"
                   onClick={() => setOpen(false)}
                 >
                   <IconByName name={link.icon} className="w-5 h-5" />

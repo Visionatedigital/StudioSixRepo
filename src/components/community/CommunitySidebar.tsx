@@ -99,8 +99,8 @@ export default function CommunitySidebar({ categories, activeCategoryId, activeC
   return (
     <div className="flex h-full">
       {/* Primary Sidebar */}
-      <div className={`h-full bg-[#F6F8FA] border-r border-[#E0DAF3] ${expanded ? 'w-14' : 'w-14'} flex flex-col items-center py-4 transition-all duration-300`}>
-        <div className="w-10 h-10 bg-purple-600 rounded-full flex items-center justify-center mb-6">
+      <div className={`h-full bg-gradient-to-b from-[#F8F9FF] via-[#F0F2FF] to-[#E8EBFF] border-r border-[#E0DAF3] ${expanded ? 'w-14' : 'w-14'} flex flex-col items-center py-4 transition-all duration-300`}>
+        <div className="w-10 h-10 bg-gradient-to-r from-[#814ADA] to-[#AB4FF0] rounded-full flex items-center justify-center mb-6 shadow-lg">
           <Icon name="users" size={20} className="text-white" />
         </div>
         
@@ -115,10 +115,10 @@ export default function CommunitySidebar({ categories, activeCategoryId, activeC
                 }
                 setExpanded(true);
               }}
-              className={`w-10 h-10 rounded-full flex items-center justify-center mb-3 transition-all ${
+              className={`w-10 h-10 rounded-full flex items-center justify-center mb-3 transition-all duration-200 ${
                 activeCategoryId === category.id 
-                  ? 'bg-purple-600'
-                  : 'bg-white hover:bg-purple-100 border border-[#E0DAF3]'
+                  ? 'bg-gradient-to-r from-[#814ADA] to-[#AB4FF0] shadow-lg'
+                  : 'bg-white/80 backdrop-blur-sm hover:bg-white hover:shadow-md border border-[#E0DAF3]'
               }`}
               title={category.name}
             >
@@ -143,7 +143,7 @@ export default function CommunitySidebar({ categories, activeCategoryId, activeC
 
       {/* Secondary Sidebar (Channels) */}
       <div 
-        className={`bg-white border-r border-[#E0DAF3] transition-all duration-300 overflow-hidden ${
+        className={`bg-gradient-to-br from-white/90 via-white/95 to-white/80 backdrop-blur-sm border-r border-[#E0DAF3] transition-all duration-300 overflow-hidden ${
           expanded ? 'w-56 md:w-64' : 'w-0'
         }`}
       >
@@ -153,7 +153,7 @@ export default function CommunitySidebar({ categories, activeCategoryId, activeC
               <h3 className="text-[#202126] font-semibold text-sm md:text-base">{categories.find(c => c.id === activeCategoryId)?.name}</h3>
               <button 
                 onClick={() => setExpanded(false)}
-                className="text-gray-500 hover:text-purple-600"
+                className="text-gray-500 hover:text-[#844BDC] transition-colors p-1 rounded-lg hover:bg-white/50"
               >
                 <Icon name="chevron-left" size={16} />
               </button>
@@ -164,17 +164,17 @@ export default function CommunitySidebar({ categories, activeCategoryId, activeC
                 <button
                   key={channel.id}
                   onClick={() => onChannelSelect(activeCategoryId, channel.id)}
-                  className={`flex items-center justify-between w-full px-3 py-2 rounded mb-1 transition-colors ${
+                  className={`flex items-center justify-between w-full px-3 py-2 rounded-xl mb-1 transition-all duration-200 ${
                     activeChannelId === channel.id
-                      ? 'bg-purple-100 text-purple-700'
-                      : 'text-gray-700 hover:bg-[#F6F8FA] hover:text-purple-600'
+                      ? 'bg-gradient-to-r from-[#844BDC]/10 to-[#AB4FF0]/10 border border-[#844BDC]/20 shadow-lg shadow-[#844BDC]/10'
+                      : 'text-gray-700 hover:bg-gradient-to-r hover:from-[#844BDC]/5 hover:to-[#AB4FF0]/5'
                   }`}
                 >
                   <div className="flex items-center">
                     <span className="text-sm truncate">{channel.name}</span>
                   </div>
                   {channel.unreadCount && (
-                    <span className="bg-red-500 text-white text-xs rounded-full px-1.5 py-0.5 flex-shrink-0 ml-1">
+                    <span className="bg-gradient-to-r from-red-500 to-red-600 text-white text-xs rounded-full px-1.5 py-0.5 flex-shrink-0 ml-1 shadow-sm">
                       {channel.unreadCount}
                     </span>
                   )}
@@ -182,16 +182,16 @@ export default function CommunitySidebar({ categories, activeCategoryId, activeC
               ))}
             </div>
             
-            <div className="mt-4 pt-4 border-t border-[#E0DAF3]">
-              <div className="flex items-center bg-[#F6F8FA] rounded-lg p-2 gap-2">
-                <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center relative flex-shrink-0">
+            <div className="mt-4 pt-4 border-t border-[#E0DAF3]/50">
+              <div className="flex items-center bg-gradient-to-r from-[#F8F9FF] to-[#F0F2FF] rounded-xl p-3 gap-2 border border-[#E0DAF3]/30">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-r from-[#814ADA] to-[#AB4FF0] flex items-center justify-center relative flex-shrink-0 shadow-sm">
                   <Image
                     src="/icons/online.svg"
                     alt="Online members"
                     width={20}
                     height={20}
                   />
-                  <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border border-white"></div>
+                  <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white shadow-sm"></div>
                 </div>
                 <div className="text-xs text-gray-500 min-w-0">
                   <div className="font-medium text-[#202126]">Online</div>

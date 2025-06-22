@@ -15,7 +15,10 @@ export type Tool =
   | 'board'
   | 'stickers'
   | 'ai'
-  | 'table';
+  | 'table'
+  | 'mindmap'
+  | 'spatialPlanning'
+  | 'libraries';
 
 export type ElementType =
   | 'text'
@@ -31,7 +34,8 @@ export type ElementType =
   | 'generated-content'
   | 'sticky-note'
   | 'drawing'
-  | 'table';
+  | 'table'
+  | 'library-asset';
 
 export interface BaseElement {
   id: string;
@@ -321,6 +325,13 @@ export interface StickyNoteProps {
   onSelect: (id: string) => void;
 }
 
+export interface LibraryAssetElement extends BaseElement {
+  type: 'library-asset';
+  src: string;
+  image?: HTMLImageElement;
+  name?: string;
+}
+
 export type CanvasElement =
   | TextElement
   | ImageElement
@@ -335,7 +346,8 @@ export type CanvasElement =
   | GeneratedContentElement
   | StickyNoteElement
   | DrawingElement
-  | TableElement;
+  | TableElement
+  | LibraryAssetElement;
 
 export interface CanvasData {
   id: string;

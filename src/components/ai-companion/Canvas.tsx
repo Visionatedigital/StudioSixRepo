@@ -9,14 +9,12 @@ import { KonvaEventObject } from 'konva/lib/Node';
 import { Vector2d } from 'konva/lib/types';
 import { Stage as KonvaStage } from 'konva/lib/Stage';
 // Import components directly
-import { Stage, Layer, Rect as KonvaRect, Circle as KonvaCircle, Line as KonvaLine, Text as KonvaText, Image as KonvaImage, Transformer as KonvaTransformer, Group as KonvaGroup, Path, Shape as KonvaShape } from 'react-konva';
+import { Stage, Layer, Rect as KonvaRect, Circle as KonvaCircle, Line as KonvaLine, Text as KonvaText, Image as KonvaImage, Transformer as KonvaTransformer, Group as KonvaGroup, Path, Shape as KonvaShape, Arc as KonvaArc } from 'react-konva';
   import Konva from 'konva/lib/index';
-import nextImage from 'next/image';
-
 import Notification from '../ui/Notification';
 import StickyNote from './StickyNote';
 import AIChat from './AIChat';
-import Image from 'next/image';
+import NextImage from 'next/image';
 import ToolsPanel from './ToolsPanel';
 import Link from 'next/link';
 import HeaderActions from '../HeaderActions';
@@ -40,7 +38,8 @@ import {
   ElementType,
   DrawingElement,
   StickyNoteProps,
-  TableElement
+  TableElement,
+  LibraryAssetElement
 } from '@/types/canvas';
 import Board from './Board';
 import { v4 as uuidv4 } from 'uuid';
@@ -70,6 +69,8 @@ import { Transformer } from 'konva/lib/shapes/Transformer';
 import UploadMenu from './UploadMenu';
 import AIPopupMenu from './AIPopupMenu';
 import TableFormatMenu from './TableFormatMenu';
+import SpatialPlanningMenu from './SpatialPlanningMenu';
+import { LibraryAsset } from '@/lib/library-assets';
 
 type ShapeType = 'rect' | 'circle';
 
@@ -300,28 +301,40 @@ interface MindMapConnection {
   to: string;   // node id
 }
 
-export default function Canvas({ name, description, projectId }: Props) {
-  console.log('[DEBUG] Canvas component rendering started with props:', { name, description, projectId });
+// 1. Add LibraryAssetElement to the union type
+type Element = TextElement | StickyNoteElement | GeneratedImageElement | ShapeElement | UploadedElement | TableElement | LibraryAssetElement;
   
-  // Wrap the entire component in a try-catch for debugging
+export default function Canvas({ name, description, projectId }: Props) {
+  // Scale reference: 1 pixel = 20mm (1:50 scale)
+  const SCALE_MM_PER_PIXEL = 20;
+  const GRID_SIZE_METERS = 1; // 1 meter grid spacing
+  const GRID_SIZE_PIXELS = (GRID_SIZE_METERS * 1000) / SCALE_MM_PER_PIXEL; // 50 pixels
+  
+  // Helper function to convert real-world measurements to pixels
+  const mmToPixels = (millimeters: number) => millimeters / SCALE_MM_PER_PIXEL;
+  const metersToPixels = (meters: number) => mmToPixels(meters * 1000);
+  const [isScreenshotModeActive, setIsScreenshotModeActive] = useState(false);
   try {
     const { data: session } = useSession();
-    console.log('[DEBUG] useSession hook called, session:', session ? 'exists' : 'null');
     
     const searchParams = useSearchParams();
     const projectName = name || 'Untitled Project';
     const [elements, setElements] = useState<CanvasElementType[]>([]);
     const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [hoveredElementId, setHoveredElementId] = useState<string | null>(null);
+  const [selectedLibraryAsset, setSelectedLibraryAsset] = useState<LibraryAssetElement | null>(null);
+  const libraryAssetTransformerRef = useRef<any>(null);
     const [scale, setScale] = useState(1);
     const [position, setPosition] = useState({ x: 0, y: 0 });
     const [tool, setTool] = useState<Tool>('mouse');
-    const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+    const [canvasDimensions, setCanvasDimensions] = useState({ width: 0, height: 0 });
     const [notification, setNotification] = useState<NotificationState>({
       show: false,
       type: 'success',
       title: '',
       message: '',
     });
+    const [lastNotificationTime, setLastNotificationTime] = useState<number>(0);
     const stageRef = useRef<KonvaStage | null>(null);
     const transformerRef = useRef(null);
     const [isChatOpen, setIsChatOpen] = useState(true);
@@ -356,6 +369,13 @@ export default function Canvas({ name, description, projectId }: Props) {
     const [history, setHistory] = useState<{
       elements: CanvasElementType[];
       canvasStack: CanvasData[];
+      spatialPlanning?: {
+        walls: any[];
+        doors: any[];
+        windows: any[];
+        dimensions: any[];
+        annotations: any[];
+      };
     }[]>([]);
     const [historyIndex, setHistoryIndex] = useState(-1);
     const [showInviteModal, setShowInviteModal] = useState(false);
@@ -468,6 +488,143 @@ export default function Canvas({ name, description, projectId }: Props) {
     const [mindMapConnections, setMindMapConnections] = useState<MindMapConnection[]>([]);
     const [editingMindMapNodeId, setEditingMindMapNodeId] = useState<string | null>(null);
     const [editingMindMapNodeValue, setEditingMindMapNodeValue] = useState('');
+    
+    // 3. Add state for spatial planning tool
+    const [showSpatialPlanningMenu, setShowSpatialPlanningMenu] = useState(false);
+    const [spatialPlanningTool, setSpatialPlanningTool] = useState<string>('wall');
+    
+    // Wall drawing state
+    const [isDrawingWall, setIsDrawingWall] = useState(false);
+    const [wallPoints, setWallPoints] = useState<{ x: number; y: number }[]>([]);
+    const [currentMousePosition, setCurrentMousePosition] = useState<{ x: number; y: number } | null>(null);
+    const [wallSegments, setWallSegments] = useState<Array<{
+      id: string;
+      points: { x: number; y: number }[];
+      thickness: number;
+      color: string;
+      isClosed?: boolean;
+    }>>([]);
+    const [showWallDoneButton, setShowWallDoneButton] = useState(false);
+    const [isShiftPressed, setIsShiftPressed] = useState(false);
+
+    // Door placement state
+    interface DoorElement {
+      id: string;
+      wallId: string;
+      x: number;
+      y: number;
+      width: number;
+      angle: number; // Wall angle in radians
+      type: 'regular' | 'double' | 'sliding';
+      swingOption: 1 | 2 | 3 | 4; // Quadrant-based swing option
+      position: number; // Position along the wall (0-1)
+    }
+    
+    const [doors, setDoors] = useState<DoorElement[]>([]);
+    const [isDoorPlacement, setIsDoorPlacement] = useState(false);
+    const [hoveredWall, setHoveredWall] = useState<{ wallId: string; position: { x: number; y: number }; segmentIndex: number; wallAngle: number } | null>(null);
+    const [doorPlacementStep, setDoorPlacementStep] = useState<'position' | 'swing'>('position');
+    const [lockedDoorPosition, setLockedDoorPosition] = useState<{
+      wallId: string;
+      position: { x: number; y: number };
+      wallAngle: number;
+      segmentIndex: number;
+      positionOnSegment: number;
+    } | null>(null);
+    const [selectedSwingOption, setSelectedSwingOption] = useState<1 | 2 | 3 | 4 | null>(null);
+
+    // Window placement state
+    interface WindowElement {
+      id: string;
+      wallId: string;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      angle: number; // Wall angle in radians
+      type: 'regular' | 'french' | 'bay' | 'sliding';
+      position: number; // Position along the wall (0-1)
+      orientation: 'inside' | 'outside'; // Which side of wall faces outside
+    }
+    
+    const [windows, setWindows] = useState<WindowElement[]>([]);
+    const [isWindowPlacement, setIsWindowPlacement] = useState(false);
+    const [windowPlacementStep, setWindowPlacementStep] = useState<'position' | 'orientation'>('position');
+    const [lockedWindowPosition, setLockedWindowPosition] = useState<{
+      wallId: string;
+      position: { x: number; y: number };
+      wallAngle: number;
+      segmentIndex: number;
+      positionOnSegment: number;
+    } | null>(null);
+    const [selectedWindowType, setSelectedWindowType] = useState<'regular' | 'french' | 'bay' | 'sliding'>('regular');
+    const [selectedWindowWidth, setSelectedWindowWidth] = useState<number>(0.8); // in meters
+    const [windowWidthInput, setWindowWidthInput] = useState<string>('0.8');
+    const [nearbyMeasurements, setNearbyMeasurements] = useState<Array<{
+      id: string;
+      distance: number;
+      startPoint: { x: number; y: number };
+      endPoint: { x: number; y: number };
+      type: 'wall-end' | 'door' | 'window';
+      label: string;
+    }>>([]);
+
+    // Dimensioning tool states
+    const [isDimensioning, setIsDimensioning] = useState(false);
+    const [dimensionStep, setDimensionStep] = useState<'first-point' | 'second-point' | 'placement'>('first-point');
+    const [dimensionFirstPoint, setDimensionFirstPoint] = useState<{ x: number; y: number } | null>(null);
+    const [dimensionSecondPoint, setDimensionSecondPoint] = useState<{ x: number; y: number } | null>(null);
+    const [dimensionPlacementPoint, setDimensionPlacementPoint] = useState<{ x: number; y: number } | null>(null);
+    const [dimensionSnapPoint, setDimensionSnapPoint] = useState<{ x: number; y: number; type: 'wall-end' | 'door-center' | 'window-center'; id: string } | null>(null);
+    const [placedDimensions, setPlacedDimensions] = useState<Array<{
+      id: string;
+      startPoint: { x: number; y: number };
+      endPoint: { x: number; y: number };
+      placementPoint: { x: number; y: number };
+      distance: number;
+      label: string;
+    }>>([]);
+    const [hoveredWindowSide, setHoveredWindowSide] = useState<'inside' | 'outside' | null>(null);
+
+    // Annotation tool states
+    interface AnnotationElement {
+      id: string;
+      targetPoint: { x: number; y: number };
+      bendPoint: { x: number; y: number };
+      textBox: {
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+        text: string;
+      };
+      isEditing: boolean;
+    }
+    
+    const [annotations, setAnnotations] = useState<AnnotationElement[]>([]);
+    const [isAnnotating, setIsAnnotating] = useState(false);
+    const [selectedAnnotation, setSelectedAnnotation] = useState<string | null>(null);
+    const [isDraggingBend, setIsDraggingBend] = useState<string | null>(null);
+    const [isDraggingTextBox, setIsDraggingTextBox] = useState<string | null>(null);
+
+    // Fill tool states
+    interface FillElement {
+      id: string;
+      points: { x: number; y: number }[];
+      materialType: 'wood' | 'tile';
+      patternId: string;
+      opacity: number;
+      scale: number;
+      rotation: number;
+    }
+    
+    const [fillElements, setFillElements] = useState<FillElement[]>([]);
+    const [isFillMode, setIsFillMode] = useState(false);
+    const [fillPoints, setFillPoints] = useState<{ x: number; y: number }[]>([]);
+    const [showFillDoneButton, setShowFillDoneButton] = useState(false);
+    const [showMaterialPicker, setShowMaterialPicker] = useState(false);
+    const [pendingFill, setPendingFill] = useState<{ points: { x: number; y: number }[] } | null>(null);
+    const [fillSnapPoint, setFillSnapPoint] = useState<{ x: number; y: number; isCorner?: boolean } | null>(null);
 
     // Get current canvas data with safety check
     const currentCanvas = canvasStack[currentCanvasIndex] || canvasStack[0];
@@ -563,10 +720,36 @@ export default function Canvas({ name, description, projectId }: Props) {
           }
 
           // Log the final state
+          // Load spatial planning data if it exists
+          const spatialPlanningData = project.canvasData?.spatialPlanning;
+          if (spatialPlanningData) {
+            console.log('Loading spatial planning data:', spatialPlanningData);
+            
+            if (spatialPlanningData.walls) {
+              setWallSegments(spatialPlanningData.walls);
+            }
+            if (spatialPlanningData.doors) {
+              setDoors(spatialPlanningData.doors);
+            }
+            if (spatialPlanningData.windows) {
+              setWindows(spatialPlanningData.windows);
+            }
+            if (spatialPlanningData.dimensions) {
+              setPlacedDimensions(spatialPlanningData.dimensions);
+            }
+            if (spatialPlanningData.annotations) {
+              setAnnotations(spatialPlanningData.annotations);
+            }
+            if ((spatialPlanningData as any).fills) {
+              setFillElements((spatialPlanningData as any).fills);
+            }
+          }
+
           console.log('Final state:', {
             project,
             canvasStack: [initialCanvasData, ...processedCanvasStack],
-            elements: allElements
+            elements: allElements,
+            spatialPlanning: spatialPlanningData
           });
         } catch (error) {
           console.error('Error loading project data:', error);
@@ -624,6 +807,14 @@ export default function Canvas({ name, description, projectId }: Props) {
           setElements(data.data);
         } else if (data.type === 'canvasStack') {
           setCanvasStack(data.data);
+        } else if (data.type === 'spatialPlanning') {
+          const spatialData = data.data;
+          if (spatialData.walls) setWallSegments(spatialData.walls);
+          if (spatialData.doors) setDoors(spatialData.doors);
+          if (spatialData.windows) setWindows(spatialData.windows);
+          if (spatialData.dimensions) setPlacedDimensions(spatialData.dimensions);
+          if (spatialData.annotations) setAnnotations(spatialData.annotations);
+          if ((spatialData as any).fills) setFillElements((spatialData as any).fills);
         }
       });
 
@@ -634,7 +825,6 @@ export default function Canvas({ name, description, projectId }: Props) {
 
     // Track and broadcast cursor position
     const handleMouseMove = (e: KonvaEventObject<MouseEvent>) => {
-      console.log('[DEBUG] handleMouseMove triggered', e);
       const stage = e.target.getStage();
       if (!stage) return;
 
@@ -733,6 +923,16 @@ export default function Canvas({ name, description, projectId }: Props) {
             };
           }),
           
+          // Save spatial planning data
+          spatialPlanning: {
+            walls: wallSegments,
+            doors: doors,
+            windows: windows,
+            dimensions: placedDimensions,
+            annotations: annotations,
+            fills: fillElements
+          },
+          
           // Save the current canvas structure with proper element references
           canvasStack: canvasStack.map(canvas => ({
             id: canvas.id,
@@ -755,7 +955,7 @@ export default function Canvas({ name, description, projectId }: Props) {
           },
           body: JSON.stringify({
             name: projectName,
-            description: searchParams.get('description') || '',
+            description: searchParams?.get('description') || '',
             canvasData: canvasState,
             timestamp: new Date().toISOString()
           }),
@@ -768,20 +968,34 @@ export default function Canvas({ name, description, projectId }: Props) {
         const updatedProject = await saveResponse.json();
         console.log('Project saved successfully:', updatedProject);
         
-        // Show success notification with timestamp
-        const timestamp = new Date().toLocaleTimeString();
-        showNotification(
-          'success', 
-          'Project Saved', 
-          `All changes saved at ${timestamp}`
-        );
+        // Show success notification only every 5 minutes (300,000 ms)
+        const now = Date.now();
+        const fiveMinutes = 5 * 60 * 1000; // 5 minutes in milliseconds
+        
+        if (now - lastNotificationTime >= fiveMinutes) {
+          const timestamp = new Date().toLocaleTimeString();
+          showNotification(
+            'success', 
+            'Project Saved', 
+            `All changes saved at ${timestamp}`
+          );
+          setLastNotificationTime(now);
+        }
 
         // Update history
         setHistory(prev => {
           const newHistory = [...prev];
           newHistory[historyIndex + 1] = {
             elements: [...elements],
-            canvasStack: [...canvasStack]
+            canvasStack: [...canvasStack],
+            spatialPlanning: {
+              walls: [...wallSegments],
+              doors: [...doors],
+              windows: [...windows],
+              dimensions: [...placedDimensions],
+              annotations: [...annotations],
+              ...(fillElements.length > 0 && { fills: [...fillElements] })
+            }
           };
           return newHistory;
         });
@@ -798,6 +1012,18 @@ export default function Canvas({ name, description, projectId }: Props) {
             projectId,
             type: 'canvasStack',
             data: canvasStack
+          });
+          socket.emit('canvas-update', {
+            projectId,
+            type: 'spatialPlanning',
+            data: {
+              walls: wallSegments,
+              doors: doors,
+              windows: windows,
+              dimensions: placedDimensions,
+              annotations: annotations,
+              ...(fillElements.length > 0 && { fills: fillElements })
+            }
           });
         }
       } catch (error) {
@@ -816,13 +1042,13 @@ export default function Canvas({ name, description, projectId }: Props) {
     useEffect(() => {
       if (!projectId || isSaving) return;
       
-      const timeoutId = setTimeout(handleSave, 3000);
+      const timeoutId = setTimeout(handleSave, 60000); // Set to 60 seconds for less frequent notifications
       return () => clearTimeout(timeoutId);
-    }, [canvasStack, elements, projectId, projectName]);
+    }, [canvasStack, elements, projectId, projectName, wallSegments, doors, windows, placedDimensions, annotations, fillElements]);
 
     useEffect(() => {
       const updateDimensions = () => {
-        setDimensions({
+        setCanvasDimensions({
           width: window.innerWidth,
           height: window.innerHeight - 56, // Adjust to match the header height exactly
         });
@@ -1171,16 +1397,35 @@ export default function Canvas({ name, description, projectId }: Props) {
         return;
       }
       
+      // Handle spatial planning tool
+      if (toolId === 'spatialPlanning') {
+        if (selectedTool === 'spatialPlanning') {
+          // If already selected, toggle the menu
+          setShowSpatialPlanningMenu(!showSpatialPlanningMenu);
+        } else {
+          // First time selecting, show menu
+          setSelectedTool(toolId);
+          setTool(toolId);
+          setShowSpatialPlanningMenu(true);
+          setSpatialPlanningTool('wall'); // Default to wall tool
+        }
+        return;
+      }
+      
       // If clicking the currently selected tool, switch back to mouse tool
       if (toolId === selectedTool) {
         setSelectedTool('mouse');
         setTool('mouse');
         setDrawingMode(false);
+        setShowSpatialPlanningMenu(false);
         return;
       }
 
       setSelectedTool(toolId);
       setTool(toolId);
+      
+      // Close spatial planning menu when switching tools
+      setShowSpatialPlanningMenu(false);
       
       if (toolId === 'draw') {
         setDrawingMode(true);
@@ -1369,13 +1614,13 @@ export default function Canvas({ name, description, projectId }: Props) {
     };
 
     // Calculate the grid size based on scale
-    const gridSize = 32; // or your preferred spacing
+    const gridSize = GRID_SIZE_PIXELS; // 1 meter spacing
     
     // Create grid pattern
     const renderGrid = () => {
       const dots = [];
-      const width = dimensions.width - (isChatOpen ? 400 : 0);
-      const height = dimensions.height;
+      const width = canvasDimensions.width - (isChatOpen ? 400 : 0);
+              const height = canvasDimensions.height;
       
       // Calculate visible area based on position and scale
       const viewportLeft = -position.x / scale;
@@ -1638,34 +1883,67 @@ export default function Canvas({ name, description, projectId }: Props) {
     };
 
     const handleDragOver = (e: React.DragEvent) => {
+      console.log('[DEBUG] handleDragOver called');
+      console.log('[DEBUG] DataTransfer types:', e.dataTransfer.types);
+      console.log('[DEBUG] DataTransfer items:', e.dataTransfer.items);
+      
       e.preventDefault();
       e.stopPropagation();
       setIsDragging(true);
     };
 
     const handleDragLeave = (e: React.DragEvent) => {
+      console.log('[DEBUG] handleDragLeave called');
       e.preventDefault();
       e.stopPropagation();
       setIsDragging(false);
     };
 
     const handleDrop = (e: React.DragEvent) => {
+      console.log('[DEBUG] handleDrop called');
+      console.log('[DEBUG] DataTransfer types:', e.dataTransfer.types);
+      console.log('[DEBUG] DataTransfer items:', e.dataTransfer.items);
+      
       e.preventDefault();
+      e.stopPropagation();
+      setIsDragging(false);
+
+      // Log all available data
+      for (let i = 0; i < e.dataTransfer.types.length; i++) {
+        const type = e.dataTransfer.types[i];
+        console.log(`[DEBUG] Data type ${type}:`, e.dataTransfer.getData(type));
+      }
+
+      let droppedItem;
+      try {
+        const jsonData = e.dataTransfer.getData('text/plain');
+        console.log('[DEBUG] JSON data received:', jsonData);
+        droppedItem = JSON.parse(jsonData);
+        console.log('[DEBUG] Parsed dropped item:', droppedItem);
+      } catch (error) {
+        console.log('[DEBUG] Failed to parse JSON:', error);
+        // Not a JSON object, might be a URL for a sticker
       const url = e.dataTransfer.getData('text/plain');
-      if (url && url.startsWith('http')) {
-        // Use Konva Stage pointer position for accurate placement
+        console.log('[DEBUG] URL data received:', url);
+        if (url && (url.startsWith('http') || url.startsWith('data:image'))) {
+          console.log('[DEBUG] Processing URL as sticker');
         if (stageRef.current) {
           const stage = stageRef.current;
           const pointer = stage.getPointerPosition();
+            console.log('[DEBUG] Stage pointer position:', pointer);
           if (pointer) {
+              const transform = stage.getAbsoluteTransform().copy().invert();
+              const pos = transform.point(pointer);
+              console.log('[DEBUG] Transformed position:', pos);
           const img = new window.Image();
             img.src = url;
             img.onload = () => {
+                console.log('[DEBUG] Sticker image loaded, creating element');
               const newSticker: UploadedElement = {
                 id: uuidv4(),
                 type: 'uploaded' as const,
-                x: pointer.x - 40,
-                y: pointer.y - 40,
+                  x: pos.x - 40,
+                  y: pos.y - 40,
                 width: 80,
                 height: 80,
                 image: img,
@@ -1673,10 +1951,71 @@ export default function Canvas({ name, description, projectId }: Props) {
                 canvasId: currentCanvas.id,
                 rotation: 0
               };
+                console.log('[DEBUG] Adding sticker to elements:', newSticker);
               setElements(prev => [...prev, newSticker]);
             };
           }
         }
+        }
+        return;
+      }
+
+      // If we are here, it's a library asset
+      console.log('[DEBUG] Processing as library asset');
+      console.log('[DEBUG] Dropped item:', droppedItem);
+      console.log('[DEBUG] Stage ref exists:', !!stageRef.current);
+      
+      if (stageRef.current && droppedItem && droppedItem.svgPath) {
+        console.log('[DEBUG] Stage and dropped item are valid');
+        const stage = stageRef.current;
+        const pointer = stage.getPointerPosition();
+        console.log('[DEBUG] Stage pointer position:', pointer);
+        
+        if (!pointer) {
+          console.log('[DEBUG] No pointer position, returning');
+          return;
+        }
+
+        const transform = stage.getAbsoluteTransform().copy().invert();
+        const pos = transform.point(pointer);
+        console.log('[DEBUG] Transformed position:', pos);
+
+        console.log('[DEBUG] Creating image for asset:', droppedItem.svgPath);
+        const image = new window.Image();
+        image.src = droppedItem.svgPath;
+        image.onload = () => {
+          console.log('[DEBUG] Library asset image loaded');
+          console.log('[DEBUG] Image natural dimensions:', image.naturalWidth, 'x', image.naturalHeight);
+          
+          const newElement: LibraryAssetElement = {
+            id: uuidv4(),
+            type: 'library-asset',
+            x: pos.x - (image.naturalWidth || 100) / 2,
+            y: pos.y - (image.naturalHeight || 100) / 2,
+            width: image.naturalWidth || 100,
+            height: image.naturalHeight || 100,
+            src: droppedItem.svgPath,
+            image: image,
+            canvasId: currentCanvas.id,
+            rotation: 0,
+            name: droppedItem.name
+          };
+          console.log('[DEBUG] Creating library asset element:', newElement);
+          setElements(prev => {
+            console.log('[DEBUG] Current elements count:', prev.length);
+            const newElements = [...prev, newElement];
+            console.log('[DEBUG] New elements count:', newElements.length);
+            return newElements;
+          });
+        };
+        image.onerror = (error) => {
+          console.error('[DEBUG] Failed to load library asset image:', error);
+        };
+      } else {
+        console.log('[DEBUG] Invalid conditions for library asset processing');
+        console.log('[DEBUG] Stage ref exists:', !!stageRef.current);
+        console.log('[DEBUG] Dropped item exists:', !!droppedItem);
+        console.log('[DEBUG] Dropped item svgPath exists:', !!(droppedItem && droppedItem.svgPath));
       }
     };
 
@@ -2169,7 +2508,7 @@ export default function Canvas({ name, description, projectId }: Props) {
                             width: colWidth,
                             height: rowHeight,
                             background: 'white',
-                            border: '1px solid #814ADA',
+                            border: '1px solid #E91E63',
                             borderRadius: 4,
                             zIndex: 20,
                             display: 'flex',
@@ -2223,7 +2562,7 @@ export default function Canvas({ name, description, projectId }: Props) {
                           y={cellY}
                           width={colWidth}
                           height={rowHeight}
-                          stroke={isCellSelected ? '#814ADA' : (style.borderColor || table.borderColor || '#333')}
+                          stroke={isCellSelected ? '#E91E63' : (style.borderColor || table.borderColor || '#333')}
                           strokeWidth={isCellSelected ? 2 : 1}
                           fill={style.fill || table.cellFill || '#fff'}
                           onClick={e => {
@@ -2318,6 +2657,94 @@ export default function Canvas({ name, description, projectId }: Props) {
             </KonvaGroup>
           );
         }
+        case 'library-asset': {
+          const assetElement = element as LibraryAssetElement;
+          if (!assetElement.image || !(assetElement.image instanceof window.Image)) {
+            // Preload the image if it's not already loaded
+            if (assetElement.src) {
+              const image = new window.Image();
+              image.src = assetElement.src;
+              image.onload = () => {
+                setElements(prevElements => prevElements.map(el => {
+                  if (el.id === assetElement.id) {
+                    return { ...el, image: image, width: image.naturalWidth, height: image.naturalHeight };
+                  }
+                  return el;
+                }));
+              };
+            }
+            return null;
+          }
+
+          const isSelected = selectedId === assetElement.id;
+          const isHovered = hoveredElementId === assetElement.id;
+
+          return (
+            <KonvaGroup key={assetElement.id}>
+              <KonvaImage
+                id={assetElement.id}
+                image={assetElement.image}
+                x={assetElement.x}
+                y={assetElement.y}
+                width={assetElement.width}
+                height={assetElement.height}
+                rotation={assetElement.rotation}
+                draggable={tool === 'mouse'}
+                onClick={(e) => {
+                  e.cancelBubble = true;
+                  setSelectedId(assetElement.id);
+                  setSelectedLibraryAsset(assetElement);
+                  setIsExplicitlySelected(true);
+                }}
+                onTap={(e) => {
+                  e.cancelBubble = true;
+                  setSelectedId(assetElement.id);
+                  setSelectedLibraryAsset(assetElement);
+                  setIsExplicitlySelected(true);
+                }}
+                onMouseEnter={() => {
+                  setHoveredElementId(assetElement.id);
+                }}
+                onMouseLeave={() => {
+                  setHoveredElementId(null);
+                }}
+                onDragEnd={e => {
+                  const node = e.target;
+                  handleElementChange(assetElement.id, { x: node.x(), y: node.y() });
+                }}
+                onTransformEnd={e => {
+                  const node = e.target;
+                  const scaleX = node.scaleX();
+                  const scaleY = node.scaleY();
+                  node.scaleX(1);
+                  node.scaleY(1);
+                  handleElementChange(assetElement.id, {
+                    x: node.x(),
+                    y: node.y(),
+                    width: Math.max(10, node.width() * scaleX),
+                    height: Math.max(10, node.height() * scaleY),
+                  });
+                }}
+              />
+              
+
+              
+              {/* Hover border */}
+              {isHovered && !isSelected && (
+                <KonvaRect
+                  x={assetElement.x - 3}
+                  y={assetElement.y - 3}
+                  width={assetElement.width + 6}
+                  height={assetElement.height + 6}
+                  stroke="#E91E63"
+                  strokeWidth={1}
+                  opacity={0.6}
+                  listening={false}
+                />
+              )}
+            </KonvaGroup>
+          );
+        }
         default:
           return null;
       }
@@ -2395,6 +2822,17 @@ export default function Canvas({ name, description, projectId }: Props) {
         const previousState = history[historyIndex - 1];
         setElements(previousState.elements);
         setCanvasStack(previousState.canvasStack);
+        
+        // Restore spatial planning data if it exists
+        if (previousState.spatialPlanning) {
+          setWallSegments(previousState.spatialPlanning.walls || []);
+          setDoors(previousState.spatialPlanning.doors || []);
+          setWindows(previousState.spatialPlanning.windows || []);
+          setPlacedDimensions(previousState.spatialPlanning.dimensions || []);
+          setAnnotations(previousState.spatialPlanning.annotations || []);
+          setFillElements((previousState.spatialPlanning as any).fills || []);
+        }
+        
         setHistoryIndex(historyIndex - 1);
       }
     };
@@ -2404,6 +2842,17 @@ export default function Canvas({ name, description, projectId }: Props) {
         const nextState = history[historyIndex + 1];
         setElements(nextState.elements);
         setCanvasStack(nextState.canvasStack);
+        
+        // Restore spatial planning data if it exists
+        if (nextState.spatialPlanning) {
+          setWallSegments(nextState.spatialPlanning.walls || []);
+          setDoors(nextState.spatialPlanning.doors || []);
+          setWindows(nextState.spatialPlanning.windows || []);
+          setPlacedDimensions(nextState.spatialPlanning.dimensions || []);
+          setAnnotations(nextState.spatialPlanning.annotations || []);
+          setFillElements((nextState.spatialPlanning as any).fills || []);
+        }
+        
         setHistoryIndex(historyIndex + 1);
       }
     };
@@ -2412,7 +2861,15 @@ export default function Canvas({ name, description, projectId }: Props) {
     useEffect(() => {
       const newState = {
         elements: [...elements],
-        canvasStack: [...canvasStack]
+        canvasStack: [...canvasStack],
+        spatialPlanning: {
+          walls: [...wallSegments],
+          doors: [...doors],
+          windows: [...windows],
+          dimensions: [...placedDimensions],
+          annotations: [...annotations],
+          fills: [...fillElements]
+        }
       };
 
       // Remove any future states if we're not at the end of history
@@ -2423,7 +2880,7 @@ export default function Canvas({ name, description, projectId }: Props) {
       // Add new state to history
       setHistory(prev => [...prev, newState]);
       setHistoryIndex(prev => prev + 1);
-    }, [elements, canvasStack]);
+    }, [elements, canvasStack, wallSegments, doors, windows, placedDimensions, annotations, fillElements]);
 
     // Add this after other useEffect hooks
     useEffect(() => {
@@ -2501,7 +2958,7 @@ export default function Canvas({ name, description, projectId }: Props) {
                   className="relative w-6 h-6 rounded-full border-2 border-white overflow-hidden"
                 >
                   {collaborator.user.image ? (
-                    <Image
+                    <NextImage
                       src={collaborator.user.image}
                       alt={collaborator.user.name || 'Collaborator'}
                       fill
@@ -2544,6 +3001,10 @@ export default function Canvas({ name, description, projectId }: Props) {
       }
     };
 
+    const handleScreenshotModeChange = (isActive: boolean) => {
+      setIsScreenshotModeActive(isActive);
+    };
+
     const handleAddGeneratedImage = (imageUrl: string, prompt: string) => {
       const img = new window.Image();
       img.src = imageUrl;
@@ -2551,8 +3012,8 @@ export default function Canvas({ name, description, projectId }: Props) {
         const newElement: GeneratedImageElement = {
           id: uuidv4(),
           type: 'generated-image',
-          x: Math.random() * (dimensions.width - 200),
-          y: Math.random() * (dimensions.height - 200),
+          x: Math.random() * (canvasDimensions.width - 200),
+          y: Math.random() * (canvasDimensions.height - 200),
           width: img.width,
           height: img.height,
           src: imageUrl,
@@ -2973,7 +3434,38 @@ export default function Canvas({ name, description, projectId }: Props) {
     };
     const handleTransformEnd = () => {};
     const handleDragStart = () => {};
-    const handleWheel = () => {};
+    const handleWheel = (e: KonvaEventObject<WheelEvent>) => {
+      e.evt.preventDefault();
+      
+      const scaleBy = 1.1;
+      const stage = e.target.getStage();
+      if (!stage) return;
+      
+      const oldScale = stage.scaleX();
+      const pointer = stage.getPointerPosition();
+      if (!pointer) return;
+      
+      // Calculate new scale with limits
+      const direction = e.evt.deltaY > 0 ? -1 : 1;
+      const newScale = direction > 0 ? oldScale * scaleBy : oldScale / scaleBy;
+      
+      // Set zoom limits (10% to 500%)
+      const clampedScale = Math.max(0.1, Math.min(5, newScale));
+      
+      // Calculate new position to zoom towards mouse pointer
+      const mousePointTo = {
+        x: (pointer.x - stage.x()) / oldScale,
+        y: (pointer.y - stage.y()) / oldScale,
+      };
+      
+      const newPos = {
+        x: pointer.x - mousePointTo.x * clampedScale,
+        y: pointer.y - mousePointTo.y * clampedScale,
+      };
+      
+      setScale(clampedScale);
+      setPosition(newPos);
+    };
     const handleStageMouseEnter = (e: KonvaEventObject<MouseEvent>) => {
       const stage = e.target.getStage();
       if (!stage) return;
@@ -3072,36 +3564,7 @@ export default function Canvas({ name, description, projectId }: Props) {
     };
 
     const handleShapePlacement = (e: KonvaEventObject<MouseEvent>) => {
-      if (!pendingShape) return;
-
-      const stage = stageRef.current;
-      if (!stage) return;
-
-      const pointerPos = stage.getPointerPosition();
-      if (!pointerPos) return;
-
-      const newId = uuidv4();
-      const newShape: ShapeElement = {
-        id: newId,
-        type: 'shape',
-        shapeType: pendingShape as 'square' | 'circle' | 'triangle' | 'diamond' | 'star',
-        x: pointerPos.x,
-        y: pointerPos.y,
-        width: 80,
-        height: 80,
-        fill: DEFAULT_SHAPE_PROPERTIES.fill,
-        stroke: DEFAULT_SHAPE_PROPERTIES.stroke,
-        strokeWidth: DEFAULT_SHAPE_PROPERTIES.strokeWidth,
-        opacity: DEFAULT_SHAPE_PROPERTIES.opacity,
-        rotation: DEFAULT_SHAPE_PROPERTIES.rotation,
-        canvasId: currentCanvas.id
-      };
-
-      setElements(prev => [...prev, newShape]);
-      setSelectedShapeElementId(newId);
-      setPendingShape(null);
-      setSelectedTool('mouse');
-      setTool('mouse');
+      console.log('Shape placement handler triggered');
     };
 
     const handleShapeClick = (e: KonvaEventObject<MouseEvent>, shape: ShapeElement) => {
@@ -3125,23 +3588,23 @@ export default function Canvas({ name, description, projectId }: Props) {
     };
 
     const handleShapePropertiesChange = (id: string, changes: Partial<ShapeElement>) => {
-      setElements(prev => prev.map(el => {
+      setElements(prevElements => prevElements.map(el => {
         if (el.id === id && el.type === 'shape') {
-          return { ...el, ...changes } as ShapeElement;
+          return { ...el, ...changes };
         }
         return el;
       }));
     };
 
     const handleShapeDelete = (id: string) => {
-      setElements(prev => prev.filter(el => el.id !== id));
+      setElements(prevElements => prevElements.filter(el => el.id !== id));
       setSelectedShapeElementId(null);
       setShapeMenuPosition(null);
     };
 
     // Update renderShapeElement to use handleShapeClick
     const renderShapeElement = (element: ShapeElement) => {
-      const isSelected = selectedId === element.id;
+      const isSelected = selectedShapeElementId === element.id;
       // Convert 'none' to 'transparent' for Konva, always use string
       const fill: string = element.fill === 'none' ? 'transparent' : (element.fill || 'transparent');
       const stroke: string = element.stroke === 'none' ? 'transparent' : (element.stroke || 'transparent');
@@ -3299,20 +3762,129 @@ export default function Canvas({ name, description, projectId }: Props) {
       }
     }, [selectedId, elements]);
 
-    // Keydown handler for deleting selected sticker
+    // Keydown handler for deleting selected elements and zoom shortcuts
     useEffect(() => {
       const handleKeyDown = (e: KeyboardEvent) => {
+        // Handle Shift key for wall constraint
+        if (e.key === 'Shift') {
+          setIsShiftPressed(true);
+        }
+        
+        // Delete selected element
         if ((e.key === 'Backspace' || e.key === 'Delete') && selectedId) {
-          const selectedElement = elements.find(el => el.id === selectedId && el.type === 'uploaded');
-          if (selectedElement) {
+          const selectedElement = elements.find(el => el.id === selectedId);
+          if (selectedElement && (selectedElement.type === 'uploaded' || selectedElement.type === 'library-asset')) {
             setElements(prev => prev.filter(el => el.id !== selectedId));
             setSelectedId(null);
+            setSelectedLibraryAsset(null);
+          }
+        }
+        
+        // Delete selected annotation
+        if ((e.key === 'Backspace' || e.key === 'Delete') && selectedAnnotation) {
+          handleAnnotationDelete(selectedAnnotation);
+        }
+        
+        // Zoom shortcuts
+        if (e.ctrlKey || e.metaKey) {
+          if (e.key === '=' || e.key === '+') {
+            e.preventDefault();
+            const newScale = Math.min(5, scale * 1.2);
+            setScale(newScale);
+          } else if (e.key === '-') {
+            e.preventDefault();
+            const newScale = Math.max(0.1, scale / 1.2);
+            setScale(newScale);
+          } else if (e.key === '0') {
+            e.preventDefault();
+            setScale(1);
+            setPosition({ x: 0, y: 0 });
+          }
+        }
+        
+        // Handle Escape key for wall drawing
+        if (e.key === 'Escape' && isDrawingWall) {
+          handleWallCancel();
+        }
+        
+        // Handle Escape key for door/window placement
+        if (e.key === 'Escape' && (isDoorPlacement || isWindowPlacement)) {
+          setIsDoorPlacement(false);
+          setIsWindowPlacement(false);
+          setShowSpatialPlanningMenu(false);
+          setTool('mouse');
+          setSelectedTool('mouse');
+        }
+        
+        // Window type cycling during window placement
+        if (isWindowPlacement && e.key === 'Tab') {
+          e.preventDefault();
+          const windowTypes: ('regular' | 'french' | 'bay' | 'sliding')[] = ['regular', 'french', 'bay', 'sliding'];
+          const currentIndex = windowTypes.indexOf(selectedWindowType);
+          const nextIndex = (currentIndex + 1) % windowTypes.length;
+          setSelectedWindowType(windowTypes[nextIndex]);
+        }
+        
+        // Window width adjustment during window placement
+        if (isWindowPlacement && windowPlacementStep === 'orientation') {
+          if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            const newWidth = Math.min(3.0, selectedWindowWidth + 0.1);
+            setSelectedWindowWidth(newWidth);
+            setWindowWidthInput(newWidth.toFixed(1));
+          } else if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            const newWidth = Math.max(0.3, selectedWindowWidth - 0.1);
+            setSelectedWindowWidth(newWidth);
+            setWindowWidthInput(newWidth.toFixed(1));
+          } else if (e.key === 'Backspace') {
+            e.preventDefault();
+            const newInput = windowWidthInput.slice(0, -1);
+            setWindowWidthInput(newInput);
+            const parsed = parseFloat(newInput);
+            if (!isNaN(parsed) && parsed >= 0.3 && parsed <= 3.0) {
+              setSelectedWindowWidth(parsed);
+            }
+          } else if (e.key === 'Enter') {
+            e.preventDefault();
+            const parsed = parseFloat(windowWidthInput);
+            if (!isNaN(parsed) && parsed >= 0.3 && parsed <= 3.0) {
+              setSelectedWindowWidth(parsed);
+              setWindowWidthInput(parsed.toFixed(1));
+            } else {
+              // Reset to current valid value if invalid input
+              setWindowWidthInput(selectedWindowWidth.toFixed(1));
+            }
+          } else if (/^[0-9.]$/.test(e.key)) {
+            e.preventDefault();
+            const newInput = windowWidthInput + e.key;
+            // Prevent multiple decimal points
+            if (e.key === '.' && windowWidthInput.includes('.')) {
+              return;
+            }
+            setWindowWidthInput(newInput);
+            const parsed = parseFloat(newInput);
+            if (!isNaN(parsed) && parsed >= 0.3 && parsed <= 3.0) {
+              setSelectedWindowWidth(parsed);
+            }
           }
         }
       };
+
+      const handleKeyUp = (e: KeyboardEvent) => {
+        // Handle Shift key release for wall constraint
+        if (e.key === 'Shift') {
+          setIsShiftPressed(false);
+        }
+      };
+
       window.addEventListener('keydown', handleKeyDown);
-      return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [selectedId, elements]);
+      window.addEventListener('keyup', handleKeyUp);
+      return () => {
+        window.removeEventListener('keydown', handleKeyDown);
+        window.removeEventListener('keyup', handleKeyUp);
+      };
+    }, [selectedId, elements, scale, isDrawingWall, isWindowPlacement, windowPlacementStep, selectedWindowType, selectedWindowWidth, windowWidthInput, nearbyMeasurements, selectedAnnotation]);
 
     // Attach transformer to selected sticker
     useEffect(() => {
@@ -3321,6 +3893,20 @@ export default function Canvas({ name, description, projectId }: Props) {
       if (node) {
         stickerTransformerRef.current.nodes([node]);
         stickerTransformerRef.current.getLayer()?.batchDraw();
+      }
+    }, [selectedId, elements]);
+
+    // Attach transformer to selected library asset
+    useEffect(() => {
+      if (!selectedId || !stageRef.current || !libraryAssetTransformerRef.current) return;
+      
+      const selectedElement = elements.find(el => el.id === selectedId && el.type === 'library-asset');
+      if (selectedElement) {
+        const node = stageRef.current.findOne(`#${selectedId}`);
+        if (node) {
+          libraryAssetTransformerRef.current.nodes([node]);
+          libraryAssetTransformerRef.current.getLayer()?.batchDraw();
+        }
       }
     }, [selectedId, elements]);
 
@@ -3615,6 +4201,1319 @@ export default function Canvas({ name, description, projectId }: Props) {
       </>
     );
 
+    // Spatial planning handlers
+    const handleSpatialPlanningToolSelect = (tool: string) => {
+      setSpatialPlanningTool(tool);
+      
+      // Handle wall tool activation
+      if (tool === 'wall') {
+        setIsDrawingWall(true);
+        setWallPoints([]);
+        setCurrentMousePosition(null);
+        setShowWallDoneButton(false);
+        setIsDoorPlacement(false);
+        setIsWindowPlacement(false);
+      } else if (tool === 'door') {
+        // Activate door placement mode
+        setIsDoorPlacement(true);
+        setIsDrawingWall(false);
+        setWallPoints([]);
+        setCurrentMousePosition(null);
+        setShowWallDoneButton(false);
+        setDoorPlacementStep('position');
+        setLockedDoorPosition(null);
+        setSelectedSwingOption(null);
+        setIsWindowPlacement(false);
+      } else if (tool === 'window') {
+        // Activate window placement mode
+        setIsWindowPlacement(true);
+        setIsDrawingWall(false);
+        setIsDoorPlacement(false);
+        setWallPoints([]);
+        setCurrentMousePosition(null);
+        setShowWallDoneButton(false);
+        setWindowPlacementStep('position');
+        setLockedWindowPosition(null);
+        setSelectedWindowType('regular');
+        setSelectedWindowWidth(0.8);
+        setWindowWidthInput('0.8');
+        setNearbyMeasurements([]);
+      } else if (tool === 'dimension') {
+        // Activate dimensioning mode
+        setIsDimensioning(true);
+        setIsDrawingWall(false);
+        setIsDoorPlacement(false);
+        setIsWindowPlacement(false);
+        setWallPoints([]);
+        setCurrentMousePosition(null);
+        setShowWallDoneButton(false);
+        setDimensionStep('first-point');
+        setDimensionFirstPoint(null);
+        setDimensionSecondPoint(null);
+        setDimensionPlacementPoint(null);
+        setDimensionSnapPoint(null);
+        setIsAnnotating(false);
+        setSelectedAnnotation(null);
+        setIsDraggingBend(null);
+        setIsDraggingTextBox(null);
+      } else if (tool === 'annotation') {
+        // Activate annotation mode
+        setIsAnnotating(true);
+        setIsDrawingWall(false);
+        setIsDoorPlacement(false);
+        setIsWindowPlacement(false);
+        setIsDimensioning(false);
+        setWallPoints([]);
+        setCurrentMousePosition(null);
+        setShowWallDoneButton(false);
+        setDimensionStep('first-point');
+        setDimensionFirstPoint(null);
+        setDimensionSecondPoint(null);
+        setDimensionPlacementPoint(null);
+        setDimensionSnapPoint(null);
+        setSelectedAnnotation(null);
+        setIsDraggingBend(null);
+        setIsDraggingTextBox(null);
+      } else if (tool === 'fill') {
+        // Activate fill mode
+        setIsFillMode(true);
+        setFillPoints([]);
+        setShowFillDoneButton(false);
+        setIsDrawingWall(false);
+        setIsDoorPlacement(false);
+        setIsWindowPlacement(false);
+        setIsDimensioning(false);
+        setIsAnnotating(false);
+        setWallPoints([]);
+        setCurrentMousePosition(null);
+        setShowWallDoneButton(false);
+        setDoorPlacementStep('position');
+        setLockedDoorPosition(null);
+        setSelectedSwingOption(null);
+        setWindowPlacementStep('position');
+        setLockedWindowPosition(null);
+        setSelectedWindowType('regular');
+        setSelectedWindowWidth(0.8);
+        setWindowWidthInput('0.8');
+        setNearbyMeasurements([]);
+        setHoveredWindowSide(null);
+        setDimensionStep('first-point');
+        setDimensionFirstPoint(null);
+        setDimensionSecondPoint(null);
+        setDimensionPlacementPoint(null);
+        setDimensionSnapPoint(null);
+        setSelectedAnnotation(null);
+        setIsDraggingBend(null);
+        setIsDraggingTextBox(null);
+      } else {
+        // Reset all drawing states when switching to other tools
+        setIsDrawingWall(false);
+        setIsDoorPlacement(false);
+        setIsWindowPlacement(false);
+        setIsDimensioning(false);
+        setWallPoints([]);
+        setCurrentMousePosition(null);
+        setShowWallDoneButton(false);
+        setDoorPlacementStep('position');
+        setLockedDoorPosition(null);
+        setSelectedSwingOption(null);
+        setWindowPlacementStep('position');
+        setLockedWindowPosition(null);
+        setSelectedWindowType('regular');
+        setSelectedWindowWidth(0.8);
+        setWindowWidthInput('0.8');
+        setNearbyMeasurements([]);
+        setHoveredWindowSide(null);
+        setDimensionStep('first-point');
+        setDimensionFirstPoint(null);
+        setDimensionSecondPoint(null);
+        setDimensionPlacementPoint(null);
+        setDimensionSnapPoint(null);
+        setIsAnnotating(false);
+        setSelectedAnnotation(null);
+        setIsDraggingBend(null);
+        setIsDraggingTextBox(null);
+      }
+    };
+
+    const handleSpatialPlanningMenuClose = () => {
+      setShowSpatialPlanningMenu(false);
+      setSelectedTool('mouse');
+      setTool('mouse');
+      // Reset wall drawing state
+      setIsDrawingWall(false);
+      setWallPoints([]);
+      setCurrentMousePosition(null);
+      setShowWallDoneButton(false);
+      setIsWindowPlacement(false);
+      setWindowPlacementStep('position');
+      setLockedWindowPosition(null);
+      setSelectedWindowType('regular');
+      setSelectedWindowWidth(0.8);
+      setWindowWidthInput('0.8');
+      setNearbyMeasurements([]);
+      setHoveredWindowSide(null);
+      setIsDimensioning(false);
+      setDimensionStep('first-point');
+      setDimensionFirstPoint(null);
+      setDimensionSecondPoint(null);
+      setDimensionPlacementPoint(null);
+      setDimensionSnapPoint(null);
+      setIsAnnotating(false);
+      setSelectedAnnotation(null);
+      setIsDraggingBend(null);
+      setIsDraggingTextBox(null);
+      setIsFillMode(false);
+      setFillPoints([]);
+      setFillSnapPoint(null);
+      setShowFillDoneButton(false);
+    };
+
+    // Line intersection utility function for wall hatching
+    const getLineIntersection = (
+      x1: number, y1: number, x2: number, y2: number,
+      x3: number, y3: number, x4: number, y4: number
+    ): { x: number; y: number } | null => {
+      const denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+      if (Math.abs(denom) < 1e-10) return null; // Lines are parallel
+      
+      const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom;
+      const u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / denom;
+      
+      // Check if intersection is within both line segments
+      if (t >= 0 && t <= 1 && u >= 0 && u <= 1) {
+        return {
+          x: x1 + t * (x2 - x1),
+          y: y1 + t * (y2 - y1)
+        };
+      }
+      
+      return null;
+    };
+
+    // Wall drawing handlers
+    const handleWallClick = (e: KonvaEventObject<MouseEvent>) => {
+      if (!isDrawingWall || spatialPlanningTool !== 'wall') return;
+      
+      const stage = e.target.getStage();
+      if (!stage) return;
+      
+      const pointerPosition = stage.getPointerPosition();
+      if (!pointerPosition) return;
+      
+      // Convert screen coordinates to canvas coordinates
+      let newPoint = {
+        x: (pointerPosition.x - position.x) / scale,
+        y: (pointerPosition.y - position.y) / scale
+      };
+      
+      // If shift is pressed and we have at least one point, constrain to cardinal directions
+      if (isShiftPressed && wallPoints.length > 0) {
+        const lastPoint = wallPoints[wallPoints.length - 1];
+        newPoint = constrainToCardinalDirection(newPoint, lastPoint);
+      }
+      
+      // Check if clicking near the first point to close the loop
+      if (wallPoints.length >= 3) {
+        const firstPoint = wallPoints[0];
+        const distance = Math.sqrt(
+          Math.pow(newPoint.x - firstPoint.x, 2) + Math.pow(newPoint.y - firstPoint.y, 2)
+        );
+        
+        // If clicking within 20 pixels of the first point, close the loop
+        if (distance < 20) {
+          handleWallComplete(true);
+          return;
+        }
+      }
+      
+      // Add new point
+      const newWallPoints = [...wallPoints, newPoint];
+      setWallPoints(newWallPoints);
+      
+      // Show done button after first point
+      if (newWallPoints.length >= 1) {
+        setShowWallDoneButton(true);
+      }
+    };
+
+    // Helper function to constrain position to nearest cardinal direction
+    const constrainToCardinalDirection = (mousePos: { x: number; y: number }, lastPoint: { x: number; y: number }) => {
+      const dx = mousePos.x - lastPoint.x;
+      const dy = mousePos.y - lastPoint.y;
+      
+      // Determine which direction is closer: horizontal or vertical
+      if (Math.abs(dx) > Math.abs(dy)) {
+        // Horizontal line - lock Y to last point's Y
+        return { x: mousePos.x, y: lastPoint.y };
+      } else {
+        // Vertical line - lock X to last point's X
+        return { x: lastPoint.x, y: mousePos.y };
+      }
+    };
+
+    const handleWallMouseMove = (e: KonvaEventObject<MouseEvent>) => {
+      if (!isDrawingWall || spatialPlanningTool !== 'wall') return;
+      
+      const stage = e.target.getStage();
+      if (!stage) return;
+      
+      const pointerPosition = stage.getPointerPosition();
+      if (!pointerPosition) return;
+      
+      // Convert screen coordinates to canvas coordinates
+      let mousePos = {
+        x: (pointerPosition.x - position.x) / scale,
+        y: (pointerPosition.y - position.y) / scale
+      };
+      
+      // If shift is pressed and we have at least one point, constrain to cardinal directions
+      if (isShiftPressed && wallPoints.length > 0) {
+        const lastPoint = wallPoints[wallPoints.length - 1];
+        mousePos = constrainToCardinalDirection(mousePos, lastPoint);
+      }
+      
+      setCurrentMousePosition(mousePos);
+    };
+
+    const handleWallComplete = (isClosedShape: boolean = false) => {
+      if (wallPoints.length >= 2) {
+        // Only add the first point to complete the loop if it's explicitly a closed shape
+        const completedPoints = isClosedShape 
+          ? [...wallPoints, wallPoints[0]] 
+          : [...wallPoints];
+        
+        // Create wall segment with closed flag for proper rendering
+        const newWallSegment = {
+          id: uuidv4(),
+          points: completedPoints,
+          thickness: mmToPixels(200), // Standard wall thickness (200mm)
+          color: '#666666',
+          isClosed: isClosedShape // Flag to indicate this is a closed shape
+        };
+        
+        setWallSegments(prev => [...prev, newWallSegment]);
+      }
+      
+      // Reset wall drawing state completely
+      setWallPoints([]);
+      setCurrentMousePosition(null);
+      setShowWallDoneButton(false);
+      setIsDrawingWall(false);
+      setSpatialPlanningTool('');
+      setShowSpatialPlanningMenu(false);
+      
+      // Switch back to mouse tool
+      setTool('mouse');
+    };
+
+    const handleWallCancel = () => {
+      // Reset wall drawing state completely
+      setWallPoints([]);
+      setCurrentMousePosition(null);
+      setShowWallDoneButton(false);
+      setIsDrawingWall(false);
+      setSpatialPlanningTool('');
+      setShowSpatialPlanningMenu(false);
+      
+      // Switch back to mouse tool
+      setTool('mouse');
+    };
+
+    // Door placement functions
+    const findNearestWall = (mouseX: number, mouseY: number) => {
+      let nearestWall = null;
+      let minDistance = Infinity;
+      const snapDistance = 20; // Pixels
+
+      wallSegments.forEach((wall) => {
+        for (let i = 0; i < wall.points.length - 1; i++) {
+          const p1 = wall.points[i];
+          const p2 = wall.points[i + 1];
+          
+          // Calculate distance from mouse to wall segment
+          const A = mouseX - p1.x;
+          const B = mouseY - p1.y;
+          const C = p2.x - p1.x;
+          const D = p2.y - p1.y;
+          
+          const dot = A * C + B * D;
+          const lenSq = C * C + D * D;
+          
+          if (lenSq === 0) continue; // Zero length segment
+          
+          const param = dot / lenSq;
+          
+          let closestX, closestY;
+          if (param < 0) {
+            closestX = p1.x;
+            closestY = p1.y;
+          } else if (param > 1) {
+            closestX = p2.x;
+            closestY = p2.y;
+          } else {
+            closestX = p1.x + param * C;
+            closestY = p1.y + param * D;
+          }
+          
+          const distance = Math.sqrt((mouseX - closestX) ** 2 + (mouseY - closestY) ** 2);
+          
+          if (distance < snapDistance && distance < minDistance) {
+            minDistance = distance;
+            const wallAngle = Math.atan2(D, C);
+            nearestWall = {
+              wallId: wall.id,
+              position: { x: closestX, y: closestY },
+              segmentIndex: i,
+              wallAngle,
+              segmentStart: p1,
+              segmentEnd: p2,
+              positionOnSegment: param
+            };
+          }
+        }
+      });
+
+      return nearestWall;
+    };
+
+    const handleDoorPlacement = (e: KonvaEventObject<MouseEvent>) => {
+      if (!isDoorPlacement || spatialPlanningTool !== 'door') return;
+      
+      const stage = e.target.getStage();
+      if (!stage) return;
+      
+      const pointerPosition = stage.getPointerPosition();
+      if (!pointerPosition) return;
+      
+      // Convert screen coordinates to canvas coordinates
+      const mousePos = {
+        x: (pointerPosition.x - position.x) / scale,
+        y: (pointerPosition.y - position.y) / scale
+      };
+      
+      if (doorPlacementStep === 'position') {
+        // First click: Lock door position
+        const nearestWall = findNearestWall(mousePos.x, mousePos.y);
+        
+        if (nearestWall) {
+          setLockedDoorPosition({
+            wallId: nearestWall.wallId,
+            position: nearestWall.position,
+            wallAngle: nearestWall.wallAngle,
+            segmentIndex: nearestWall.segmentIndex,
+            positionOnSegment: nearestWall.positionOnSegment
+          });
+          setDoorPlacementStep('swing');
+        }
+      } else if (doorPlacementStep === 'swing' && lockedDoorPosition && selectedSwingOption) {
+        // Second click: Finalize door with selected swing option
+        const newDoor: DoorElement = {
+          id: uuidv4(),
+          wallId: lockedDoorPosition.wallId,
+          x: lockedDoorPosition.position.x,
+          y: lockedDoorPosition.position.y,
+          width: mmToPixels(900), // Standard door width (900mm/0.9m)
+          angle: lockedDoorPosition.wallAngle,
+          type: 'regular',
+          swingOption: selectedSwingOption,
+          position: lockedDoorPosition.positionOnSegment
+        };
+        
+        setDoors(prev => [...prev, newDoor]);
+        
+        // Reset door placement mode
+        setIsDoorPlacement(false);
+        setSpatialPlanningTool('');
+        setShowSpatialPlanningMenu(false);
+        setTool('mouse');
+        setDoorPlacementStep('position');
+        setLockedDoorPosition(null);
+        setSelectedSwingOption(null);
+      }
+    };
+
+    const handleDoorMouseMove = (e: KonvaEventObject<MouseEvent>) => {
+      if (!isDoorPlacement || spatialPlanningTool !== 'door') return;
+      
+      const stage = e.target.getStage();
+      if (!stage) return;
+      
+      const pointerPosition = stage.getPointerPosition();
+      if (!pointerPosition) return;
+      
+      // Convert screen coordinates to canvas coordinates
+      const mousePos = {
+        x: (pointerPosition.x - position.x) / scale,
+        y: (pointerPosition.y - position.y) / scale
+      };
+      
+      if (doorPlacementStep === 'position') {
+        // First step: Show wall hover for position selection
+        const nearestWall = findNearestWall(mousePos.x, mousePos.y);
+        setHoveredWall(nearestWall);
+      } else if (doorPlacementStep === 'swing' && lockedDoorPosition) {
+        // Second step: Wall-angle-aware quadrant detection
+        const doorPos = lockedDoorPosition.position;
+        const wallAngle = lockedDoorPosition.wallAngle;
+        
+        // Calculate vector from door position to mouse
+        const toMouseX = mousePos.x - doorPos.x;
+        const toMouseY = mousePos.y - doorPos.y;
+        
+        // Rotate the mouse vector to align with wall coordinate system
+        // This makes the wall appear "horizontal" for consistent quadrant logic
+        const cos = Math.cos(-wallAngle);
+        const sin = Math.sin(-wallAngle);
+        const rotatedX = toMouseX * cos - toMouseY * sin;
+        const rotatedY = toMouseX * sin + toMouseY * cos;
+        
+        // Apply quadrant detection in the rotated coordinate system
+        // This maintains our preview design while adapting to wall angle
+        let swingOption: 1 | 2 | 3 | 4;
+        
+        if (rotatedX < 0 && rotatedY < 0) {
+          swingOption = 1; // Top-left quadrant (relative to wall)
+        } else if (rotatedX < 0 && rotatedY >= 0) {
+          swingOption = 2; // Bottom-left quadrant (relative to wall)
+        } else if (rotatedX >= 0 && rotatedY >= 0) {
+          swingOption = 3; // Bottom-right quadrant (relative to wall)
+        } else {
+          swingOption = 4; // Top-right quadrant (relative to wall)
+        }
+        
+        setSelectedSwingOption(swingOption);
+      }
+    };
+
+    // Window placement functions
+    const handleWindowPlacement = (e: KonvaEventObject<MouseEvent>) => {
+      if (!isWindowPlacement || spatialPlanningTool !== 'window') return;
+      
+      const stage = e.target.getStage();
+      if (!stage) return;
+      
+      const pointerPosition = stage.getPointerPosition();
+      if (!pointerPosition) return;
+      
+      // Convert screen coordinates to canvas coordinates
+      const mousePos = {
+        x: (pointerPosition.x - position.x) / scale,
+        y: (pointerPosition.y - position.y) / scale
+      };
+      
+      if (windowPlacementStep === 'position') {
+        // First click: Lock window position
+        const nearestWall = findNearestWall(mousePos.x, mousePos.y);
+        
+        if (nearestWall) {
+          setLockedWindowPosition({
+            wallId: nearestWall.wallId,
+            position: nearestWall.position,
+            wallAngle: nearestWall.wallAngle,
+            segmentIndex: nearestWall.segmentIndex,
+            positionOnSegment: nearestWall.positionOnSegment
+          });
+                  setWindowPlacementStep('orientation');
+      }
+        } else if (windowPlacementStep === 'orientation' && lockedWindowPosition && hoveredWindowSide) {
+      // Second click: Finalize window with selected orientation
+      const windowWidth = selectedWindowWidth * 100; // Convert meters to pixels
+      const windowHeight = selectedWindowType === 'bay' ? 120 : 100;
+      
+      const newWindow: WindowElement = {
+        id: uuidv4(),
+        wallId: lockedWindowPosition.wallId,
+        x: lockedWindowPosition.position.x,
+        y: lockedWindowPosition.position.y,
+        width: windowWidth,
+        height: windowHeight,
+        angle: lockedWindowPosition.wallAngle,
+        type: selectedWindowType,
+        position: lockedWindowPosition.positionOnSegment,
+        orientation: hoveredWindowSide
+      };
+      
+      setWindows(prev => [...prev, newWindow]);
+      
+      // Reset window placement mode
+      setIsWindowPlacement(false);
+      setSpatialPlanningTool('');
+      setShowSpatialPlanningMenu(false);
+      setTool('mouse');
+      setWindowPlacementStep('position');
+      setLockedWindowPosition(null);
+      setSelectedWindowType('regular');
+      setSelectedWindowWidth(0.8);
+      setWindowWidthInput('0.8');
+      setNearbyMeasurements([]);
+      setHoveredWindowSide(null);
+    }
+    };
+
+    // Function to calculate nearby measurements for real-time visualization
+    const calculateNearbyMeasurements = (windowPosition: { x: number; y: number }, wallId?: string) => {
+
+      
+      const measurements: Array<{
+        id: string;
+        distance: number;
+        startPoint: { x: number; y: number };
+        endPoint: { x: number; y: number };
+        type: 'wall-end' | 'door' | 'window';
+        label: string;
+      }> = [];
+
+      const maxDistance = 300; // Maximum distance to show measurements (in pixels)
+
+      // Find distances to wall ends
+      wallSegments.forEach((wall, wallIndex) => {
+        // Skip if wallId is provided and this is the same wall (avoid measuring to the wall we're placing on)
+        if (wallId && wall.id === wallId) return;
+
+        // Distance to wall start
+        const startDistance = Math.sqrt(
+          Math.pow(windowPosition.x - wall.points[0].x, 2) + 
+          Math.pow(windowPosition.y - wall.points[0].y, 2)
+        );
+        
+        if (startDistance < maxDistance && startDistance > 10) {
+          measurements.push({
+            id: `wall-start-${wallIndex}`,
+            distance: startDistance / 100, // Convert to meters
+            startPoint: windowPosition,
+            endPoint: wall.points[0],
+            type: 'wall-end',
+            label: `${(startDistance / 100).toFixed(2)}m`
+          });
+        }
+
+        // Distance to wall end
+        const endPoint = wall.points[wall.points.length - 1];
+        const endDistance = Math.sqrt(
+          Math.pow(windowPosition.x - endPoint.x, 2) + 
+          Math.pow(windowPosition.y - endPoint.y, 2)
+        );
+        
+        if (endDistance < maxDistance && endDistance > 10) {
+          measurements.push({
+            id: `wall-end-${wallIndex}`,
+            distance: endDistance / 100, // Convert to meters
+            startPoint: windowPosition,
+            endPoint: endPoint,
+            type: 'wall-end',
+            label: `${(endDistance / 100).toFixed(2)}m`
+          });
+        }
+      });
+
+      // Find distances to existing doors (measure to nearest edge)
+      doors.forEach((door, doorIndex) => {
+        // Calculate door edges based on door width and angle
+        const doorWidth = door.width;
+        const doorAngle = door.angle;
+        
+        // Calculate door edge points
+        const halfWidth = doorWidth / 2;
+        const cos = Math.cos(doorAngle);
+        const sin = Math.sin(doorAngle);
+        
+        const doorEdge1 = {
+          x: door.x - cos * halfWidth,
+          y: door.y - sin * halfWidth
+        };
+        const doorEdge2 = {
+          x: door.x + cos * halfWidth,
+          y: door.y + sin * halfWidth
+        };
+        
+        // Calculate distances to both edges
+        const distance1 = Math.sqrt(
+          Math.pow(windowPosition.x - doorEdge1.x, 2) + 
+          Math.pow(windowPosition.y - doorEdge1.y, 2)
+        );
+        const distance2 = Math.sqrt(
+          Math.pow(windowPosition.x - doorEdge2.x, 2) + 
+          Math.pow(windowPosition.y - doorEdge2.y, 2)
+        );
+        
+        // Use the nearest edge
+        const nearestDistance = Math.min(distance1, distance2);
+        const nearestEdge = distance1 < distance2 ? doorEdge1 : doorEdge2;
+        
+        if (nearestDistance < maxDistance && nearestDistance > 10) {
+          measurements.push({
+            id: `door-${doorIndex}`,
+            distance: nearestDistance / 100, // Convert to meters
+            startPoint: windowPosition,
+            endPoint: nearestEdge,
+            type: 'door',
+            label: `${(nearestDistance / 100).toFixed(2)}m`
+          });
+        }
+      });
+
+      // Find distances to existing windows (measure to nearest edge)
+      windows.forEach((window, windowIndex) => {
+        // Calculate window edges based on window width and angle
+        const windowWidth = window.width;
+        const windowAngle = window.angle;
+        
+        // Calculate window edge points
+        const halfWidth = windowWidth / 2;
+        const cos = Math.cos(windowAngle);
+        const sin = Math.sin(windowAngle);
+        
+        const windowEdge1 = {
+          x: window.x - cos * halfWidth,
+          y: window.y - sin * halfWidth
+        };
+        const windowEdge2 = {
+          x: window.x + cos * halfWidth,
+          y: window.y + sin * halfWidth
+        };
+        
+        // Calculate distances to both edges
+        const distance1 = Math.sqrt(
+          Math.pow(windowPosition.x - windowEdge1.x, 2) + 
+          Math.pow(windowPosition.y - windowEdge1.y, 2)
+        );
+        const distance2 = Math.sqrt(
+          Math.pow(windowPosition.x - windowEdge2.x, 2) + 
+          Math.pow(windowPosition.y - windowEdge2.y, 2)
+        );
+        
+        // Use the nearest edge
+        const nearestDistance = Math.min(distance1, distance2);
+        const nearestEdge = distance1 < distance2 ? windowEdge1 : windowEdge2;
+        
+        if (nearestDistance < maxDistance && nearestDistance > 10) {
+          measurements.push({
+            id: `window-${windowIndex}`,
+            distance: nearestDistance / 100, // Convert to meters
+            startPoint: windowPosition,
+            endPoint: nearestEdge,
+            type: 'window',
+            label: `${(nearestDistance / 100).toFixed(2)}m`
+          });
+        }
+      });
+
+      // Sort by distance and limit to closest 4 measurements
+      const finalMeasurements = measurements
+        .sort((a, b) => a.distance - b.distance)
+        .slice(0, 4);
+      
+      return finalMeasurements;
+    };
+
+    // Function to find nearby snap points for dimensioning
+    const findNearbySnapPoints = (mousePos: { x: number; y: number }, snapDistance: number = 20) => {
+      const snapPoints: Array<{ x: number; y: number; type: 'wall-end' | 'door-center' | 'window-center'; id: string }> = [];
+      
+      // Add wall end points
+      wallSegments.forEach((wall, index) => {
+        if (!wall.points || wall.points.length === 0) return;
+        
+        // First point (start)
+        const firstPoint = wall.points[0];
+        if (firstPoint) {
+          const startDistance = Math.sqrt(Math.pow(firstPoint.x - mousePos.x, 2) + Math.pow(firstPoint.y - mousePos.y, 2));
+          if (startDistance <= snapDistance) {
+            snapPoints.push({
+              x: firstPoint.x,
+              y: firstPoint.y,
+              type: 'wall-end',
+              id: `wall-${index}-start`
+            });
+          }
+        }
+        
+        // Last point (end)
+        const lastPoint = wall.points[wall.points.length - 1];
+        if (lastPoint && wall.points.length > 1) {
+          const endDistance = Math.sqrt(Math.pow(lastPoint.x - mousePos.x, 2) + Math.pow(lastPoint.y - mousePos.y, 2));
+          if (endDistance <= snapDistance) {
+            snapPoints.push({
+              x: lastPoint.x,
+              y: lastPoint.y,
+              type: 'wall-end',
+              id: `wall-${index}-end`
+            });
+          }
+        }
+        
+        // Add all intermediate points as well
+        for (let i = 1; i < wall.points.length - 1; i++) {
+          const point = wall.points[i];
+          if (point) {
+            const pointDistance = Math.sqrt(Math.pow(point.x - mousePos.x, 2) + Math.pow(point.y - mousePos.y, 2));
+            if (pointDistance <= snapDistance) {
+              snapPoints.push({
+                x: point.x,
+                y: point.y,
+                type: 'wall-end',
+                id: `wall-${index}-point-${i}`
+              });
+            }
+          }
+        }
+      });
+      
+      // Add door centers
+      doors.forEach((door) => {
+        const doorDistance = Math.sqrt(Math.pow(door.x - mousePos.x, 2) + Math.pow(door.y - mousePos.y, 2));
+        if (doorDistance <= snapDistance) {
+          snapPoints.push({
+            x: door.x,
+            y: door.y,
+            type: 'door-center',
+            id: door.id
+          });
+        }
+      });
+      
+      // Add window centers
+      windows.forEach((window) => {
+        const windowDistance = Math.sqrt(Math.pow(window.x - mousePos.x, 2) + Math.pow(window.y - mousePos.y, 2));
+        if (windowDistance <= snapDistance) {
+          snapPoints.push({
+            x: window.x,
+            y: window.y,
+            type: 'window-center',
+            id: window.id
+          });
+        }
+      });
+      
+      // Return the closest snap point
+      if (snapPoints.length === 0) return null;
+      
+      return snapPoints.reduce((closest, point) => {
+        const pointDistance = Math.sqrt(Math.pow(point.x - mousePos.x, 2) + Math.pow(point.y - mousePos.y, 2));
+        const closestDistance = Math.sqrt(Math.pow(closest.x - mousePos.x, 2) + Math.pow(closest.y - mousePos.y, 2));
+        return pointDistance < closestDistance ? point : closest;
+      });
+    };
+
+    // Dimensioning tool handlers
+    const handleDimensionPlacement = (e: KonvaEventObject<MouseEvent>) => {
+      if (!isDimensioning || spatialPlanningTool !== 'dimension') return;
+      
+      const stage = e.target.getStage();
+      if (!stage) return;
+      
+      const pointerPosition = stage.getPointerPosition();
+      if (!pointerPosition) return;
+      
+      // Convert screen coordinates to canvas coordinates
+      const clickPos = {
+        x: (pointerPosition.x - position.x) / scale,
+        y: (pointerPosition.y - position.y) / scale
+      };
+      
+      // Check for snap points and use them if available
+      const snapPoint = findNearbySnapPoints(clickPos);
+      const finalPos = snapPoint || clickPos;
+      
+      if (dimensionStep === 'first-point') {
+        // Set first point
+        setDimensionFirstPoint(finalPos);
+        setDimensionStep('second-point');
+      } else if (dimensionStep === 'second-point' && dimensionFirstPoint) {
+        // Set second point
+        setDimensionSecondPoint(finalPos);
+        setDimensionStep('placement');
+      } else if (dimensionStep === 'placement' && dimensionFirstPoint && dimensionSecondPoint) {
+        // Place the dimension
+        const distance = Math.sqrt(
+          Math.pow(dimensionSecondPoint.x - dimensionFirstPoint.x, 2) + 
+          Math.pow(dimensionSecondPoint.y - dimensionFirstPoint.y, 2)
+        );
+        
+        const newDimension = {
+          id: uuidv4(),
+          startPoint: dimensionFirstPoint,
+          endPoint: dimensionSecondPoint,
+          placementPoint: clickPos,
+          distance: distance / 100, // Convert to meters
+          label: `${(distance / 100).toFixed(2)}m`
+        };
+        
+        setPlacedDimensions(prev => [...prev, newDimension]);
+        
+        // Reset for next dimension
+        setDimensionStep('first-point');
+        setDimensionFirstPoint(null);
+        setDimensionSecondPoint(null);
+        setDimensionPlacementPoint(null);
+        setDimensionSnapPoint(null);
+      }
+    };
+    
+    const handleDimensionMouseMove = (e: KonvaEventObject<MouseEvent>) => {
+      if (!isDimensioning || spatialPlanningTool !== 'dimension') return;
+      
+      const stage = e.target.getStage();
+      if (!stage) return;
+      
+      const pointerPosition = stage.getPointerPosition();
+      if (!pointerPosition) return;
+      
+      // Convert screen coordinates to canvas coordinates
+      const mousePos = {
+        x: (pointerPosition.x - position.x) / scale,
+        y: (pointerPosition.y - position.y) / scale
+      };
+      
+      // Check for snap points during first-point and second-point steps
+      if (dimensionStep === 'first-point' || dimensionStep === 'second-point') {
+        const snapPoint = findNearbySnapPoints(mousePos);
+        setDimensionSnapPoint(snapPoint);
+      } else {
+        setDimensionSnapPoint(null);
+      }
+      
+      if (dimensionStep === 'placement') {
+        setDimensionPlacementPoint(mousePos);
+      }
+    };
+
+    // Annotation tool handlers
+    const handleAnnotationPlacement = (e: KonvaEventObject<MouseEvent>) => {
+      if (!isAnnotating || spatialPlanningTool !== 'annotation') return;
+      
+      const stage = e.target.getStage();
+      if (!stage) return;
+      
+      const pointerPosition = stage.getPointerPosition();
+      if (!pointerPosition) return;
+      
+      // Convert screen coordinates to canvas coordinates
+      const clickPos = {
+        x: (pointerPosition.x - position.x) / scale,
+        y: (pointerPosition.y - position.y) / scale
+      };
+      
+      // Create new annotation
+      const newAnnotation: AnnotationElement = {
+        id: uuidv4(),
+        targetPoint: clickPos,
+        bendPoint: {
+          x: clickPos.x + 100,
+          y: clickPos.y - 50
+        },
+        textBox: {
+          x: clickPos.x + 150,
+          y: clickPos.y - 75,
+          width: 120,
+          height: 50,
+          text: 'New annotation'
+        },
+        isEditing: true
+      };
+      
+      setAnnotations(prev => [...prev, newAnnotation]);
+      setSelectedAnnotation(newAnnotation.id);
+      
+      // Switch back to mouse tool after placing annotation
+      setIsAnnotating(false);
+      setSpatialPlanningTool('');
+      setShowSpatialPlanningMenu(false);
+      setTool('mouse');
+      setSelectedTool('mouse');
+    };
+
+    const handleAnnotationMouseMove = (e: KonvaEventObject<MouseEvent>) => {
+      // This will be used for drag operations
+      if (!isDraggingBend && !isDraggingTextBox) return;
+      
+      const stage = e.target.getStage();
+      if (!stage) return;
+      
+      const pointerPosition = stage.getPointerPosition();
+      if (!pointerPosition) return;
+      
+      const mousePos = {
+        x: (pointerPosition.x - position.x) / scale,
+        y: (pointerPosition.y - position.y) / scale
+      };
+      
+      if (isDraggingBend) {
+        setAnnotations(prev => prev.map(annotation => 
+          annotation.id === isDraggingBend
+            ? { 
+                ...annotation, 
+                bendPoint: mousePos,
+                textBox: {
+                  ...annotation.textBox,
+                  // Keep text box at the same horizontal level as bend point
+                  y: mousePos.y - annotation.textBox.height / 2,
+                  // Maintain horizontal distance from bend point
+                  x: mousePos.x + (annotation.textBox.x - annotation.bendPoint.x)
+                }
+              }
+            : annotation
+        ));
+      } else if (isDraggingTextBox) {
+        setAnnotations(prev => prev.map(annotation => 
+          annotation.id === isDraggingTextBox
+            ? { 
+                ...annotation, 
+                textBox: {
+                  ...annotation.textBox,
+                  x: mousePos.x,
+                  y: mousePos.y
+                }
+              }
+            : annotation
+        ));
+      }
+    };
+
+    const handleAnnotationMouseUp = () => {
+      setIsDraggingBend(null);
+      setIsDraggingTextBox(null);
+    };
+
+    const handleBendPointDragStart = (annotationId: string) => {
+      setIsDraggingBend(annotationId);
+    };
+
+    const handleTextBoxDragStart = (annotationId: string) => {
+      setIsDraggingTextBox(annotationId);
+    };
+
+    const handleAnnotationTextChange = (annotationId: string, newText: string) => {
+      setAnnotations(prev => prev.map(annotation => 
+        annotation.id === annotationId
+          ? { 
+              ...annotation, 
+              textBox: { ...annotation.textBox, text: newText },
+              isEditing: false
+            }
+          : annotation
+      ));
+    };
+
+    const handleAnnotationEdit = (annotationId: string) => {
+      setAnnotations(prev => prev.map(annotation => 
+        annotation.id === annotationId
+          ? { ...annotation, isEditing: true }
+          : { ...annotation, isEditing: false }
+      ));
+      setSelectedAnnotation(annotationId);
+    };
+
+    const handleAnnotationDelete = (annotationId: string) => {
+      setAnnotations(prev => prev.filter(annotation => annotation.id !== annotationId));
+      setSelectedAnnotation(null);
+    };
+
+    // Fill tool wall edge snapping function
+    const findNearestWallEdgeForFill = (mouseX: number, mouseY: number) => {
+      let nearestSnapPoint = null;
+      let minDistance = Infinity;
+      const snapDistance = 20; // Pixels
+
+      wallSegments.forEach((wall) => {
+        for (let i = 0; i < wall.points.length - 1; i++) {
+          const p1 = wall.points[i];
+          const p2 = wall.points[i + 1];
+          
+          // Check snap to wall segment edge (closest point on line)
+          const A = mouseX - p1.x;
+          const B = mouseY - p1.y;
+          const C = p2.x - p1.x;
+          const D = p2.y - p1.y;
+          
+          const dot = A * C + B * D;
+          const lenSq = C * C + D * D;
+          
+          if (lenSq === 0) continue; // Zero length segment
+          
+          const param = dot / lenSq;
+          
+          let closestX, closestY;
+          if (param < 0) {
+            closestX = p1.x;
+            closestY = p1.y;
+          } else if (param > 1) {
+            closestX = p2.x;
+            closestY = p2.y;
+          } else {
+            closestX = p1.x + param * C;
+            closestY = p1.y + param * D;
+          }
+          
+          const distance = Math.sqrt((mouseX - closestX) ** 2 + (mouseY - closestY) ** 2);
+          
+          if (distance < snapDistance && distance < minDistance) {
+            minDistance = distance;
+            nearestSnapPoint = {
+              x: closestX,
+              y: closestY,
+              wallId: wall.id,
+              segmentIndex: i,
+              distance: distance
+            };
+          }
+        }
+        
+        // Also check for snap to wall corners/vertices
+        wall.points.forEach((point, pointIndex) => {
+          const distance = Math.sqrt(
+            Math.pow(point.x - mouseX, 2) + Math.pow(point.y - mouseY, 2)
+          );
+          
+          if (distance < snapDistance && distance < minDistance) {
+            minDistance = distance;
+            nearestSnapPoint = {
+              x: point.x,
+              y: point.y,
+              wallId: wall.id,
+              pointIndex: pointIndex,
+              distance: distance,
+              isCorner: true
+            };
+          }
+        });
+      });
+
+      return nearestSnapPoint;
+    };
+
+    // Fill tool handlers
+    const handleFillClick = (e: KonvaEventObject<MouseEvent>) => {
+      if (!isFillMode || spatialPlanningTool !== 'fill') return;
+      
+      const stage = e.target.getStage();
+      if (!stage) return;
+      
+      const pointerPosition = stage.getPointerPosition();
+      if (!pointerPosition) return;
+      
+      // Convert screen coordinates to canvas coordinates
+      let newPoint = {
+        x: (pointerPosition.x - position.x) / scale,
+        y: (pointerPosition.y - position.y) / scale
+      };
+      
+      // Check for wall edge snapping
+      const nearestWallEdge = findNearestWallEdgeForFill(newPoint.x, newPoint.y);
+      if (nearestWallEdge) {
+        newPoint = {
+          x: nearestWallEdge.x,
+          y: nearestWallEdge.y
+        };
+      }
+      
+      // Check if clicking near the first point to close the loop
+      if (fillPoints.length >= 3) {
+        const firstPoint = fillPoints[0];
+        const distance = Math.sqrt(
+          Math.pow(newPoint.x - firstPoint.x, 2) + Math.pow(newPoint.y - firstPoint.y, 2)
+        );
+        
+        // If clicking within 20 pixels of the first point, close the loop
+        if (distance < 20) {
+          handleFillComplete();
+          return;
+        }
+      }
+      
+      // Add new point
+      const newFillPoints = [...fillPoints, newPoint];
+      setFillPoints(newFillPoints);
+      
+      // Show done button after first point
+      if (newFillPoints.length >= 1) {
+        setShowFillDoneButton(true);
+      }
+    };
+
+    const handleFillComplete = () => {
+      if (fillPoints.length >= 3) {
+        // Store pending fill and show material picker
+        setPendingFill({ points: [...fillPoints] });
+        setShowMaterialPicker(true);
+      }
+      
+      // Reset fill drawing state
+      setFillPoints([]);
+      setShowFillDoneButton(false);
+      setIsFillMode(false);
+      setFillSnapPoint(null);
+    };
+
+    const handleFillCancel = () => {
+      // Reset fill drawing state
+      setFillPoints([]);
+      setShowFillDoneButton(false);
+      setIsFillMode(false);
+      setFillSnapPoint(null);
+      setSpatialPlanningTool('');
+      setShowSpatialPlanningMenu(false);
+      
+      // Switch back to mouse tool
+      setTool('mouse');
+      setSelectedTool('mouse');
+    };
+
+    // Material selection state
+    const [selectedMaterial, setSelectedMaterial] = React.useState<{
+      materialType: 'wood' | 'tile';
+      patternId: string;
+    } | null>(null);
+    const [materialParameters, setMaterialParameters] = React.useState({
+      opacity: 1.0,
+      scale: 1.0,
+      rotation: 0,
+      realWorldSize: 200 // mm - default plank/tile size
+    });
+
+    const handleMaterialSelect = (materialType: 'wood' | 'tile', patternId: string) => {
+      // Set default real-world sizes based on material type
+      const defaultSizes = {
+        wood: 200, // 200mm wide planks
+        tile: 300  // 300mm ceramic tiles
+      };
+      
+      setSelectedMaterial({ materialType, patternId });
+      setMaterialParameters(prev => ({
+        ...prev,
+        realWorldSize: defaultSizes[materialType]
+      }));
+    };
+
+    const handleParameterConfirm = () => {
+      if (!pendingFill || !selectedMaterial) return;
+      
+      // Calculate scale based on real-world size and grid
+      // Grid is 1m = 1000mm, so scale = realWorldSize / 1000
+      const calculatedScale = materialParameters.realWorldSize / 1000;
+      
+      const newFill: FillElement = {
+        id: uuidv4(),
+        points: pendingFill.points,
+        materialType: selectedMaterial.materialType,
+        patternId: selectedMaterial.patternId,
+        opacity: materialParameters.opacity,
+        scale: calculatedScale,
+        rotation: materialParameters.rotation
+      };
+      
+      setFillElements(prev => [...prev, newFill]);
+      
+      // Clean up
+      setPendingFill(null);
+      setShowMaterialPicker(false);
+      setSelectedMaterial(null);
+      setMaterialParameters({
+        opacity: 1.0,
+        scale: 1.0,
+        rotation: 0,
+        realWorldSize: 200
+      });
+      setFillSnapPoint(null);
+      setSpatialPlanningTool('');
+      setShowSpatialPlanningMenu(false);
+      setTool('mouse');
+      setSelectedTool('mouse');
+    };
+
+    const handleParameterCancel = () => {
+      setSelectedMaterial(null);
+      setMaterialParameters({
+        opacity: 1.0,
+        scale: 1.0,
+        rotation: 0,
+        realWorldSize: 200
+      });
+    };
+
+    const handleFillMouseMove = (e: KonvaEventObject<MouseEvent>) => {
+      if (!isFillMode || spatialPlanningTool !== 'fill') return;
+      
+      const stage = e.target.getStage();
+      if (!stage) return;
+      
+      const pointerPosition = stage.getPointerPosition();
+      if (!pointerPosition) return;
+      
+      // Convert screen coordinates to canvas coordinates
+      const mousePos = {
+        x: (pointerPosition.x - position.x) / scale,
+        y: (pointerPosition.y - position.y) / scale
+      };
+      
+      // Check for wall edge snapping and update snap point
+      const nearestWallEdge = findNearestWallEdgeForFill(mousePos.x, mousePos.y);
+      if (nearestWallEdge) {
+        setFillSnapPoint({
+          x: nearestWallEdge.x,
+          y: nearestWallEdge.y,
+          isCorner: nearestWallEdge.isCorner
+        });
+      } else {
+        setFillSnapPoint(null);
+      }
+    };
+
+    const handleWindowMouseMove = (e: KonvaEventObject<MouseEvent>) => {
+      if (!isWindowPlacement || spatialPlanningTool !== 'window') return;
+      
+      const stage = e.target.getStage();
+      if (!stage) return;
+      
+      const pointerPosition = stage.getPointerPosition();
+      if (!pointerPosition) return;
+      
+      // Convert screen coordinates to canvas coordinates
+      const mousePos = {
+        x: (pointerPosition.x - position.x) / scale,
+        y: (pointerPosition.y - position.y) / scale
+      };
+      
+      if (windowPlacementStep === 'position') {
+        // First step: Show wall hover for position selection
+        const nearestWall = findNearestWall(mousePos.x, mousePos.y);
+        setHoveredWall(nearestWall);
+        
+        // Calculate nearby measurements for real-time visualization
+        if (nearestWall) {
+          const measurements = calculateNearbyMeasurements(nearestWall.position);
+
+          setNearbyMeasurements(measurements);
+        } else {
+          setNearbyMeasurements([]);
+        }
+      } else if (windowPlacementStep === 'orientation' && lockedWindowPosition) {
+        // Second step: Detect which side of the wall the mouse is on
+        const wallAngle = lockedWindowPosition.wallAngle;
+        const wallPos = lockedWindowPosition.position;
+        
+        // Calculate perpendicular direction to wall
+        const perpCos = Math.cos(wallAngle - Math.PI / 2);
+        const perpSin = Math.sin(wallAngle - Math.PI / 2);
+        
+        // Vector from wall position to mouse
+        const toMouseX = mousePos.x - wallPos.x;
+        const toMouseY = mousePos.y - wallPos.y;
+        
+        // Dot product to determine which side of wall mouse is on
+        const dotProduct = toMouseX * perpCos + toMouseY * perpSin;
+        
+        // Positive dot product means "outside", negative means "inside"
+        setHoveredWindowSide(dotProduct > 0 ? 'outside' : 'inside');
+        
+        // Update measurements for locked position
+        const measurements = calculateNearbyMeasurements(lockedWindowPosition.position);
+
+        setNearbyMeasurements(measurements);
+      }
+    };
+
     return (
       <div
         className="h-screen w-full relative bg-[#fafafa]"
@@ -3634,7 +5533,15 @@ export default function Canvas({ name, description, projectId }: Props) {
         />
         
         {/* Add padding-top to account for the fixed header */}
-        <div className="pt-16">
+        <div 
+          className="pt-16"
+          style={{
+            cursor: isScreenshotModeActive ? 'crosshair' : 'default'
+          }}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
           {/* Collaborator cursors */}
           {Object.values(collaboratorCursors).map((cursor) => (
             <CollaboratorCursor
@@ -3648,15 +5555,15 @@ export default function Canvas({ name, description, projectId }: Props) {
 
           {/* Rest of your canvas content */}
           <Stage
-            width={dimensions.width}
-            height={dimensions.height}
+            width={canvasDimensions.width}
+                          height={canvasDimensions.height}
             scaleX={scale}
             scaleY={scale}
             x={position.x}
             y={position.y}
-            onMouseDown={e => { handleCanvasClick(e); handleSimpleDrawMouseDown(e); handleStageClick(e); handleSimpleStickyNoteCanvasClick(e); handleShapePlacement(e); handleMindMapCanvasClick(e); }}
-            onMouseUp={e => { handleMouseUp(e); handleSimpleDrawMouseUp(e); }}
-            onMouseMove={e => { handleMouseMove(e); handleSimpleDrawMouseMove(e); }}
+            onMouseDown={e => { handleCanvasClick(e); handleSimpleDrawMouseDown(e); handleStageClick(e); handleSimpleStickyNoteCanvasClick(e); handleShapePlacement(e); handleMindMapCanvasClick(e); handleWallClick(e); handleDoorPlacement(e); handleWindowPlacement(e); handleDimensionPlacement(e); handleAnnotationPlacement(e); handleFillClick(e); }}
+            onMouseUp={e => { handleMouseUp(e); handleSimpleDrawMouseUp(e); handleAnnotationMouseUp(); }}
+            onMouseMove={e => { handleMouseMove(e); handleSimpleDrawMouseMove(e); handleWallMouseMove(e); handleDoorMouseMove(e); handleWindowMouseMove(e); handleDimensionMouseMove(e); handleAnnotationMouseMove(e); handleFillMouseMove(e); }}
             onWheel={handleWheel}
             onMouseEnter={handleStageMouseEnter}
             onMouseLeave={handleMouseLeave}
@@ -3666,13 +5573,271 @@ export default function Canvas({ name, description, projectId }: Props) {
             id="studio-canvas"
             style={{
               display: 'block',
-              backgroundColor: 'white'
+              backgroundColor: 'white',
+              cursor: isScreenshotModeActive ? 'crosshair' : isDrawingWall ? 'crosshair' : 'default'
             }}
           >
             <Layer>
               {/* Restore the polka dot grid */}
               <KonvaGroup>
                 {renderGrid()}
+              </KonvaGroup>
+
+              {/* Fill tool visualization - Bottom layer for floor materials */}
+              <KonvaGroup>
+                {/* Completed fill elements */}
+                {fillElements.map((fill) => {
+                    // Create pattern fill component
+                    const PatternFillShape = () => {
+                      const [patternCanvas, setPatternCanvas] = React.useState<HTMLCanvasElement | null>(null);
+                      const [isPatternLoading, setIsPatternLoading] = React.useState(true);
+
+                      React.useEffect(() => {
+                        // Create PNG pattern canvas
+                        const createPatternCanvas = async () => {
+                          try {
+
+                            
+                            // Determine the correct file name based on pattern ID
+                            let fileName = fill.patternId;
+                            
+                            // Handle old/invalid pattern IDs
+                            if (!fileName || fileName === 'wood-pattern' || fileName === 'undefined') {
+                              fileName = 'Wood-01';
+                            }
+                            
+                            if (!fileName.endsWith('.png')) {
+                              fileName = `${fileName}.png`;
+                            }
+                            
+                            const encodedPath = `/patterns/${encodeURIComponent(fileName)}`;
+                            
+                            // Create an image element to load the PNG directly
+                            const img = new Image();
+                            img.crossOrigin = 'anonymous';
+                            
+                            img.onload = () => {
+                              try {
+                                // Create a canvas to render the pattern
+                                const canvas = document.createElement('canvas');
+                                const ctx = canvas.getContext('2d');
+                                
+                                if (ctx) {
+                                  // Use a reasonable pattern size that balances quality and performance
+                                  const patternSize = 256; // Power of 2 for better GPU performance
+                                  canvas.width = patternSize;
+                                  canvas.height = patternSize;
+                                  
+                                  // Set canvas context properties for better image quality
+                                  ctx.imageSmoothingEnabled = true; // Enable smoothing for better scaling
+                                  ctx.imageSmoothingQuality = 'high';
+                                  
+                                  // Calculate optimal tile size to preserve pattern detail
+                                  // Use a scale that makes the pattern visible but not too large
+                                  const targetTileSize = Math.min(patternSize / 3, 120); // Max 120px tiles
+                                  const scale = Math.min(
+                                    targetTileSize / img.naturalWidth,
+                                    targetTileSize / img.naturalHeight
+                                  );
+                                  
+                                  const scaledWidth = img.naturalWidth * scale;
+                                  const scaledHeight = img.naturalHeight * scale;
+                                  
+                                  // Draw the PNG image tiled across the canvas
+                                  for (let x = 0; x < patternSize; x += scaledWidth) {
+                                    for (let y = 0; y < patternSize; y += scaledHeight) {
+                                      ctx.drawImage(img, x, y, scaledWidth, scaledHeight);
+                                    }
+                                  }
+                                  
+                                  setPatternCanvas(canvas);
+                                  setIsPatternLoading(false);
+                                } else {
+                                  setIsPatternLoading(false);
+                                }
+                              } catch (error) {
+                                setIsPatternLoading(false);
+                              }
+                            };
+                            
+                            img.onerror = () => {
+                              setIsPatternLoading(false);
+                            };
+                            
+                            // Load PNG directly as image
+                            img.src = encodedPath;
+                            
+                          } catch (error) {
+                            // Handle any errors silently
+                          }
+                        };
+
+                        createPatternCanvas();
+                      }, []);
+
+                      // Fallback colors if pattern doesn't load
+                      const getFallbackColor = (materialType: string, patternId: string) => {
+                        // Handle old fills without materialType
+                        if (!materialType) {
+                          return '#DEB887'; // Default wood color for old fills
+                        }
+                        
+                        if (materialType === 'wood') {
+                          switch (patternId) {
+                            case 'Wood-01': return '#D2B48C'; // Classic Oak - tan
+                            case 'Wood-02': return '#A0522D'; // Modern Plank - sienna
+                            case 'Wood-03': return '#DEB887'; // Rustic Pine - burlywood
+                            case 'Wood-04': return '#8B4513'; // Mahogany - saddle brown
+                            case 'Wood-05': return '#CD853F'; // Bamboo - peru
+                            case 'Wood-06': return '#654321'; // Walnut - dark brown
+                            default: return '#DEB887';
+                          }
+                        } else {
+                          switch (patternId) {
+                            case 'Ceramic-07': return '#F2F2F2'; // Very light gray
+                            default: return '#F5F5F5';
+                          }
+                        }
+                      };
+
+                      const getStrokeColor = (materialType: string, patternId: string) => {
+                        // Handle old fills without materialType
+                        if (!materialType) {
+                          return '#8B4513'; // Default to wood stroke for old fills
+                        }
+                        
+                        if (materialType === 'wood') {
+                          return '#8B4513'; // Darker brown for wood edges
+                        } else {
+                          return '#D3D3D3'; // Light gray for tile edges
+                        }
+                      };
+
+
+                      
+                      const fillProps: any = patternCanvas 
+                        ? {
+                            fillPatternImage: patternCanvas,
+                            fillPatternScaleX: (fill.scale || 1) * 1.5, // Moderate scale for good visibility
+                            fillPatternScaleY: (fill.scale || 1) * 1.5,
+                            fillPatternRotation: fill.rotation || 0,
+                            fillPatternRepeat: 'repeat',
+                            fillPatternOffsetX: 0,
+                            fillPatternOffsetY: 0
+                          }
+                        : isPatternLoading
+                        ? {
+                            fill: 'transparent' // Don't show fallback color while loading
+                          }
+                        : {
+                            fill: getFallbackColor(fill.materialType, fill.patternId)
+                          };
+
+                      const points = fill.points.flatMap(p => [p.x, p.y]);
+                      const strokeColor = getStrokeColor(fill.materialType, fill.patternId);
+                  
+                  return (
+                    <KonvaLine
+                          points={points}
+                          {...fillProps}
+                          stroke={strokeColor}
+                          strokeWidth={0.5}
+                      closed={true}
+                      opacity={fill.opacity}
+                    />
+                  );
+                    };
+                    
+                    return <PatternFillShape key={fill.id} />;
+                })}
+                
+                {/* Current fill drawing preview */}
+                {isFillMode && fillPoints.length > 0 && (
+                  <KonvaGroup>
+                    {/* Fill preview line */}
+                    <KonvaLine
+                      points={fillPoints.flatMap(p => [p.x, p.y])}
+                      stroke="#2563eb"
+                      strokeWidth={2}
+                      dash={[5, 5]}
+                      closed={false}
+                    />
+                    
+                    {/* Fill points */}
+                    {fillPoints.map((point, index) => (
+                      <KonvaCircle
+                        key={index}
+                        x={point.x}
+                        y={point.y}
+                        radius={4}
+                        fill={index === 0 ? "#dc2626" : "#2563eb"}
+                        stroke="white"
+                        strokeWidth={2}
+                      />
+                    ))}
+                    
+                    {/* First point indicator for closing */}
+                    {fillPoints.length >= 3 && (
+                      <KonvaCircle
+                        x={fillPoints[0].x}
+                        y={fillPoints[0].y}
+                        radius={8}
+                        stroke="#dc2626"
+                        strokeWidth={2}
+                        dash={[3, 3]}
+                        fill="transparent"
+                      />
+                    )}
+                    
+                    {/* Wall edge snap point indicator */}
+                    {fillSnapPoint && (
+                      <KonvaGroup>
+                        {/* Snap point indicator */}
+                        <KonvaCircle
+                          x={fillSnapPoint.x}
+                          y={fillSnapPoint.y}
+                          radius={6}
+                          fill="transparent"
+                          stroke={fillSnapPoint.isCorner ? "#ff6b35" : "#4CAF50"}
+                          strokeWidth={2}
+                          dash={[3, 3]}
+                        />
+                        
+                        {/* Inner snap point dot */}
+                        <KonvaCircle
+                          x={fillSnapPoint.x}
+                          y={fillSnapPoint.y}
+                          radius={2}
+                          fill={fillSnapPoint.isCorner ? "#ff6b35" : "#4CAF50"}
+                        />
+                        
+                        {/* Snap point label */}
+                        <KonvaRect
+                          x={fillSnapPoint.x + 10}
+                          y={fillSnapPoint.y - 12}
+                          width={fillSnapPoint.isCorner ? 50 : 60}
+                          height={16}
+                          fill="white"
+                          stroke={fillSnapPoint.isCorner ? "#ff6b35" : "#4CAF50"}
+                          strokeWidth={1}
+                          cornerRadius={3}
+                          opacity={0.95}
+                        />
+                        
+                        <KonvaText
+                          x={fillSnapPoint.x + 10}
+                          y={fillSnapPoint.y - 8}
+                          width={fillSnapPoint.isCorner ? 50 : 60}
+                          text={fillSnapPoint.isCorner ? "Corner" : "Wall Edge"}
+                          fontSize={9}
+                          fill={fillSnapPoint.isCorner ? "#ff6b35" : "#4CAF50"}
+                          align="center"
+                          fontStyle="bold"
+                        />
+                      </KonvaGroup>
+                    )}
+                  </KonvaGroup>
+                )}
               </KonvaGroup>
 
               {/* Drawing Groups Layer */}
@@ -3769,6 +5934,1643 @@ export default function Canvas({ name, description, projectId }: Props) {
                     lineJoin="round"
                     globalCompositeOperation="source-over"
                   />
+                )}
+              </KonvaGroup>
+
+              {/* Wall Drawing Layer */}
+              <KonvaGroup>
+                {/* Completed wall segments */}
+                {wallSegments.map((wall) => {
+                  // Create wall shape with proper thickness and joinery
+                  const wallThickness = wall.thickness;
+                  
+                  if (wall.points.length < 2) return null;
+                  
+                  // Calculate all wall segments with proper joinery
+                  const wallPath: number[] = [];
+                  
+                  // Helper function to calculate perpendicular offset
+                  const getPerpendicular = (p1: {x: number, y: number}, p2: {x: number, y: number}, thickness: number) => {
+                    const dx = p2.x - p1.x;
+                    const dy = p2.y - p1.y;
+                    const length = Math.sqrt(dx * dx + dy * dy);
+                    if (length === 0) return { perpX: 0, perpY: 0 };
+                    
+                    const dirX = dx / length;
+                    const dirY = dy / length;
+                    return {
+                      perpX: -dirY * thickness / 2,
+                      perpY: dirX * thickness / 2
+                    };
+                  };
+                  
+                  // Helper function to find intersection of two lines
+                  const findLineIntersection = (
+                    p1: {x: number, y: number}, p2: {x: number, y: number},
+                    p3: {x: number, y: number}, p4: {x: number, y: number}
+                  ) => {
+                    const denom = (p1.x - p2.x) * (p3.y - p4.y) - (p1.y - p2.y) * (p3.x - p4.x);
+                    if (Math.abs(denom) < 1e-10) return null;
+                    
+                    const t = ((p1.x - p3.x) * (p3.y - p4.y) - (p1.y - p3.y) * (p3.x - p4.x)) / denom;
+                    return {
+                      x: p1.x + t * (p2.x - p1.x),
+                      y: p1.y + t * (p2.y - p1.y)
+                    };
+                  };
+                  
+                  // Calculate outer edge points with proper mitering
+                  const outerPoints: {x: number, y: number}[] = [];
+                  const innerPoints: {x: number, y: number}[] = [];
+                  
+                  // For closed shapes, we need to handle the first and last points differently
+                  const isClosedShape = wall.isClosed && wall.points.length > 3;
+                  
+                  for (let i = 0; i < wall.points.length; i++) {
+                    let prevPoint, currentPoint, nextPoint;
+                    
+                                          if (isClosedShape) {
+                        // For closed shapes, wrap around for first and last points
+                        if (i === wall.points.length - 1) {
+                          // This is the duplicate last point (same as first point)
+                          // Skip processing it since it's identical to the first point
+                          continue;
+                        }
+                        prevPoint = wall.points[i === 0 ? wall.points.length - 2 : i - 1]; // Skip the duplicate last point
+                        currentPoint = wall.points[i];
+                        nextPoint = wall.points[i === wall.points.length - 2 ? 0 : i + 1]; // Wrap to first point when at second-to-last
+                      } else {
+                        prevPoint = wall.points[i - 1];
+                        currentPoint = wall.points[i];
+                        nextPoint = wall.points[i + 1];
+                      }
+                    
+                                          if (!isClosedShape && i === 0) {
+                        // First point of open wall - no previous segment
+                        const perp = getPerpendicular(currentPoint, nextPoint, wallThickness);
+                        outerPoints.push({
+                          x: currentPoint.x + perp.perpX,
+                          y: currentPoint.y + perp.perpY
+                        });
+                        innerPoints.push({
+                          x: currentPoint.x - perp.perpX,
+                          y: currentPoint.y - perp.perpY
+                        });
+                      } else if (!isClosedShape && i === wall.points.length - 1) {
+                        // Last point of open wall - no next segment
+                        const perp = getPerpendicular(prevPoint, currentPoint, wallThickness);
+                        outerPoints.push({
+                          x: currentPoint.x + perp.perpX,
+                          y: currentPoint.y + perp.perpY
+                        });
+                        innerPoints.push({
+                          x: currentPoint.x - perp.perpX,
+                          y: currentPoint.y - perp.perpY
+                        });
+                    } else {
+                      // Middle point or closed shape point - calculate miter joint
+                      const perp1 = getPerpendicular(prevPoint, currentPoint, wallThickness);
+                      const perp2 = getPerpendicular(currentPoint, nextPoint, wallThickness);
+                      
+                      // Outer edge intersection
+                      const outerLine1Start = { x: prevPoint.x + perp1.perpX, y: prevPoint.y + perp1.perpY };
+                      const outerLine1End = { x: currentPoint.x + perp1.perpX, y: currentPoint.y + perp1.perpY };
+                      const outerLine2Start = { x: currentPoint.x + perp2.perpX, y: currentPoint.y + perp2.perpY };
+                      const outerLine2End = { x: nextPoint.x + perp2.perpX, y: nextPoint.y + perp2.perpY };
+                      
+                      const outerIntersection = findLineIntersection(outerLine1Start, outerLine1End, outerLine2Start, outerLine2End);
+                      
+                      // Inner edge intersection
+                      const innerLine1Start = { x: prevPoint.x - perp1.perpX, y: prevPoint.y - perp1.perpY };
+                      const innerLine1End = { x: currentPoint.x - perp1.perpX, y: currentPoint.y - perp1.perpY };
+                      const innerLine2Start = { x: currentPoint.x - perp2.perpX, y: currentPoint.y - perp2.perpY };
+                      const innerLine2End = { x: nextPoint.x - perp2.perpX, y: nextPoint.y - perp2.perpY };
+                      
+                      const innerIntersection = findLineIntersection(innerLine1Start, innerLine1End, innerLine2Start, innerLine2End);
+                      
+                      outerPoints.push(outerIntersection || {
+                        x: currentPoint.x + perp1.perpX,
+                        y: currentPoint.y + perp1.perpY
+                      });
+                      
+                      innerPoints.push(innerIntersection || {
+                        x: currentPoint.x - perp1.perpX,
+                        y: currentPoint.y - perp1.perpY
+                      });
+                    }
+                  }
+                  
+                                    // For closed shapes, render fill per segment to avoid path winding issues
+                  const actualPoints = isClosedShape ? wall.points.slice(0, -1) : wall.points;
+                  const numSegments = isClosedShape ? actualPoints.length : actualPoints.length - 1;
+
+                  
+                  return (
+                    <KonvaGroup key={wall.id}>
+                      {/* Wall fill - render per segment to avoid winding issues */}
+                      {(() => {
+                        const fillSegments: JSX.Element[] = [];
+                        
+                        for (let segIdx = 0; segIdx < numSegments; segIdx++) {
+                          const p1 = actualPoints[segIdx];
+                          const p2 = isClosedShape 
+                            ? actualPoints[(segIdx + 1) % actualPoints.length]
+                            : actualPoints[segIdx + 1];
+                          
+                          // Calculate segment perpendicular
+                          const dx = p2.x - p1.x;
+                          const dy = p2.y - p1.y;
+                          const length = Math.sqrt(dx * dx + dy * dy);
+                          
+                          if (length === 0) continue;
+                          
+                          const dirX = dx / length;
+                          const dirY = dy / length;
+                          const perpX = -dirY * wallThickness / 2;
+                          const perpY = dirX * wallThickness / 2;
+                          
+                          // Segment fill rectangle
+                          const segmentFillPoints = [
+                            p1.x + perpX, p1.y + perpY,  // outer start
+                            p2.x + perpX, p2.y + perpY,  // outer end
+                            p2.x - perpX, p2.y - perpY,  // inner end
+                            p1.x - perpX, p1.y - perpY   // inner start
+                          ];
+                          
+                          fillSegments.push(
+                            <KonvaLine
+                              key={`fill-${wall.id}-${segIdx}`}
+                              points={segmentFillPoints}
+                              closed={true}
+                              fill="#f5f5f5"
+                              stroke=""
+                              perfectDrawEnabled={false}
+                              listening={false}
+                            />
+                          );
+                        }
+                        
+                        return fillSegments;
+                      })()}
+                      
+                      {/* Wall stroke - outer edge */}
+                      <KonvaLine
+                        points={outerPoints.flatMap(p => [p.x, p.y])}
+                        closed={isClosedShape}
+                        fill=""
+                        stroke="#333333"
+                        strokeWidth={1}
+                        perfectDrawEnabled={false}
+                        listening={false}
+                      />
+                      
+                      {/* Wall stroke - inner edge */}
+                      <KonvaLine
+                        points={innerPoints.flatMap(p => [p.x, p.y])}
+                        closed={isClosedShape}
+                        fill=""
+                        stroke="#333333"
+                        strokeWidth={1}
+                        perfectDrawEnabled={false}
+                        listening={false}
+                      />
+
+                      
+                      {/* Hatching pattern - applied to each segment individually */}
+                      {(() => {
+                        const hatchLines: JSX.Element[] = [];
+                        const hatchSpacing = 8;
+                        
+                        // Apply hatching to each wall segment individually
+                        // For closed shapes, we need to include all segments including the closing one
+                        const actualPoints = isClosedShape ? wall.points.slice(0, -1) : wall.points; // Remove duplicate last point for closed shapes
+                        const numSegments = isClosedShape ? actualPoints.length : actualPoints.length - 1;
+                        
+                        for (let segIdx = 0; segIdx < numSegments; segIdx++) {
+                          const p1 = actualPoints[segIdx];
+                          const p2 = isClosedShape 
+                            ? actualPoints[(segIdx + 1) % actualPoints.length] // Wrap around for closed shapes
+                            : actualPoints[segIdx + 1];
+                          
+                          // Calculate segment perpendicular
+                          const dx = p2.x - p1.x;
+                          const dy = p2.y - p1.y;
+                          const length = Math.sqrt(dx * dx + dy * dy);
+                          
+                          if (length === 0) continue;
+                          
+                          const dirX = dx / length;
+                          const dirY = dy / length;
+                          const perpX = -dirY * wallThickness / 2;
+                          const perpY = dirX * wallThickness / 2;
+                          
+                          // Segment corners
+                          const segmentCorners = [
+                            { x: p1.x + perpX, y: p1.y + perpY },
+                            { x: p2.x + perpX, y: p2.y + perpY },
+                            { x: p2.x - perpX, y: p2.y - perpY },
+                            { x: p1.x - perpX, y: p1.y - perpY }
+                          ];
+                          
+                          // Calculate segment bounds
+                          const minX = Math.min(...segmentCorners.map(c => c.x));
+                          const maxX = Math.max(...segmentCorners.map(c => c.x));
+                          const minY = Math.min(...segmentCorners.map(c => c.y));
+                          const maxY = Math.max(...segmentCorners.map(c => c.y));
+                          
+                          // Create diagonal hatch lines for this segment
+                          const segmentWidth = maxX - minX;
+                          const segmentHeight = maxY - minY;
+                          const diagonal = Math.sqrt(segmentWidth * segmentWidth + segmentHeight * segmentHeight);
+                          const numLines = Math.ceil(diagonal / hatchSpacing) + 4;
+                          
+                          for (let j = -numLines; j <= numLines; j++) {
+                            const offset = j * hatchSpacing;
+                            
+                            // Create a diagonal line (45 degrees) across the segment
+                            const lineStart = {
+                              x: minX - diagonal + offset,
+                              y: minY - diagonal
+                            };
+                            const lineEnd = {
+                              x: maxX + diagonal + offset,
+                              y: maxY + diagonal
+                            };
+                            
+                            // Find intersections with segment edges
+                            const intersections: { x: number; y: number }[] = [];
+                            
+                            // Check intersection with each segment edge
+                            for (let k = 0; k < 4; k++) {
+                              const edgeStart = segmentCorners[k];
+                              const edgeEnd = segmentCorners[(k + 1) % 4];
+                              
+                              const intersection = getLineIntersection(
+                                lineStart.x, lineStart.y, lineEnd.x, lineEnd.y,
+                                edgeStart.x, edgeStart.y, edgeEnd.x, edgeEnd.y
+                              );
+                              
+                              if (intersection) {
+                                intersections.push(intersection);
+                              }
+                            }
+                            
+                            // Draw line segments between intersection pairs
+                            if (intersections.length >= 2) {
+                              // Sort intersections by distance along the line
+                              intersections.sort((a, b) => {
+                                const distA = Math.sqrt((a.x - lineStart.x) ** 2 + (a.y - lineStart.y) ** 2);
+                                const distB = Math.sqrt((b.x - lineStart.x) ** 2 + (b.y - lineStart.y) ** 2);
+                                return distA - distB;
+                              });
+                              
+                              // Take the first and last intersection points
+                              const start = intersections[0];
+                              const end = intersections[intersections.length - 1];
+                              
+                              hatchLines.push(
+                                <KonvaLine
+                                  key={`hatch-${wall.id}-${segIdx}-${j}`}
+                                  points={[start.x, start.y, end.x, end.y]}
+                                  stroke="#999999"
+                                  strokeWidth={0.5}
+                                  opacity={0.6}
+                                />
+                              );
+                            }
+                          }
+                        }
+                        
+                        return hatchLines;
+                      })()}
+                    </KonvaGroup>
+                  );
+                })}
+                
+                {/* Door elements */}
+                {doors.map((door) => {
+                  const doorWidth = door.width;
+                  const swingRadius = doorWidth;
+                  
+                  // Door frame aligned with wall angle (matching preview)
+                  const cos = Math.cos(door.angle);
+                  const sin = Math.sin(door.angle);
+                  const frameStartX = door.x - cos * doorWidth / 2;
+                  const frameStartY = door.y - sin * doorWidth / 2;
+                  const frameEndX = door.x + cos * doorWidth / 2;
+                  const frameEndY = door.y + sin * doorWidth / 2;
+                  
+                  // Calculate perpendicular directions for swing options
+                  const perpCos = Math.cos(door.angle - Math.PI / 2);
+                  const perpSin = Math.sin(door.angle - Math.PI / 2);
+                  
+                  // Define swing parameters based on option (matching preview logic)
+                  let pivotX: number, pivotY: number, panelEndX: number, panelEndY: number, arcRotation: number;
+                  
+                  switch (door.swingOption) {
+                    case 1: // Top-Left
+                      pivotX = frameStartX;
+                      pivotY = frameStartY;
+                      panelEndX = frameStartX + perpCos * swingRadius;
+                      panelEndY = frameStartY + perpSin * swingRadius;
+                      arcRotation = (door.angle * 180 / Math.PI) + 270;
+                      break;
+                    case 2: // Bottom-Left
+                      pivotX = frameStartX;
+                      pivotY = frameStartY;
+                      panelEndX = frameStartX - perpCos * swingRadius;
+                      panelEndY = frameStartY - perpSin * swingRadius;
+                      arcRotation = (door.angle * 180 / Math.PI) + 0;
+                      break;
+                    case 3: // Bottom-Right
+                      pivotX = frameEndX;
+                      pivotY = frameEndY;
+                      panelEndX = frameEndX - perpCos * swingRadius;
+                      panelEndY = frameEndY - perpSin * swingRadius;
+                      arcRotation = (door.angle * 180 / Math.PI) + 90;
+                      break;
+                    case 4: // Top-Right
+                      pivotX = frameEndX;
+                      pivotY = frameEndY;
+                      panelEndX = frameEndX + perpCos * swingRadius;
+                      panelEndY = frameEndY + perpSin * swingRadius;
+                      arcRotation = (door.angle * 180 / Math.PI) + 180;
+                      break;
+                  }
+                  
+                  return (
+                    <KonvaGroup key={door.id}>
+                      {/* Door frame - follows wall angle */}
+                      <KonvaLine
+                        points={[frameStartX, frameStartY, frameEndX, frameEndY]}
+                        stroke="white"
+                        strokeWidth={12}
+                      />
+                      
+                      {/* Door swing arc */}
+                      <KonvaArc
+                        x={pivotX}
+                        y={pivotY}
+                        innerRadius={0}
+                        outerRadius={swingRadius}
+                        angle={90}
+                        rotation={arcRotation}
+                        stroke="#8B4513"
+                        strokeWidth={1}
+                        dash={[5, 5]}
+                        opacity={0.6}
+                      />
+                      
+                      {/* Door panel (door slab line) */}
+                      <KonvaLine
+                        points={[pivotX, pivotY, panelEndX, panelEndY]}
+                        stroke="#8B4513"
+                        strokeWidth={2}
+                        opacity={0.8}
+                      />
+                    </KonvaGroup>
+                  );
+                })}
+                
+                {/* Door placement preview */}
+                {isDoorPlacement && (
+                  <KonvaGroup>
+                    {/* Step 1: Position selection preview */}
+                    {doorPlacementStep === 'position' && hoveredWall && (
+                      <>
+                        {/* Preview door frame */}
+                        <KonvaCircle
+                          x={hoveredWall.position.x}
+                          y={hoveredWall.position.y}
+                          radius={8}
+                          fill="#E91E63"
+                          stroke="white"
+                          strokeWidth={2}
+                          opacity={0.8}
+                        />
+                        
+                        {/* Preview door symbol - rotated to match wall angle */}
+                        <KonvaLine
+                          points={[
+                            hoveredWall.position.x - Math.cos(hoveredWall.wallAngle) * 22.5,
+                            hoveredWall.position.y - Math.sin(hoveredWall.wallAngle) * 22.5,
+                            hoveredWall.position.x + Math.cos(hoveredWall.wallAngle) * 22.5,
+                            hoveredWall.position.y + Math.sin(hoveredWall.wallAngle) * 22.5
+                          ]}
+                          stroke="#E91E63"
+                          strokeWidth={2}
+                          opacity={0.6}
+                          dash={[5, 5]}
+                        />
+                      </>
+                    )}
+                    
+                    {/* Step 2: Swing direction preview */}
+                    {doorPlacementStep === 'swing' && lockedDoorPosition && (
+                      <>
+                        {/* Locked door position indicator */}
+                        <KonvaCircle
+                          x={lockedDoorPosition.position.x}
+                          y={lockedDoorPosition.position.y}
+                          radius={6}
+                          fill="#E91E63"
+                          stroke="white"
+                          strokeWidth={2}
+                        />
+                        
+                        {/* Door frame preview - follows wall angle */}
+                        <KonvaLine
+                          points={[
+                            lockedDoorPosition.position.x - Math.cos(lockedDoorPosition.wallAngle) * 22.5,
+                            lockedDoorPosition.position.y - Math.sin(lockedDoorPosition.wallAngle) * 22.5,
+                            lockedDoorPosition.position.x + Math.cos(lockedDoorPosition.wallAngle) * 22.5,
+                            lockedDoorPosition.position.y + Math.sin(lockedDoorPosition.wallAngle) * 22.5
+                          ]}
+                          stroke="white"
+                          strokeWidth={12}
+                        />
+                        
+                        {/* Four swing option previews - wall-angle-aware layout */}
+                        {(() => {
+                          const doorPos = lockedDoorPosition.position;
+                          const wallAngle = lockedDoorPosition.wallAngle;
+                          const doorWidth = mmToPixels(900); // Standard door width
+                          
+                          // Calculate door frame endpoints based on wall angle
+                          const cos = Math.cos(wallAngle);
+                          const sin = Math.sin(wallAngle);
+                          const frameStartX = doorPos.x - cos * doorWidth / 2;
+                          const frameStartY = doorPos.y - sin * doorWidth / 2;
+                          const frameEndX = doorPos.x + cos * doorWidth / 2;
+                          const frameEndY = doorPos.y + sin * doorWidth / 2;
+                          
+                          // Calculate perpendicular directions for swing options
+                          const perpCos = Math.cos(wallAngle - Math.PI / 2);
+                          const perpSin = Math.sin(wallAngle - Math.PI / 2);
+                          
+                          const swingOptions = [
+                            { 
+                              id: 1, 
+                              label: 'Top-Left', 
+                              pivotX: frameStartX, 
+                              pivotY: frameStartY, 
+                              panelEndX: frameStartX + perpCos * 45, 
+                              panelEndY: frameStartY + perpSin * 45,
+                              arcRotation: (wallAngle * 180 / Math.PI) + 270
+                            },
+                            { 
+                              id: 2, 
+                              label: 'Bottom-Left', 
+                              pivotX: frameStartX, 
+                              pivotY: frameStartY, 
+                              panelEndX: frameStartX - perpCos * 45, 
+                              panelEndY: frameStartY - perpSin * 45,
+                              arcRotation: (wallAngle * 180 / Math.PI) + 0
+                            },
+                            { 
+                              id: 3, 
+                              label: 'Bottom-Right', 
+                              pivotX: frameEndX, 
+                              pivotY: frameEndY, 
+                              panelEndX: frameEndX - perpCos * 45, 
+                              panelEndY: frameEndY - perpSin * 45,
+                              arcRotation: (wallAngle * 180 / Math.PI) + 90
+                            },
+                            { 
+                              id: 4, 
+                              label: 'Top-Right', 
+                              pivotX: frameEndX, 
+                              pivotY: frameEndY, 
+                              panelEndX: frameEndX + perpCos * 45, 
+                              panelEndY: frameEndY + perpSin * 45,
+                              arcRotation: (wallAngle * 180 / Math.PI) + 180
+                            }
+                          ];
+                          
+                          return swingOptions.map((option) => {
+                            const isSelected = selectedSwingOption === option.id;
+                            const opacity = isSelected ? 1.0 : 0.3;
+                            const strokeWidth = isSelected ? 3 : 1;
+                            const color = isSelected ? "#4CAF50" : "#999999";
+                            
+                                                          return (
+                                <KonvaGroup key={option.id}>
+                                  {/* Swing arc */}
+                                  <KonvaArc
+                                    x={option.pivotX}
+                                    y={option.pivotY}
+                                    innerRadius={0}
+                                    outerRadius={45}
+                                    angle={90}
+                                    rotation={option.arcRotation}
+                                    stroke={color}
+                                    strokeWidth={strokeWidth}
+                                    dash={[6, 3]}
+                                    opacity={opacity}
+                                  />
+                                  
+                                  {/* Door panel - hidden */}
+                                  {/* <KonvaLine
+                                    points={[option.pivotX, option.pivotY, option.panelEndX, option.panelEndY]}
+                                    stroke={color}
+                                    strokeWidth={strokeWidth}
+                                    opacity={opacity}
+                                  /> */}
+                                  
+                                  {/* Option number - hidden */}
+                                  {/* <KonvaText
+                                    x={option.panelEndX - 8}
+                                    y={option.panelEndY - 8}
+                                    text={option.id.toString()}
+                                    fontSize={16}
+                                    fill={color}
+                                    fontStyle="bold"
+                                    opacity={opacity}
+                                  /> */}
+                                </KonvaGroup>
+                              );
+                          });
+                        })()}
+                      </>
+                    )}
+                  </KonvaGroup>
+                )}
+
+                {/* Window elements */}
+                {windows.map((window) => {
+                  const windowWidth = window.width;
+                  const windowHeight = window.height;
+                  
+                  // Window frame aligned with wall angle
+                  const cos = Math.cos(window.angle);
+                  const sin = Math.sin(window.angle);
+                  const frameStartX = window.x - cos * windowWidth / 2;
+                  const frameStartY = window.y - sin * windowWidth / 2;
+                  const frameEndX = window.x + cos * windowWidth / 2;
+                  const frameEndY = window.y + sin * windowWidth / 2;
+                  
+                  // Calculate perpendicular directions for window depth
+                  const perpCos = Math.cos(window.angle - Math.PI / 2);
+                  const perpSin = Math.sin(window.angle - Math.PI / 2);
+                  const depthOffset = 8; // Window depth offset
+                  
+                  return (
+                    <KonvaGroup key={window.id}>
+                      {/* Standard architectural window symbol */}
+                      
+                      {/* White fill to represent opening in wall - hides wall lines */}
+                      <KonvaLine
+                        points={[
+                          frameStartX - perpCos * 5, 
+                          frameStartY - perpSin * 5,
+                          frameEndX - perpCos * 5, 
+                          frameEndY - perpSin * 5,
+                          frameEndX + perpCos * 5, 
+                          frameEndY + perpSin * 5,
+                          frameStartX + perpCos * 5, 
+                          frameStartY + perpSin * 5
+                        ]}
+                        closed={true}
+                        fill="white"
+                        stroke="white"
+                        strokeWidth={1}
+                      />
+                      
+                      {/* Window frame line flush with one wall edge */}
+                      <KonvaLine
+                        points={[
+                          frameStartX - perpCos * 5, 
+                          frameStartY - perpSin * 5,
+                          frameEndX - perpCos * 5, 
+                          frameEndY - perpSin * 5
+                        ]}
+                        stroke="#000000"
+                        strokeWidth={2}
+                      />
+                      
+                      {/* Window frame line flush with opposite wall edge */}
+                      <KonvaLine
+                        points={[
+                          frameStartX + perpCos * 5, 
+                          frameStartY + perpSin * 5,
+                          frameEndX + perpCos * 5, 
+                          frameEndY + perpSin * 5
+                        ]}
+                        stroke="#000000"
+                        strokeWidth={2}
+                      />
+                      
+                      {/* Window sash lines within the opening */}
+                      <KonvaLine
+                        points={[
+                          frameStartX - perpCos * 2, 
+                          frameStartY - perpSin * 2,
+                          frameEndX - perpCos * 2, 
+                          frameEndY - perpSin * 2
+                        ]}
+                        stroke="#000000"
+                        strokeWidth={0.5}
+                      />
+                      <KonvaLine
+                        points={[
+                          frameStartX + perpCos * 2, 
+                          frameStartY + perpSin * 2,
+                          frameEndX + perpCos * 2, 
+                          frameEndY + perpSin * 2
+                        ]}
+                        stroke="#000000"
+                        strokeWidth={0.5}
+                      />
+                      
+                      {/* Window frame left and right strokes */}
+                      <KonvaLine
+                        points={[
+                          frameStartX - perpCos * 5,
+                          frameStartY - perpSin * 5,
+                          frameStartX + perpCos * 5,
+                          frameStartY + perpSin * 5
+                        ]}
+                        stroke="#000000"
+                        strokeWidth={2}
+                      />
+                      <KonvaLine
+                        points={[
+                          frameEndX - perpCos * 5,
+                          frameEndY - perpSin * 5,
+                          frameEndX + perpCos * 5,
+                          frameEndY + perpSin * 5
+                        ]}
+                        stroke="#000000"
+                        strokeWidth={2}
+                      />
+                      
+                      {/* Window type specific symbols */}
+                      {window.type === 'regular' && (
+                        // Regular window - single pane with cross
+                        <KonvaGroup>
+                          {/* Horizontal divider across window opening */}
+                          <KonvaLine
+                            points={[
+                              frameStartX + (frameEndX - frameStartX) * 0.5 - perpCos * 5,
+                              frameStartY + (frameEndY - frameStartY) * 0.5 - perpSin * 5,
+                              frameStartX + (frameEndX - frameStartX) * 0.5 + perpCos * 5,
+                              frameStartY + (frameEndY - frameStartY) * 0.5 + perpSin * 5
+                            ]}
+                            stroke="#000000"
+                            strokeWidth={1}
+                            opacity={0.7}
+                          />
+                          {/* Vertical divider along window length */}
+                          <KonvaLine
+                            points={[
+                              frameStartX + (frameEndX - frameStartX) * 0.5,
+                              frameStartY + (frameEndY - frameStartY) * 0.5,
+                              frameStartX + (frameEndX - frameStartX) * 0.5,
+                              frameStartY + (frameEndY - frameStartY) * 0.5
+                            ]}
+                            stroke="#000000"
+                            strokeWidth={1}
+                            opacity={0.7}
+                          />
+                        </KonvaGroup>
+                      )}
+                      
+                      {window.type === 'french' && (
+                        // French window - double doors with center line
+                        <KonvaGroup>
+                          {/* Center divider across window opening */}
+                          <KonvaLine
+                            points={[
+                              frameStartX + (frameEndX - frameStartX) * 0.5 - perpCos * 5,
+                              frameStartY + (frameEndY - frameStartY) * 0.5 - perpSin * 5,
+                              frameStartX + (frameEndX - frameStartX) * 0.5 + perpCos * 5,
+                              frameStartY + (frameEndY - frameStartY) * 0.5 + perpSin * 5
+                            ]}
+                            stroke="#000000"
+                            strokeWidth={2}
+                          />
+                          {/* Swing arcs for french doors from window frame */}
+                          <KonvaArc
+                            x={frameStartX - perpCos * 5}
+                            y={frameStartY - perpSin * 5}
+                            innerRadius={0}
+                            outerRadius={15}
+                            angle={90}
+                            rotation={window.angle * 180 / Math.PI + (window.orientation === 'outside' ? 0 : 180)}
+                            stroke="#000000"
+                            strokeWidth={1}
+                            opacity={0.5}
+                          />
+                          <KonvaArc
+                            x={frameEndX - perpCos * 5}
+                            y={frameEndY - perpSin * 5}
+                            innerRadius={0}
+                            outerRadius={15}
+                            angle={90}
+                            rotation={window.angle * 180 / Math.PI + (window.orientation === 'outside' ? 180 : 0)}
+                            stroke="#000000"
+                            strokeWidth={1}
+                            opacity={0.5}
+                          />
+                        </KonvaGroup>
+                      )}
+                      
+                      {window.type === 'bay' && (
+                        // Bay window - angled projection from wall edge
+                        <KonvaGroup>
+                          {/* Bay window projection lines from window frame */}
+                          <KonvaLine
+                            points={[
+                              frameStartX - perpCos * 5,
+                              frameStartY - perpSin * 5,
+                              frameStartX + perpCos * 12 - Math.cos(window.angle + Math.PI/6) * 8,
+                              frameStartY + perpSin * 12 - Math.sin(window.angle + Math.PI/6) * 8
+                            ]}
+                            stroke="#000000"
+                            strokeWidth={2}
+                          />
+                          <KonvaLine
+                            points={[
+                              frameEndX - perpCos * 5,
+                              frameEndY - perpSin * 5,
+                              frameEndX + perpCos * 12 - Math.cos(window.angle - Math.PI/6) * 8,
+                              frameEndY + perpSin * 12 - Math.sin(window.angle - Math.PI/6) * 8
+                            ]}
+                            stroke="#000000"
+                            strokeWidth={2}
+                          />
+                          {/* Bay window front edge */}
+                          <KonvaLine
+                            points={[
+                              frameStartX + perpCos * 12 - Math.cos(window.angle + Math.PI/6) * 8,
+                              frameStartY + perpSin * 12 - Math.sin(window.angle + Math.PI/6) * 8,
+                              frameEndX + perpCos * 12 - Math.cos(window.angle - Math.PI/6) * 8,
+                              frameEndY + perpSin * 12 - Math.sin(window.angle - Math.PI/6) * 8
+                            ]}
+                            stroke="#000000"
+                            strokeWidth={2}
+                          />
+                        </KonvaGroup>
+                      )}
+                      
+                      {window.type === 'sliding' && (
+                        // Sliding window - overlapping rectangles with arrow
+                        <KonvaGroup>
+                          {/* Sliding track indicator centered in opening */}
+                          <KonvaLine
+                            points={[
+                              frameStartX + (frameEndX - frameStartX) * 0.25 + perpCos * 3,
+                              frameStartY + (frameEndY - frameStartY) * 0.25 + perpSin * 3,
+                              frameStartX + (frameEndX - frameStartX) * 0.75 + perpCos * 3,
+                              frameStartY + (frameEndY - frameStartY) * 0.75 + perpSin * 3
+                            ]}
+                            stroke="#000000"
+                            strokeWidth={1}
+                            opacity={0.7}
+                          />
+                          {/* Sliding direction arrow centered in opening */}
+                          <KonvaLine
+                            points={[
+                              frameStartX + (frameEndX - frameStartX) * 0.3 + perpCos * 3,
+                              frameStartY + (frameEndY - frameStartY) * 0.3 + perpSin * 3,
+                              frameStartX + (frameEndX - frameStartX) * 0.7 + perpCos * 3,
+                              frameStartY + (frameEndY - frameStartY) * 0.7 + perpSin * 3,
+                              frameStartX + (frameEndX - frameStartX) * 0.6 + perpCos * 1,
+                              frameStartY + (frameEndY - frameStartY) * 0.6 + perpSin * 1,
+                              frameStartX + (frameEndX - frameStartX) * 0.7 + perpCos * 3,
+                              frameStartY + (frameEndY - frameStartY) * 0.7 + perpSin * 3,
+                              frameStartX + (frameEndX - frameStartX) * 0.6 + perpCos * 5,
+                              frameStartY + (frameEndY - frameStartY) * 0.6 + perpSin * 5
+                            ]}
+                            stroke="#000000"
+                            strokeWidth={1}
+                            opacity={0.8}
+                          />
+                        </KonvaGroup>
+                      )}
+                    </KonvaGroup>
+                  );
+                })}
+
+                {/* Window placement preview */}
+                {isWindowPlacement && (
+                  <KonvaGroup>
+                    {/* Real-time measurement visualizer */}
+                    {nearbyMeasurements.map((measurement) => {
+                      const midX = (measurement.startPoint.x + measurement.endPoint.x) / 2;
+                      const midY = (measurement.startPoint.y + measurement.endPoint.y) / 2;
+                      const angle = Math.atan2(
+                        measurement.endPoint.y - measurement.startPoint.y,
+                        measurement.endPoint.x - measurement.startPoint.x
+                      );
+                      
+                      // Offset the label slightly from the line
+                      const labelOffsetX = Math.cos(angle + Math.PI / 2) * 15;
+                      const labelOffsetY = Math.sin(angle + Math.PI / 2) * 15;
+                      
+                      const getColorByType = (type: string) => {
+                        switch (type) {
+                          case 'wall-end': return '#10B981'; // Green
+                          case 'door': return '#F59E0B'; // Amber
+                          case 'window': return '#3B82F6'; // Blue
+                          default: return '#6B7280'; // Gray
+                        }
+                      };
+                      
+                      return (
+                        <KonvaGroup key={measurement.id}>
+                          {/* Measurement line */}
+                          <KonvaLine
+                            points={[
+                              measurement.startPoint.x,
+                              measurement.startPoint.y,
+                              measurement.endPoint.x,
+                              measurement.endPoint.y
+                            ]}
+                            stroke={getColorByType(measurement.type)}
+                            strokeWidth={1}
+                            dash={[5, 5]}
+                            opacity={0.7}
+                          />
+                          
+                          {/* Start point indicator */}
+                          <KonvaCircle
+                            x={measurement.startPoint.x}
+                            y={measurement.startPoint.y}
+                            radius={2}
+                            fill={getColorByType(measurement.type)}
+                            opacity={0.8}
+                          />
+                          
+                          {/* End point indicator */}
+                          <KonvaCircle
+                            x={measurement.endPoint.x}
+                            y={measurement.endPoint.y}
+                            radius={2}
+                            fill={getColorByType(measurement.type)}
+                            opacity={0.8}
+                          />
+                          
+                          {/* Distance label background */}
+                          <KonvaRect
+                            x={midX + labelOffsetX - 20}
+                            y={midY + labelOffsetY - 8}
+                            width={40}
+                            height={16}
+                            fill="white"
+                            stroke={getColorByType(measurement.type)}
+                            strokeWidth={1}
+                            cornerRadius={3}
+                            opacity={0.95}
+                          />
+                          
+                          {/* Distance label text */}
+                          <KonvaText
+                            x={midX + labelOffsetX - 18}
+                            y={midY + labelOffsetY - 5}
+                            text={measurement.label}
+                            fontSize={10}
+                            fill={getColorByType(measurement.type)}
+                            fontStyle="bold"
+                          />
+                        </KonvaGroup>
+                      );
+                    })}
+                    {/* Step 1: Position selection preview */}
+                    {windowPlacementStep === 'position' && hoveredWall && (
+                      <>
+                        {/* Preview window position */}
+                        <KonvaCircle
+                          x={hoveredWall.position.x}
+                          y={hoveredWall.position.y}
+                          radius={8}
+                          fill="#3B82F6"
+                          stroke="white"
+                          strokeWidth={2}
+                          opacity={0.8}
+                        />
+                        
+                        {/* Preview window symbol - rotated to match wall angle */}
+                        <KonvaLine
+                          points={[
+                            hoveredWall.position.x - Math.cos(hoveredWall.wallAngle) * (selectedWindowWidth * 100 / 2),
+                            hoveredWall.position.y - Math.sin(hoveredWall.wallAngle) * (selectedWindowWidth * 100 / 2),
+                            hoveredWall.position.x + Math.cos(hoveredWall.wallAngle) * (selectedWindowWidth * 100 / 2),
+                            hoveredWall.position.y + Math.sin(hoveredWall.wallAngle) * (selectedWindowWidth * 100 / 2)
+                          ]}
+                          stroke="#3B82F6"
+                          strokeWidth={6}
+                          opacity={0.6}
+                        />
+                      </>
+                    )}
+                    
+                    {/* Step 2: Window orientation selection */}
+                    {windowPlacementStep === 'orientation' && lockedWindowPosition && (
+                      <>
+                        {/* Locked window position indicator */}
+                        <KonvaCircle
+                          x={lockedWindowPosition.position.x}
+                          y={lockedWindowPosition.position.y}
+                          radius={6}
+                          fill="#3B82F6"
+                          stroke="white"
+                          strokeWidth={2}
+                        />
+                        
+                        {/* Window frame preview */}
+                        <KonvaLine
+                          points={[
+                            lockedWindowPosition.position.x - Math.cos(lockedWindowPosition.wallAngle) * (selectedWindowWidth * 100 / 2),
+                            lockedWindowPosition.position.y - Math.sin(lockedWindowPosition.wallAngle) * (selectedWindowWidth * 100 / 2),
+                            lockedWindowPosition.position.x + Math.cos(lockedWindowPosition.wallAngle) * (selectedWindowWidth * 100 / 2),
+                            lockedWindowPosition.position.y + Math.sin(lockedWindowPosition.wallAngle) * (selectedWindowWidth * 100 / 2)
+                          ]}
+                          stroke="#3B82F6"
+                          strokeWidth={8}
+                          opacity={0.8}
+                        />
+                        
+                        {/* Window orientation guide */}
+                        <KonvaGroup>
+                          {/* Show both sides of the wall */}
+                          {(() => {
+                            const wallAngle = lockedWindowPosition.wallAngle;
+                            const wallPos = lockedWindowPosition.position;
+                            const perpCos = Math.cos(wallAngle - Math.PI / 2);
+                            const perpSin = Math.sin(wallAngle - Math.PI / 2);
+                            const sideOffset = 30;
+                            
+                            return (
+                              <>
+                                {/* Inside triangle indicator */}
+                                <KonvaLine
+                                  points={[
+                                    // Triangle pointing toward inside
+                                    wallPos.x - perpCos * sideOffset + perpCos * 8 - Math.cos(wallAngle) * 6,
+                                    wallPos.y - perpSin * sideOffset + perpSin * 8 - Math.sin(wallAngle) * 6,
+                                    wallPos.x - perpCos * sideOffset,
+                                    wallPos.y - perpSin * sideOffset,
+                                    wallPos.x - perpCos * sideOffset + perpCos * 8 + Math.cos(wallAngle) * 6,
+                                    wallPos.y - perpSin * sideOffset + perpSin * 8 + Math.sin(wallAngle) * 6
+                                  ]}
+                                  closed={true}
+                                  fill={hoveredWindowSide === 'inside' ? "#10B981" : "#6B7280"}
+                                  stroke={hoveredWindowSide === 'inside' ? "#10B981" : "#6B7280"}
+                                  strokeWidth={1}
+                                  opacity={hoveredWindowSide === 'inside' ? 1.0 : 0.6}
+                                />
+                                
+                                {/* Outside triangle indicator */}
+                                <KonvaLine
+                                  points={[
+                                    // Triangle pointing toward outside
+                                    wallPos.x + perpCos * sideOffset - perpCos * 8 - Math.cos(wallAngle) * 6,
+                                    wallPos.y + perpSin * sideOffset - perpSin * 8 - Math.sin(wallAngle) * 6,
+                                    wallPos.x + perpCos * sideOffset,
+                                    wallPos.y + perpSin * sideOffset,
+                                    wallPos.x + perpCos * sideOffset - perpCos * 8 + Math.cos(wallAngle) * 6,
+                                    wallPos.y + perpSin * sideOffset - perpSin * 8 + Math.sin(wallAngle) * 6
+                                  ]}
+                                  closed={true}
+                                  fill={hoveredWindowSide === 'outside' ? "#10B981" : "#6B7280"}
+                                  stroke={hoveredWindowSide === 'outside' ? "#10B981" : "#6B7280"}
+                                  strokeWidth={1}
+                                  opacity={hoveredWindowSide === 'outside' ? 1.0 : 0.6}
+                                />
+                              </>
+                            );
+                                                      })()}
+                            
+                          {/* Window width input bubble */}
+                          <KonvaGroup>
+                            {/* Subtle purple border */}
+                            <KonvaRect
+                              x={lockedWindowPosition.position.x - 61}
+                              y={lockedWindowPosition.position.y - 66}
+                              width={122}
+                              height={37}
+                              fill="#8B5CF6"
+                              cornerRadius={6}
+                              opacity={0.9}
+                            />
+                            
+                            {/* Inner white background */}
+                            <KonvaRect
+                              x={lockedWindowPosition.position.x - 60}
+                              y={lockedWindowPosition.position.y - 65}
+                              width={120}
+                              height={35}
+                              fill="white"
+                              cornerRadius={5}
+                              opacity={1.0}
+                            />
+                            
+                            {/* Width label */}
+                            <KonvaText
+                              x={lockedWindowPosition.position.x - 55}
+                              y={lockedWindowPosition.position.y - 57}
+                              text={`Width: ${windowWidthInput}m`}
+                              fontSize={12}
+                              fill="#374151"
+                              fontStyle="bold"
+                            />
+                            
+                            {/* Instructions */}
+                            <KonvaText
+                              x={lockedWindowPosition.position.x - 55}
+                              y={lockedWindowPosition.position.y - 42}
+                              text="↑↓ or type to adjust"
+                              fontSize={9}
+                              fill="#6B7280"
+                            />
+                          </KonvaGroup>
+ 
+                          </KonvaGroup>
+                      </>
+                    )}
+                  </KonvaGroup>
+                )}
+
+                {/* Dimensioning tool visualization */}
+                {isDimensioning && (
+                  <KonvaGroup>
+                    {/* Render placed dimensions */}
+                    {placedDimensions.map((dim) => {
+                      // Calculate dimension line position and witness lines
+                      const dx = dim.endPoint.x - dim.startPoint.x;
+                      const dy = dim.endPoint.y - dim.startPoint.y;
+                      const length = Math.sqrt(dx * dx + dy * dy);
+                      
+                      if (length === 0) return null;
+                      
+                      // Unit vector along the dimension line
+                      const unitX = dx / length;
+                      const unitY = dy / length;
+                      
+                      // Perpendicular vector
+                      const perpX = -unitY;
+                      const perpY = unitX;
+                      
+                      // Project placement point onto dimension line to get offset distance
+                      const toPlacementX = dim.placementPoint.x - dim.startPoint.x;
+                      const toPlacementY = dim.placementPoint.y - dim.startPoint.y;
+                      const offset = toPlacementX * perpX + toPlacementY * perpY;
+                      
+                      // Dimension line points
+                      const dimStartX = dim.startPoint.x + perpX * offset;
+                      const dimStartY = dim.startPoint.y + perpY * offset;
+                      const dimEndX = dim.endPoint.x + perpX * offset;
+                      const dimEndY = dim.endPoint.y + perpY * offset;
+                      
+                      // Text position (middle of dimension line)
+                      const textX = (dimStartX + dimEndX) / 2;
+                      const textY = (dimStartY + dimEndY) / 2;
+                      
+                      return (
+                        <KonvaGroup key={dim.id}>
+                          {/* Witness line 1 */}
+                          <KonvaLine
+                            points={[
+                              dim.startPoint.x, dim.startPoint.y,
+                              dimStartX, dimStartY
+                            ]}
+                            stroke="#666666"
+                            strokeWidth={1}
+                            dash={[2, 2]}
+                          />
+                          
+                          {/* Witness line 2 */}
+                          <KonvaLine
+                            points={[
+                              dim.endPoint.x, dim.endPoint.y,
+                              dimEndX, dimEndY
+                            ]}
+                            stroke="#666666"
+                            strokeWidth={1}
+                            dash={[2, 2]}
+                          />
+                          
+                          {/* Main dimension line */}
+                          <KonvaLine
+                            points={[dimStartX, dimStartY, dimEndX, dimEndY]}
+                            stroke="#000000"
+                            strokeWidth={2}
+                          />
+                          
+                          {/* Arrow heads */}
+                          <KonvaLine
+                            points={[
+                              dimStartX, dimStartY,
+                              dimStartX + unitX * 8 - perpX * 4,
+                              dimStartY + unitY * 8 - perpY * 4,
+                              dimStartX + unitX * 8 + perpX * 4,
+                              dimStartY + unitY * 8 + perpY * 4,
+                              dimStartX, dimStartY
+                            ]}
+                            closed={true}
+                            fill="#000000"
+                          />
+                          
+                          <KonvaLine
+                            points={[
+                              dimEndX, dimEndY,
+                              dimEndX - unitX * 8 - perpX * 4,
+                              dimEndY - unitY * 8 - perpY * 4,
+                              dimEndX - unitX * 8 + perpX * 4,
+                              dimEndY - unitY * 8 + perpY * 4,
+                              dimEndX, dimEndY
+                            ]}
+                            closed={true}
+                            fill="#000000"
+                          />
+                          
+                          {/* Dimension text background and text */}
+                          {(() => {
+                            // Determine if this is a vertical dimension (more vertical than horizontal)
+                            const isVertical = Math.abs(dy) > Math.abs(dx);
+                            
+                            if (isVertical) {
+                              // For vertical dimensions, rotate text to face right
+                              const rotation = dy > 0 ? 90 : -90; // Rotate based on direction
+                              
+                              return (
+                                <KonvaGroup
+                                  x={textX}
+                                  y={textY}
+                                  rotation={rotation}
+                                >
+                                  {/* Background */}
+                                  <KonvaRect
+                                    x={-25}
+                                    y={-8}
+                                    width={50}
+                                    height={16}
+                                    fill="white"
+                                    stroke="#000000"
+                                    strokeWidth={1}
+                                  />
+                                  
+                                  {/* Text */}
+                                  <KonvaText
+                                    x={-25}
+                                    y={-5}
+                                    width={50}
+                                    text={dim.label}
+                                    fontSize={12}
+                                    fill="#000000"
+                                    align="center"
+                                    fontStyle="bold"
+                                  />
+                                </KonvaGroup>
+                              );
+                            } else {
+                              // For horizontal dimensions, keep text horizontal
+                              return (
+                                <>
+                                  <KonvaRect
+                                    x={textX - 25}
+                                    y={textY - 8}
+                                    width={50}
+                                    height={16}
+                                    fill="white"
+                                    stroke="#000000"
+                                    strokeWidth={1}
+                                  />
+                                  
+                                  <KonvaText
+                                    x={textX - 25}
+                                    y={textY - 5}
+                                    width={50}
+                                    text={dim.label}
+                                    fontSize={12}
+                                    fill="#000000"
+                                    align="center"
+                                    fontStyle="bold"
+                                  />
+                                </>
+                              );
+                            }
+                          })()}
+                        </KonvaGroup>
+                      );
+                    })}
+                    
+                    {/* Preview dimension during placement */}
+                    {dimensionFirstPoint && (
+                      <KonvaGroup>
+                        {/* First point indicator */}
+                        <KonvaCircle
+                          x={dimensionFirstPoint.x}
+                          y={dimensionFirstPoint.y}
+                          radius={4}
+                          fill="#FF6B6B"
+                          stroke="white"
+                          strokeWidth={2}
+                        />
+                        
+                        {dimensionSecondPoint && (
+                          <>
+                            {/* Second point indicator */}
+                            <KonvaCircle
+                              x={dimensionSecondPoint.x}
+                              y={dimensionSecondPoint.y}
+                              radius={4}
+                              fill="#FF6B6B"
+                              stroke="white"
+                              strokeWidth={2}
+                            />
+                            
+                            {/* Preview line between points */}
+                            <KonvaLine
+                              points={[
+                                dimensionFirstPoint.x, dimensionFirstPoint.y,
+                                dimensionSecondPoint.x, dimensionSecondPoint.y
+                              ]}
+                              stroke="#FF6B6B"
+                              strokeWidth={2}
+                              dash={[5, 5]}
+                            />
+                            
+                            {dimensionPlacementPoint && (
+                              <>
+                                {/* Preview dimension with witness lines */}
+                                {(() => {
+                                  const dx = dimensionSecondPoint.x - dimensionFirstPoint.x;
+                                  const dy = dimensionSecondPoint.y - dimensionFirstPoint.y;
+                                  const length = Math.sqrt(dx * dx + dy * dy);
+                                  
+                                  if (length === 0) return null;
+                                  
+                                  const unitX = dx / length;
+                                  const unitY = dy / length;
+                                  const perpX = -unitY;
+                                  const perpY = unitX;
+                                  
+                                  const toPlacementX = dimensionPlacementPoint.x - dimensionFirstPoint.x;
+                                  const toPlacementY = dimensionPlacementPoint.y - dimensionFirstPoint.y;
+                                  const offset = toPlacementX * perpX + toPlacementY * perpY;
+                                  
+                                  const dimStartX = dimensionFirstPoint.x + perpX * offset;
+                                  const dimStartY = dimensionFirstPoint.y + perpY * offset;
+                                  const dimEndX = dimensionSecondPoint.x + perpX * offset;
+                                  const dimEndY = dimensionSecondPoint.y + perpY * offset;
+                                  
+                                  const textX = (dimStartX + dimEndX) / 2;
+                                  const textY = (dimStartY + dimEndY) / 2;
+                                  const distance = length / 100;
+                                  
+                                  return (
+                                    <KonvaGroup>
+                                      {/* Preview witness lines */}
+                                      <KonvaLine
+                                        points={[
+                                          dimensionFirstPoint.x, dimensionFirstPoint.y,
+                                          dimStartX, dimStartY
+                                        ]}
+                                        stroke="#FF6B6B"
+                                        strokeWidth={1}
+                                        dash={[3, 3]}
+                                        opacity={0.7}
+                                      />
+                                      
+                                      <KonvaLine
+                                        points={[
+                                          dimensionSecondPoint.x, dimensionSecondPoint.y,
+                                          dimEndX, dimEndY
+                                        ]}
+                                        stroke="#FF6B6B"
+                                        strokeWidth={1}
+                                        dash={[3, 3]}
+                                        opacity={0.7}
+                                      />
+                                      
+                                      {/* Preview dimension line */}
+                                      <KonvaLine
+                                        points={[dimStartX, dimStartY, dimEndX, dimEndY]}
+                                        stroke="#FF6B6B"
+                                        strokeWidth={2}
+                                        opacity={0.8}
+                                      />
+                                      
+                                      {/* Preview dimension text */}
+                                      {(() => {
+                                        // Determine if this is a vertical dimension (more vertical than horizontal)
+                                        const isVertical = Math.abs(dy) > Math.abs(dx);
+                                        
+                                        if (isVertical) {
+                                          // For vertical dimensions, rotate text to face right
+                                          const rotation = dy > 0 ? 90 : -90; // Rotate based on direction
+                                          
+                                          return (
+                                            <KonvaGroup
+                                              x={textX}
+                                              y={textY}
+                                              rotation={rotation}
+                                              opacity={0.9}
+                                            >
+                                              {/* Background */}
+                                              <KonvaRect
+                                                x={-25}
+                                                y={-8}
+                                                width={50}
+                                                height={16}
+                                                fill="white"
+                                                stroke="#FF6B6B"
+                                                strokeWidth={1}
+                                              />
+                                              
+                                              {/* Text */}
+                                              <KonvaText
+                                                x={-25}
+                                                y={-5}
+                                                width={50}
+                                                text={`${distance.toFixed(2)}m`}
+                                                fontSize={12}
+                                                fill="#FF6B6B"
+                                                align="center"
+                                                fontStyle="bold"
+                                              />
+                                            </KonvaGroup>
+                                          );
+                                        } else {
+                                          // For horizontal dimensions, keep text horizontal
+                                          return (
+                                            <>
+                                              <KonvaRect
+                                                x={textX - 25}
+                                                y={textY - 8}
+                                                width={50}
+                                                height={16}
+                                                fill="white"
+                                                stroke="#FF6B6B"
+                                                strokeWidth={1}
+                                                opacity={0.9}
+                                              />
+                                              
+                                              <KonvaText
+                                                x={textX - 25}
+                                                y={textY - 5}
+                                                width={50}
+                                                text={`${distance.toFixed(2)}m`}
+                                                fontSize={12}
+                                                fill="#FF6B6B"
+                                                align="center"
+                                                fontStyle="bold"
+                                              />
+                                            </>
+                                          );
+                                        }
+                                      })()}
+                                    </KonvaGroup>
+                                  );
+                                })()}
+                              </>
+                            )}
+                          </>
+                        )}
+                      </KonvaGroup>
+                    )}
+                    
+                    {/* Snap point visualization */}
+                    {dimensionSnapPoint && (
+                      <KonvaGroup>
+                        {/* Snap point indicator */}
+                        <KonvaCircle
+                          x={dimensionSnapPoint.x}
+                          y={dimensionSnapPoint.y}
+                          radius={8}
+                          fill="transparent"
+                          stroke={
+                            dimensionSnapPoint.type === 'wall-end' ? '#4CAF50' :
+                            dimensionSnapPoint.type === 'door-center' ? '#FF9800' :
+                            '#2196F3'
+                          }
+                          strokeWidth={3}
+                          dash={[4, 4]}
+                        />
+                        
+                        {/* Inner snap point dot */}
+                        <KonvaCircle
+                          x={dimensionSnapPoint.x}
+                          y={dimensionSnapPoint.y}
+                          radius={3}
+                          fill={
+                            dimensionSnapPoint.type === 'wall-end' ? '#4CAF50' :
+                            dimensionSnapPoint.type === 'door-center' ? '#FF9800' :
+                            '#2196F3'
+                          }
+                        />
+                        
+                        {/* Snap point label */}
+                        <KonvaRect
+                          x={dimensionSnapPoint.x + 12}
+                          y={dimensionSnapPoint.y - 8}
+                          width={60}
+                          height={16}
+                          fill="white"
+                          stroke={
+                            dimensionSnapPoint.type === 'wall-end' ? '#4CAF50' :
+                            dimensionSnapPoint.type === 'door-center' ? '#FF9800' :
+                            '#2196F3'
+                          }
+                          strokeWidth={1}
+                          cornerRadius={3}
+                          opacity={0.95}
+                        />
+                        
+                        <KonvaText
+                          x={dimensionSnapPoint.x + 12}
+                          y={dimensionSnapPoint.y - 5}
+                          width={60}
+                          text={
+                            dimensionSnapPoint.type === 'wall-end' ? 'Wall End' :
+                            dimensionSnapPoint.type === 'door-center' ? 'Door' :
+                            'Window'
+                          }
+                          fontSize={10}
+                          fill={
+                            dimensionSnapPoint.type === 'wall-end' ? '#4CAF50' :
+                            dimensionSnapPoint.type === 'door-center' ? '#FF9800' :
+                            '#2196F3'
+                          }
+                          align="center"
+                          fontStyle="bold"
+                        />
+                      </KonvaGroup>
+                    )}
+                  </KonvaGroup>
+                )}
+
+
+                
+                {/* Current wall being drawn */}
+                {isDrawingWall && wallPoints.length > 0 && (
+                  <>
+                    {/* Preview wall segments */}
+                    {wallPoints.length > 1 && (
+                      (() => {
+                        const previewWalls: JSX.Element[] = [];
+                        const wallThickness = mmToPixels(200); // Standard wall thickness (200mm)
+                        
+                        for (let i = 0; i < wallPoints.length - 1; i++) {
+                          const p1 = wallPoints[i];
+                          const p2 = wallPoints[i + 1];
+                          
+                          const dx = p2.x - p1.x;
+                          const dy = p2.y - p1.y;
+                          const length = Math.sqrt(dx * dx + dy * dy);
+                          
+                          if (length === 0) continue;
+                          
+                          const dirX = dx / length;
+                          const dirY = dy / length;
+                          const perpX = -dirY * wallThickness / 2;
+                          const perpY = dirX * wallThickness / 2;
+                          
+                          const corners = [
+                            p1.x + perpX, p1.y + perpY,
+                            p2.x + perpX, p2.y + perpY,
+                            p2.x - perpX, p2.y - perpY,
+                            p1.x - perpX, p1.y - perpY
+                          ];
+                          
+                          previewWalls.push(
+                            <KonvaLine
+                              key={`preview-${i}`}
+                              points={corners}
+                              closed={true}
+                              fill="#f5f5f5"
+                              stroke="#666666"
+                              strokeWidth={1}
+                              opacity={0.8}
+                            />
+                          );
+                        }
+                        
+                        return previewWalls;
+                      })()
+                    )}
+                    
+                    {/* Preview line from last point to mouse */}
+                    {currentMousePosition && wallPoints.length >= 1 && (
+                      (() => {
+                        const p1 = wallPoints[wallPoints.length - 1];
+                        const p2 = currentMousePosition;
+                        const wallThickness = mmToPixels(200); // Standard wall thickness (200mm)
+                        
+                        const dx = p2.x - p1.x;
+                        const dy = p2.y - p1.y;
+                        const length = Math.sqrt(dx * dx + dy * dy);
+                        
+                        if (length === 0) return null;
+                        
+                        const dirX = dx / length;
+                        const dirY = dy / length;
+                        const perpX = -dirY * wallThickness / 2;
+                        const perpY = dirX * wallThickness / 2;
+                        
+                        const corners = [
+                          p1.x + perpX, p1.y + perpY,
+                          p2.x + perpX, p2.y + perpY,
+                          p2.x - perpX, p2.y - perpY,
+                          p1.x - perpX, p1.y - perpY
+                        ];
+                        
+                        // Calculate dimension in meters using our scale (1 pixel = 20mm)
+                        const dimensionInMeters = (length * SCALE_MM_PER_PIXEL / 1000).toFixed(2);
+                        
+                        // Calculate midpoint for dimension label
+                        const midX = (p1.x + p2.x) / 2;
+                        const midY = (p1.y + p2.y) / 2;
+                        
+                        // Calculate offset for dimension label (perpendicular to wall)
+                        const labelOffsetDistance = 25;
+                        const labelX = midX + perpX * (labelOffsetDistance / (wallThickness / 2));
+                        const labelY = midY + perpY * (labelOffsetDistance / (wallThickness / 2));
+                        
+                        return (
+                          <>
+                            <KonvaLine
+                              points={corners}
+                              closed={true}
+                              fill="#f5f5f5"
+                              stroke="#666666"
+                              strokeWidth={1}
+                              opacity={0.5}
+                              dash={[5, 5]}
+                            />
+                            
+                            {/* Dimension label */}
+                            <KonvaGroup>
+                              {/* Background for dimension text */}
+                              <KonvaRect
+                                x={labelX - 20}
+                                y={labelY - 10}
+                                width={40}
+                                height={20}
+                                fill="white"
+                                stroke="#4A90E2"
+                                strokeWidth={1}
+                                cornerRadius={4}
+                                opacity={0.9}
+                              />
+                              
+                              {/* Dimension text */}
+                              <KonvaText
+                                x={labelX - 20}
+                                y={labelY - 10}
+                                width={40}
+                                height={20}
+                                text={`${dimensionInMeters}m`}
+                                fontSize={12}
+                                fontFamily="Arial"
+                                fill="#4A90E2"
+                                align="center"
+                                verticalAlign="middle"
+                                fontStyle="bold"
+                              />
+                            </KonvaGroup>
+                          </>
+                        );
+                      })()
+                    )}
+                    
+                    {/* Point indicators */}
+                    {wallPoints.map((point, index) => (
+                      <KonvaCircle
+                        key={index}
+                        x={point.x}
+                        y={point.y}
+                        radius={6}
+                        fill={index === 0 ? "#E91E63" : "#666666"}
+                        stroke="white"
+                        strokeWidth={2}
+                      />
+                    ))}
+                    
+                    {/* Highlight first point when close enough to close loop */}
+                    {wallPoints.length >= 3 && currentMousePosition && (
+                      (() => {
+                        const firstPoint = wallPoints[0];
+                        const distance = Math.sqrt(
+                          Math.pow(currentMousePosition.x - firstPoint.x, 2) + 
+                          Math.pow(currentMousePosition.y - firstPoint.y, 2)
+                        );
+                        return distance < 20 ? (
+                          <KonvaCircle
+                            x={firstPoint.x}
+                            y={firstPoint.y}
+                            radius={12}
+                            fill="transparent"
+                            stroke="#E91E63"
+                            strokeWidth={3}
+                            dash={[5, 5]}
+                          />
+                        ) : null;
+                      })()
+                    )}
+                  </>
                 )}
               </KonvaGroup>
 
@@ -3885,9 +7687,9 @@ export default function Canvas({ name, description, projectId }: Props) {
                   borderEnabled={true}
                   rotateEnabled={false}
                   anchorSize={6}
-                  anchorStroke="#814ADA"
+                  anchorStroke="#E91E63"
                   anchorFill="#fff"
-                  borderStroke="#814ADA"
+                  borderStroke="#E91E63"
                   borderDash={[4, 4]}
                 />
               )}
@@ -4027,9 +7829,28 @@ export default function Canvas({ name, description, projectId }: Props) {
                     borderEnabled={true}
                     rotateEnabled={true}
                     anchorSize={6}
-                    anchorStroke="#814ADA"
+                    anchorStroke="#E91E63"
                     anchorFill="#fff"
-                    borderStroke="#814ADA"
+                    borderStroke="#E91E63"
+                    borderDash={[4, 4]}
+                  />
+                ) : null;
+              })()}
+              
+              {/* Transformer for library assets (SVG elements) */}
+              {(() => {
+                const selectedLibraryElement = elements.find(el => el.id === selectedId && el.type === 'library-asset');
+                return selectedLibraryElement ? (
+                  <KonvaTransformer
+                    ref={libraryAssetTransformerRef}
+                    node={stageRef.current?.findOne(`#${selectedLibraryElement.id}`)}
+                    enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
+                    borderEnabled={true}
+                    rotateEnabled={true}
+                    anchorSize={6}
+                    anchorStroke="#E91E63"
+                    anchorFill="#fff"
+                    borderStroke="#E91E63"
                     borderDash={[4, 4]}
                   />
                 ) : null;
@@ -4038,6 +7859,167 @@ export default function Canvas({ name, description, projectId }: Props) {
             {/* Render mind map nodes and connections */}
             <Layer>
               {renderMindMap()}
+            </Layer>
+            
+            {/* Annotation tool visualization - Top layer for highest z-index */}
+            <Layer>
+              {annotations.map((annotation) => (
+                <KonvaGroup key={annotation.id}>
+                  {/* Line from target to bend point */}
+                  <KonvaLine
+                    points={[
+                      annotation.targetPoint.x, annotation.targetPoint.y,
+                      annotation.bendPoint.x, annotation.bendPoint.y
+                    ]}
+                    stroke="#FF6B35"
+                    strokeWidth={2}
+                    lineCap="round"
+                  />
+                  
+                  {/* Line from bend point to text box */}
+                  <KonvaLine
+                    points={[
+                      annotation.bendPoint.x, annotation.bendPoint.y,
+                      annotation.textBox.x, annotation.textBox.y + annotation.textBox.height / 2
+                    ]}
+                    stroke="#FF6B35"
+                    strokeWidth={2}
+                    lineCap="round"
+                  />
+                  
+                  {/* Arrow head at target point */}
+                  {(() => {
+                    // Calculate arrow direction from bend point to target point
+                    const dx = annotation.targetPoint.x - annotation.bendPoint.x;
+                    const dy = annotation.targetPoint.y - annotation.bendPoint.y;
+                    const length = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (length === 0) return null;
+                    
+                    // Unit vector pointing towards target
+                    const unitX = dx / length;
+                    const unitY = dy / length;
+                    
+                    // Perpendicular vector for arrow wings
+                    const perpX = -unitY;
+                    const perpY = unitX;
+                    
+                    const arrowSize = 8;
+                    
+                    return (
+                      <KonvaLine
+                        points={[
+                          annotation.targetPoint.x, annotation.targetPoint.y,
+                          annotation.targetPoint.x - unitX * arrowSize + perpX * (arrowSize / 2),
+                          annotation.targetPoint.y - unitY * arrowSize + perpY * (arrowSize / 2),
+                          annotation.targetPoint.x - unitX * arrowSize - perpX * (arrowSize / 2),
+                          annotation.targetPoint.y - unitY * arrowSize - perpY * (arrowSize / 2),
+                          annotation.targetPoint.x, annotation.targetPoint.y
+                        ]}
+                        closed={true}
+                        fill="#FF6B35"
+                        stroke="#FF6B35"
+                        strokeWidth={1}
+                      />
+                    );
+                  })()}
+                  
+                  {/* Bend point handle (draggable) */}
+                  <KonvaCircle
+                    x={annotation.bendPoint.x}
+                    y={annotation.bendPoint.y}
+                    radius={3}
+                    fill={selectedAnnotation === annotation.id ? "#FF6B35" : "white"}
+                    stroke="#FF6B35"
+                    strokeWidth={1}
+                    onMouseDown={() => handleBendPointDragStart(annotation.id)}
+                    onMouseEnter={(e) => {
+                      e.target.getStage()!.container().style.cursor = 'move';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.getStage()!.container().style.cursor = 'default';
+                    }}
+                  />
+                  
+                  {/* Text box background */}
+                  <KonvaRect
+                    x={annotation.textBox.x}
+                    y={annotation.textBox.y}
+                    width={annotation.textBox.width}
+                    height={annotation.textBox.height}
+                    fill="white"
+                    stroke={selectedAnnotation === annotation.id ? "#FF6B35" : "#CCCCCC"}
+                    strokeWidth={selectedAnnotation === annotation.id ? 2 : 1}
+                    cornerRadius={4}
+                    shadowColor="rgba(0,0,0,0.1)"
+                    shadowBlur={4}
+                    shadowOffsetX={2}
+                    shadowOffsetY={2}
+                    onClick={() => setSelectedAnnotation(annotation.id)}
+                    onMouseDown={() => handleTextBoxDragStart(annotation.id)}
+                    onMouseEnter={(e) => {
+                      e.target.getStage()!.container().style.cursor = 'move';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.getStage()!.container().style.cursor = 'default';
+                    }}
+                  />
+                  
+                  {/* Text content */}
+                  {!annotation.isEditing ? (
+                    <KonvaText
+                      x={annotation.textBox.x + 8}
+                      y={annotation.textBox.y + 8}
+                      width={annotation.textBox.width - 16}
+                      height={annotation.textBox.height - 16}
+                      text={annotation.textBox.text}
+                      fontSize={12}
+                      fill="#333333"
+                      align="left"
+                      verticalAlign="top"
+                      wrap="word"
+                      onDblClick={() => handleAnnotationEdit(annotation.id)}
+                    />
+                  ) : (
+                    <Html
+                      groupProps={{ x: annotation.textBox.x + 8, y: annotation.textBox.y + 8 }}
+                      divProps={{
+                        style: {
+                          width: annotation.textBox.width - 16,
+                          height: annotation.textBox.height - 16,
+                          zIndex: 1000
+                        }
+                      }}
+                    >
+                      <textarea
+                        defaultValue={annotation.textBox.text}
+                        onBlur={(e) => handleAnnotationTextChange(annotation.id, e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            handleAnnotationTextChange(annotation.id, e.currentTarget.value);
+                          }
+                          if (e.key === 'Escape') {
+                            handleAnnotationTextChange(annotation.id, annotation.textBox.text);
+                          }
+                        }}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          border: 'none',
+                          outline: 'none',
+                          background: 'transparent',
+                          resize: 'none',
+                          fontFamily: 'inherit',
+                          fontSize: '12px',
+                          color: '#333333'
+                        }}
+                        autoFocus
+                      />
+                    </Html>
+                  )}
+                </KonvaGroup>
+              ))}
             </Layer>
           </Stage>
       </div>
@@ -4070,7 +8052,7 @@ export default function Canvas({ name, description, projectId }: Props) {
           className="fixed bottom-4 right-4 p-3 bg-white border border-[#E0DAF3] hover:bg-gray-50 text-[#814ADA] rounded-full shadow-lg transition-colors pointer-events-auto"
         >
           <div className="w-6 h-6 relative">
-            <Image
+            <NextImage
               src="/icons/sparkles-icon.svg"
               alt="AI Assistant"
               fill
@@ -4087,6 +8069,10 @@ export default function Canvas({ name, description, projectId }: Props) {
           canvasElements={elements}
           onAddToCanvas={handleAddGeneratedImage}
           projectId={projectId}
+          stageRef={stageRef}
+          canvasPosition={position}
+          canvasScale={scale}
+          onScreenshotModeChange={handleScreenshotModeChange}
         />
       )}
 
@@ -4103,8 +8089,8 @@ export default function Canvas({ name, description, projectId }: Props) {
                   style={{
           transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
           transformOrigin: '0 0',
-          width: dimensions.width - (isChatOpen ? 400 : 0),
-          height: dimensions.height,
+                      width: canvasDimensions.width - (isChatOpen ? 400 : 0),
+                      height: canvasDimensions.height,
         }}
       >
         {promptElements.map((prompt) => (
@@ -4246,15 +8232,54 @@ export default function Canvas({ name, description, projectId }: Props) {
         ))}
       </div>
 
+      {/* Zoom Controls */}
+      <div className="fixed bottom-4 left-4 flex items-center gap-2 z-50">
+        {/* Zoom Out Button */}
+        <button
+          onClick={() => {
+            const newScale = Math.max(0.1, scale / 1.2);
+            setScale(newScale);
+          }}
+          disabled={scale <= 0.1}
+          className="p-2 bg-white border border-[#E0DAF3] hover:bg-gray-50 text-[#814ADA] rounded-lg shadow-lg transition-colors pointer-events-auto disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Zoom Out"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+          </svg>
+        </button>
+        
+        {/* Zoom Percentage Indicator */}
+        <div className="px-3 py-2 bg-white border border-[#E0DAF3] rounded-lg shadow-lg text-sm font-medium text-gray-700 pointer-events-auto min-w-[60px] text-center">
+          {Math.round(scale * 100)}%
+        </div>
+        
+        {/* Zoom In Button */}
+        <button
+          onClick={() => {
+            const newScale = Math.min(5, scale * 1.2);
+            setScale(newScale);
+          }}
+          disabled={scale >= 5}
+          className="p-2 bg-white border border-[#E0DAF3] hover:bg-gray-50 text-[#814ADA] rounded-lg shadow-lg transition-colors pointer-events-auto disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Zoom In"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+        </button>
+
       {/* Reset View Button */}
       <button
         onClick={resetView}
-        className="fixed bottom-4 left-4 p-3 bg-white border border-[#E0DAF3] hover:bg-gray-50 text-[#814ADA] rounded-full shadow-lg transition-colors pointer-events-auto z-50"
+          className="p-2 bg-white border border-[#E0DAF3] hover:bg-gray-50 text-[#814ADA] rounded-lg shadow-lg transition-colors pointer-events-auto"
+          title="Reset View"
       >
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
         </svg>
       </button>
+      </div>
 
       {boardToDelete && (
         <DeleteConfirmationModal
@@ -4282,7 +8307,7 @@ export default function Canvas({ name, description, projectId }: Props) {
       >
         {isDragging && (
           <div className="absolute inset-0 bg-purple-50/50 border-2 border-dashed border-purple-500 rounded-lg flex items-center justify-center">
-            <p className="text-purple-600 font-medium">Drop image here</p>
+            <p className="text-purple-600 font-medium">Drop here to add to canvas</p>
           </div>
         )}
       </div>
@@ -4448,8 +8473,8 @@ export default function Canvas({ name, description, projectId }: Props) {
               const width = img.width;
               const height = img.height;
               // Center using current dimensions and scale
-              const centerX = (dimensions.width - width) / 2 / scale - position.x / scale;
-              const centerY = (dimensions.height - height) / 2 / scale - position.y / scale;
+              const centerX = (canvasDimensions.width - width) / 2 / scale - position.x / scale;
+                              const centerY = (canvasDimensions.height - height) / 2 / scale - position.y / scale;
               const newElement: GeneratedImageElement = {
                 id: uuidv4(),
                 type: 'generated-image',
@@ -4467,6 +8492,563 @@ export default function Canvas({ name, description, projectId }: Props) {
             };
           }}
         />
+      )}
+      {/* Wall Drawing Done Button */}
+      {showWallDoneButton && isDrawingWall && wallPoints.length >= 1 && (
+        <div
+          className="fixed bottom-32 left-1/2 transform -translate-x-1/2 z-50"
+        >
+          <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-2 flex items-center gap-2">
+            <button
+              onClick={() => handleWallComplete()}
+              className="px-4 py-2 bg-[#E91E63] text-white rounded-md hover:bg-[#C2185B] transition-colors text-sm font-medium"
+            >
+              Done
+            </button>
+            <button
+              onClick={handleWallCancel}
+              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors text-sm font-medium"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Fill Drawing Done Button */}
+      {showFillDoneButton && isFillMode && fillPoints.length >= 3 && (
+        <div
+          className="fixed bottom-32 left-1/2 transform -translate-x-1/2 z-50"
+        >
+          <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-2 flex items-center gap-2">
+            <button
+              onClick={handleFillComplete}
+              className="px-4 py-2 bg-[#E91E63] text-white rounded-md hover:bg-[#C2185B] transition-colors text-sm font-medium"
+            >
+              Done
+            </button>
+            <button
+              onClick={handleFillCancel}
+              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors text-sm font-medium"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Render SpatialPlanningMenu when spatial planning tool is active */}
+      {showSpatialPlanningMenu && (
+        <SpatialPlanningMenu
+          selectedTool={spatialPlanningTool}
+          onToolSelect={handleSpatialPlanningToolSelect}
+          onClose={handleSpatialPlanningMenuClose}
+        />
+      )}
+
+      {/* Material Picker Modal */}
+      {showMaterialPicker && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+            {/* Header */}
+            <div className="relative overflow-hidden px-8 py-8 border-b border-gray-100 min-h-[120px]">
+              {/* Background Image */}
+              <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{
+                  backgroundImage: `url('/thumbnails/Brown Minimalist Podcast Promotion Youtube Thumbnail.png')`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center'
+                }}
+              />
+              {/* Dark overlay for text readability */}
+              <div className="absolute inset-0 bg-black/50" />
+              
+              {/* Content */}
+              <div className="relative z-10 flex items-center justify-between h-full">
+                <div className="flex items-center gap-4">
+                  {selectedMaterial && (
+              <button
+                      onClick={handleParameterCancel}
+                      className="text-white/80 hover:text-white transition-colors"
+                    >
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                      </svg>
+                    </button>
+                  )}
+                  <div>
+                    <h3 className="text-2xl font-bold text-white mb-2 drop-shadow-lg">
+                      {selectedMaterial ? 'Adjust Material Properties' : 'Choose Floor Material'}
+                    </h3>
+                    <p className="text-gray-100 text-sm drop-shadow-md">
+                      {selectedMaterial 
+                        ? 'Fine-tune the appearance and scale for realistic proportions'
+                        : 'Select a high-quality material pattern for your floor area'
+                      }
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowMaterialPicker(false);
+                    setPendingFill(null);
+                    setSelectedMaterial(null);
+                  }}
+                  className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-sm hover:bg-white/30 shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center group border border-white/20"
+                >
+                  <svg className="w-5 h-5 text-white group-hover:text-gray-100" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+              </button>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="p-8">
+              {selectedMaterial ? (
+                /* Parameter Adjustment Panel */
+                <div className="max-w-2xl mx-auto">
+                  {/* Selected Material Preview */}
+                  <div className="bg-gray-50 rounded-xl p-6 mb-8">
+                    <div className="flex items-center gap-4 mb-4">
+                      <div className="w-16 h-16 rounded-lg overflow-hidden border-2 border-gray-200">
+                        <img 
+                          src={`/patterns/${selectedMaterial.patternId}.png`}
+                          alt={selectedMaterial.patternId}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-800">{selectedMaterial.patternId}</h3>
+                        <p className="text-gray-600 capitalize">{selectedMaterial.materialType} Pattern</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Parameter Controls */}
+                  <div className="space-y-6">
+                    {/* Real-World Size */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-3">
+                        Real-World Size (Grid: 1m × 1m)
+                      </label>
+                      <div className="flex items-center gap-4">
+                        <input
+                          type="range"
+                          min={selectedMaterial.materialType === 'wood' ? 100 : 200}
+                          max={selectedMaterial.materialType === 'wood' ? 400 : 800}
+                          step="50"
+                          value={materialParameters.realWorldSize}
+                          onChange={(e) => setMaterialParameters(prev => ({
+                            ...prev,
+                            realWorldSize: parseInt(e.target.value)
+                          }))}
+                          className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                        />
+                        <div className="text-sm font-medium text-gray-700 min-w-[80px]">
+                          {materialParameters.realWorldSize}mm
+                        </div>
+                      </div>
+                      <div className="flex justify-between text-xs text-gray-500 mt-1">
+                        <span>{selectedMaterial.materialType === 'wood' ? '100mm' : '200mm'}</span>
+                        <span>{selectedMaterial.materialType === 'wood' ? '400mm' : '800mm'}</span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2">
+                        {selectedMaterial.materialType === 'wood' 
+                          ? 'Typical wood plank widths: 100-400mm'
+                          : 'Typical ceramic tile sizes: 200-800mm'
+                        }
+                      </p>
+                    </div>
+
+                    {/* Opacity */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-3">
+                        Opacity
+                      </label>
+                      <div className="flex items-center gap-4">
+                        <input
+                          type="range"
+                          min="0.1"
+                          max="1"
+                          step="0.1"
+                          value={materialParameters.opacity}
+                          onChange={(e) => setMaterialParameters(prev => ({
+                            ...prev,
+                            opacity: parseFloat(e.target.value)
+                          }))}
+                          className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                        />
+                        <div className="text-sm font-medium text-gray-700 min-w-[60px]">
+                          {Math.round(materialParameters.opacity * 100)}%
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Rotation */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-3">
+                        Rotation
+                      </label>
+                      <div className="flex items-center gap-4">
+                        <input
+                          type="range"
+                          min="0"
+                          max="360"
+                          step="15"
+                          value={materialParameters.rotation}
+                          onChange={(e) => setMaterialParameters(prev => ({
+                            ...prev,
+                            rotation: parseInt(e.target.value)
+                          }))}
+                          className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                        />
+                        <div className="text-sm font-medium text-gray-700 min-w-[60px]">
+                          {materialParameters.rotation}°
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Scale Preview */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <div className="flex items-start gap-3">
+                        <svg className="w-5 h-5 text-blue-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <div>
+                          <h4 className="text-sm font-medium text-blue-900 mb-1">Scale Preview</h4>
+                          <p className="text-sm text-blue-700">
+                            Pattern scale: {(materialParameters.realWorldSize / 1000).toFixed(3)}x relative to 1m grid
+                          </p>
+                          <p className="text-xs text-blue-600 mt-1">
+                            Each pattern tile represents {materialParameters.realWorldSize}mm in real world
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex gap-3 mt-8 pt-6 border-t border-gray-200">
+              <button
+                      onClick={handleParameterConfirm}
+                      className="flex-1 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                    >
+                      Apply Material
+                    </button>
+                    <button
+                      onClick={handleParameterCancel}
+                      className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                    >
+                      Back
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* Material Selection Grid */
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                
+                {/* Wood Flooring Section */}
+                <div className="space-y-4">
+                  <h4 className="text-lg font-semibold text-gray-800 flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                      </svg>
+                    </div>
+                    Wood Flooring
+                  </h4>
+                  
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { id: 'Wood-01', name: 'Wood-01', file: 'Wood-01.png' },
+                      { id: 'Wood-02', name: 'Wood-02', file: 'Wood-02.png' },
+                      { id: 'Wood-03', name: 'Wood-03', file: 'Wood-03.png' },
+                      { id: 'Wood-04', name: 'Wood-04', file: 'Wood-04.png' },
+                      { id: 'Wood-05', name: 'Wood-05', file: 'Wood-05.png' },
+                      { id: 'Wood-06', name: 'Wood-06', file: 'Wood-06.png' }
+                    ].map((wood) => {
+                      const PatternThumbnail = ({ patternFile }: { patternFile: string }) => {
+                        const [thumbnailSrc, setThumbnailSrc] = React.useState<string>('');
+                        const [isLoading, setIsLoading] = React.useState(true);
+
+                        React.useEffect(() => {
+                          const createThumbnail = async () => {
+                            try {
+                              console.log(`[THUMBNAIL] Starting thumbnail creation for: ${patternFile}`);
+                              setIsLoading(true);
+                              
+                              const encodedPath = `/patterns/${encodeURIComponent(patternFile)}`;
+                              console.log(`[THUMBNAIL] Encoded path: ${encodedPath}`);
+                              
+                              // Create an image element to load the SVG directly
+                              const img = new Image();
+                              img.crossOrigin = 'anonymous';
+                              
+                              img.onload = () => {
+                                try {
+                                  console.log(`[THUMBNAIL] Image loaded successfully: ${patternFile}`);
+                                  console.log(`[THUMBNAIL] Image dimensions: ${img.naturalWidth}x${img.naturalHeight}`);
+                                  
+                                  // Create a canvas to render the thumbnail
+                                  const canvas = document.createElement('canvas');
+                                  const ctx = canvas.getContext('2d');
+                                  
+                                  if (ctx) {
+                                    // Set canvas size for thumbnail
+                                    canvas.width = 120;
+                                    canvas.height = 120;
+                                    
+                                    // Fill with white background
+                                    ctx.fillStyle = '#ffffff';
+                                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                                    
+                                    // Calculate scale to fit the SVG in a tile
+                                    const tileSize = 60;
+                                    const scaleX = tileSize / img.naturalWidth;
+                                    const scaleY = tileSize / img.naturalHeight;
+                                    const scale = Math.min(scaleX, scaleY);
+                                    
+                                    const scaledWidth = img.naturalWidth * scale;
+                                    const scaledHeight = img.naturalHeight * scale;
+                                    
+                                    console.log(`[THUMBNAIL] Scale: ${scale}, Scaled dimensions: ${scaledWidth}x${scaledHeight}`);
+                                    
+                                    // Draw the SVG image tiled
+                                    for (let x = 0; x < canvas.width; x += tileSize) {
+                                      for (let y = 0; y < canvas.height; y += tileSize) {
+                                        const centerX = x + (tileSize - scaledWidth) / 2;
+                                        const centerY = y + (tileSize - scaledHeight) / 2;
+                                        ctx.drawImage(img, centerX, centerY, scaledWidth, scaledHeight);
+                                      }
+                                    }
+                                    
+                                    // Convert canvas to data URL
+                                    const dataUrl = canvas.toDataURL('image/png');
+                                    setThumbnailSrc(dataUrl);
+                                    console.log(`[THUMBNAIL] Thumbnail created successfully for: ${patternFile}`);
+                                  } else {
+                                    console.error(`[THUMBNAIL] Failed to get canvas context for: ${patternFile}`);
+                                  }
+                                } catch (error) {
+                                  console.error(`[THUMBNAIL] Error rendering thumbnail for ${patternFile}:`, error);
+                                } finally {
+                                  setIsLoading(false);
+                                }
+                              };
+                              
+                              img.onerror = (error) => {
+                                console.error(`[THUMBNAIL] Failed to load image for ${patternFile}:`, error);
+                                console.error(`[THUMBNAIL] Attempted URL: ${encodedPath}`);
+                                setIsLoading(false);
+                              };
+                              
+                              // Load SVG directly as image (encode spaces in filename)
+                              console.log(`[THUMBNAIL] Attempting to load: ${encodedPath}`);
+                              img.src = encodedPath;
+                              
+                            } catch (error) {
+                              console.error(`[THUMBNAIL] Error creating thumbnail for ${patternFile}:`, error);
+                              setIsLoading(false);
+                            }
+                          };
+
+                          createThumbnail();
+                        }, [patternFile]);
+
+                        return (
+                          <div className="w-full h-full rounded-lg overflow-hidden bg-gray-50 relative border border-gray-200">
+                            {thumbnailSrc ? (
+                              <img 
+                                src={thumbnailSrc} 
+                                alt={`${patternFile} pattern`}
+                                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">
+                                {isLoading ? 'Loading...' : 'Failed to load'}
+                              </div>
+                            )}
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                          </div>
+                        );
+                      };
+
+                      return (
+                        <button
+                          key={wood.id}
+                          onClick={() => handleMaterialSelect('wood', wood.id)}
+                          className="group relative bg-white rounded-xl border-2 border-gray-200 hover:border-amber-400 hover:shadow-lg transition-all duration-300 overflow-hidden"
+                        >
+                          <div className="aspect-square p-3">
+                            <PatternThumbnail patternFile={wood.file} />
+                          </div>
+                          <div className="px-3 pb-3">
+                            <p className="text-sm font-medium text-gray-700 group-hover:text-amber-700 transition-colors text-center">
+                              {wood.name}
+                            </p>
+                          </div>
+                          <div className="absolute top-2 right-2 w-6 h-6 rounded-full bg-white shadow-md opacity-0 group-hover:opacity-100 transition-all duration-200 flex items-center justify-center">
+                            <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          </div>
+              </button>
+                      );
+                    })}
+                  </div>
+            </div>
+            
+                {/* Ceramic Tiles Section */}
+                <div className="space-y-4">
+                  <h4 className="text-lg font-semibold text-gray-800 flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                      </svg>
+                    </div>
+                    Ceramic Tiles
+                  </h4>
+                  
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                                              { id: 'Ceramic-07', name: 'Ceramic Tiles-07', file: 'Ceramic-07.png' }
+                    ].map((tile) => {
+                      const PatternThumbnail = ({ patternFile }: { patternFile: string }) => {
+                        const [thumbnailSrc, setThumbnailSrc] = React.useState<string>('');
+                        const [isLoading, setIsLoading] = React.useState(true);
+
+                        React.useEffect(() => {
+                          const createThumbnail = async () => {
+                            try {
+                              setIsLoading(true);
+                              
+                              // Create an image element to load the SVG directly
+                              const img = new Image();
+                              img.crossOrigin = 'anonymous';
+                              
+                              img.onload = () => {
+                                try {
+                                  // Create a canvas to render the thumbnail
+                                  const canvas = document.createElement('canvas');
+                                  const ctx = canvas.getContext('2d');
+                                  
+                                  if (ctx) {
+                                    // Set canvas size for thumbnail
+                                    canvas.width = 120;
+                                    canvas.height = 120;
+                                    
+                                    // Fill with white background
+                                    ctx.fillStyle = '#ffffff';
+                                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                                    
+                                    // Calculate scale to fit the SVG in a tile
+                                    const tileSize = 40; // Smaller tiles for ceramic patterns
+                                    const scaleX = tileSize / img.naturalWidth;
+                                    const scaleY = tileSize / img.naturalHeight;
+                                    const scale = Math.min(scaleX, scaleY);
+                                    
+                                    const scaledWidth = img.naturalWidth * scale;
+                                    const scaledHeight = img.naturalHeight * scale;
+                                    
+                                    // Draw the SVG image tiled
+                                    for (let x = 0; x < canvas.width; x += tileSize) {
+                                      for (let y = 0; y < canvas.height; y += tileSize) {
+                                        const centerX = x + (tileSize - scaledWidth) / 2;
+                                        const centerY = y + (tileSize - scaledHeight) / 2;
+                                        ctx.drawImage(img, centerX, centerY, scaledWidth, scaledHeight);
+                                      }
+                                    }
+                                    
+                                    // Convert canvas to data URL
+                                    const dataUrl = canvas.toDataURL('image/png');
+                                    setThumbnailSrc(dataUrl);
+                                  }
+                                } catch (error) {
+                                  console.error('Error rendering thumbnail:', error);
+                                } finally {
+                                  setIsLoading(false);
+                                }
+                              };
+                              
+                              img.onerror = (error) => {
+                                console.error(`Failed to load pattern: ${patternFile}`, error);
+                                setIsLoading(false);
+                              };
+                              
+                              // Load SVG directly as image (encode spaces in filename)
+                              img.src = `/patterns/${encodeURIComponent(patternFile)}`;
+                              
+                            } catch (error) {
+                              console.error('Error creating thumbnail:', error);
+                              setIsLoading(false);
+                            }
+                          };
+
+                          createThumbnail();
+                        }, [patternFile]);
+
+                        return (
+                          <div className="w-full h-full rounded-lg overflow-hidden bg-gray-50 relative border border-gray-200">
+                            {thumbnailSrc ? (
+                              <img 
+                                src={thumbnailSrc} 
+                                alt={`${patternFile} pattern`}
+                                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">
+                                {isLoading ? 'Loading...' : 'Failed to load'}
+                              </div>
+                            )}
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                          </div>
+                        );
+                      };
+
+                      return (
+                        <button
+                          key={tile.id}
+                          onClick={() => handleMaterialSelect('tile', tile.id)}
+                          className="group relative bg-white rounded-xl border-2 border-gray-200 hover:border-blue-400 hover:shadow-lg transition-all duration-300 overflow-hidden"
+                        >
+                          <div className="aspect-square p-3">
+                            <PatternThumbnail patternFile={tile.file} />
+                          </div>
+                          <div className="px-3 pb-3">
+                            <p className="text-sm font-medium text-gray-700 group-hover:text-blue-700 transition-colors text-center">
+                              {tile.name}
+                            </p>
+                          </div>
+                          <div className="absolute top-2 right-2 w-6 h-6 rounded-full bg-white shadow-md opacity-0 group-hover:opacity-100 transition-all duration-200 flex items-center justify-center">
+                            <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                
+                {/* Action Buttons - Only show for material selection */}
+                <div className="flex justify-end gap-3 mt-8 pt-6 border-t border-gray-100">
+              <button
+                onClick={() => {
+                  setShowMaterialPicker(false);
+                  setPendingFill(null);
+                }}
+                    className="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-all duration-200 font-medium"
+              >
+                Cancel
+              </button>
+                </div>
+              </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
       {tableMenuPos && selectedTable && (
         <TableFormatMenu
