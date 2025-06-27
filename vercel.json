@@ -1,24 +1,15 @@
 {
-  "installCommand": "npm install --legacy-peer-deps",
+  "framework": "nextjs",
+  "nodeVersion": "18.x",
+  "installCommand": "npm ci && npm run postinstall",
   "buildCommand": "npm run build",
-  "devCommand": "npm run dev",
-  "outputDirectory": ".next",
   "env": {
-    "NODE_ENV": "production"
-  },
-  "build": {
-    "env": {
-      "NODE_ENV": "production",
-      "NEXT_TELEMETRY_DISABLED": "1"
-    }
+    "NODE_ENV": "production",
+    "NEXT_TELEMETRY_DISABLED": "1"
   },
   "functions": {
     "app/api/**/*.js": {
       "maxDuration": 30
     }
-  },
-  "crons": [{
-    "path": "/api/cron/check-subscriptions",
-    "schedule": "0 0 * * *"
-  }]
+  }
 } 
