@@ -21,12 +21,26 @@ if (!process.env.DATABASE_URL) {
 // Add debug logging
 // console.log('[PRISMA] Initializing Prisma client with database URL:', process.env.DATABASE_URL.replace(/:[^:@]+@/, ':****@'));
 
+// Create connection URL with pooling parameters for Supabase compatibility
+const getDatabaseUrl = () => {
+  const baseUrl = process.env.DATABASE_URL;
+  if (!baseUrl) return baseUrl;
+  
+  // Add connection parameters to work better with Supabase Session pooler
+  const url = new URL(baseUrl);
+  url.searchParams.set('pgbouncer', 'true');
+  url.searchParams.set('connection_limit', '1');
+  url.searchParams.set('pool_timeout', '0');
+  
+  return url.toString();
+};
+
 export const prisma =
   globalForPrisma.prisma ||
   new PrismaClient({
     datasources: {
       db: {
-        url: process.env.DATABASE_URL,
+        url: getDatabaseUrl(),
       },
     },
     log: ['error', 'warn'], // Only log errors and warnings
