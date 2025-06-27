@@ -43,7 +43,8 @@ export async function POST(request: Request) {
     console.log('Created new verification token for:', email);
 
     // Send verification email
-    const verificationUrl = `${process.env.NEXT_PUBLIC_APP_URL}/verify-email?token=${token}&email=${encodeURIComponent(email)}`;
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_BASE_URL || 'https://studiosix.ai';
+    const verificationUrl = `${baseUrl}/verify-email?token=${token}&email=${encodeURIComponent(email)}`;
     console.log('Sending verification email to:', email);
     
     const emailResult = await resend.emails.send({

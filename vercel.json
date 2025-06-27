@@ -6,14 +6,16 @@
     "NODE_ENV": "production",
     "NEXT_TELEMETRY_DISABLED": "1",
     "PRISMA_GENERATE_SKIP_AUTOINSTALL": "true",
-    "FORCE_ENV_REFRESH": "2024-12-27-17-15"
+    "FORCE_ENV_REFRESH": "2024-12-27-17-15",
+    "NEXT_PUBLIC_APP_URL": "@next_public_app_url"
   },
   "build": {
     "env": {
       "NODE_ENV": "production",
       "NEXT_TELEMETRY_DISABLED": "1",
       "PRISMA_GENERATE_SKIP_AUTOINSTALL": "true",
-      "FORCE_ENV_REFRESH": "2024-12-27-17-15"
+      "FORCE_ENV_REFRESH": "2024-12-27-17-15",
+      "NEXT_PUBLIC_APP_URL": "@next_public_app_url"
     }
   },
   "functions": {
