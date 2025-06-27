@@ -1,5 +1,5 @@
 import { prisma } from "../src/lib/prisma";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 
 async function setPassword() {
   const email = "ivanssempijja00@gmail.com";
