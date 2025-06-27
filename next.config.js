@@ -45,6 +45,27 @@ const nextConfig = {
       'bufferutil': 'commonjs bufferutil',
     });
 
+    if (isServer) {
+      config.externals.push('cheerio', 'undici');
+    }
+    
+    // Handle private fields syntax
+    config.module.rules.push({
+      test: /\.js$/,
+      include: /node_modules\/undici/,
+      use: {
+        loader: 'babel-loader',
+        options: {
+          presets: ['@babel/preset-env'],
+          plugins: [
+            ['@babel/plugin-transform-private-property-in-object', { loose: true }],
+            ['@babel/plugin-transform-class-properties', { loose: true }],
+            ['@babel/plugin-transform-private-methods', { loose: true }]
+          ]
+        }
+      }
+    });
+
     return config;
   },
   // Only use headers in development and production, not during static export
@@ -79,7 +100,7 @@ const nextConfig = {
   },
   // Skip API routes and dynamic routes during static export
   experimental: {
-    serverComponentsExternalPackages: ['puppeteer-extra', 'puppeteer-extra-plugin-stealth'],
+    serverComponentsExternalPackages: ['puppeteer-extra', 'puppeteer-extra-plugin-stealth', 'cheerio', 'undici'],
   },
 }
 
