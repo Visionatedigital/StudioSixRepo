@@ -19,9 +19,7 @@
     "scraper:run": "tsx src/lib/scraper/run.ts",
     "update-materials": "node scripts/update-material-picker.js",
     "postinstall": "node scripts/fix-react-exports.js && node scripts/fix-react-dom-exports.js && prisma generate",
-    "check-react": "node -e \"console.log('React version:', require('react/package.json').version); const fs = require('fs'); const path = require('path'); const reactPath = path.dirname(require.resolve('react/package.json')); const prodFile = path.join(reactPath, 'cjs/react.production.min.js'); const jsxFile = path.join(reactPath, 'cjs/react-jsx-runtime.production.min.js'); if (fs.existsSync(prodFile)) { console.log('✓ React production CJS exists'); } else { console.error('✗ React production CJS missing'); } if (fs.existsSync(jsxFile)) { console.log('✓ React JSX runtime CJS exists'); } else { console.error('✗ React JSX runtime CJS missing'); }\"",
-    "test-db": "node scripts/test-db-connection.js",
-    "debug-env": "node scripts/debug-env.js"
+    "check-react": "node -e \"console.log('React version:', require('react/package.json').version); const fs = require('fs'); const path = require('path'); const reactPath = path.dirname(require.resolve('react/package.json')); const prodFile = path.join(reactPath, 'cjs/react.production.min.js'); const jsxFile = path.join(reactPath, 'cjs/react-jsx-runtime.production.min.js'); if (fs.existsSync(prodFile)) { console.log('✓ React production CJS exists'); } else { console.error('✗ React production CJS missing'); } if (fs.existsSync(jsxFile)) { console.log('✓ React JSX runtime CJS exists'); } else { console.error('✗ React JSX runtime CJS missing'); }\""
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.8.0",
@@ -41,7 +39,7 @@
     "@radix-ui/react-avatar": "^1.1.3",
     "@react-pdf/renderer": "^4.3.0",
     "@runwayml/sdk": "^2.0.1",
-    "@tailwindcss/aspect-ratio": "0.4.3",
+    "@tailwindcss/aspect-ratio": "0.4.2",
     "@types/bcryptjs": "^2.4.6",
     "@types/cheerio": "^0.22.31",
     "@types/locomotive-scroll": "^4.1.4",
