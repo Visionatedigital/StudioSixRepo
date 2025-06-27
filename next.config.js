@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const path = require('path');
+const fs = require('fs');
 
 const nextConfig = {
   distDir: '.next',
@@ -51,15 +52,34 @@ const nextConfig = {
       config.externals.push('cheerio', 'undici');
     }
     
-    // Fix React 18 CJS module resolution
-    const reactPath = path.dirname(require.resolve('react/package.json'));
-    config.resolve.alias = {
-      ...config.resolve.alias,
-      'react/cjs/react.production.min.js': path.join(reactPath, 'cjs/react.production.min.js'),
-      'react/cjs/react-jsx-runtime.production.min.js': path.join(reactPath, 'cjs/react-jsx-runtime.production.min.js'),
-      'react/cjs/react.development.js': path.join(reactPath, 'cjs/react.development.js'),
-      'react/cjs/react-jsx-runtime.development.js': path.join(reactPath, 'cjs/react-jsx-runtime.development.js')
-    };
+    // Direct filesystem approach for React CJS files
+    const reactDir = path.join(process.cwd(), 'node_modules', 'react');
+    
+    // Check if React CJS files exist
+    const reactProdPath = path.join(reactDir, 'cjs', 'react.production.min.js');
+    const reactJsxProdPath = path.join(reactDir, 'cjs', 'react-jsx-runtime.production.min.js');
+    const reactDevPath = path.join(reactDir, 'cjs', 'react.development.js');
+    const reactJsxDevPath = path.join(reactDir, 'cjs', 'react-jsx-runtime.development.js');
+    
+    console.log('React CJS files check:');
+    console.log('Production:', fs.existsSync(reactProdPath));
+    console.log('JSX Production:', fs.existsSync(reactJsxProdPath));
+    console.log('Development:', fs.existsSync(reactDevPath));
+    console.log('JSX Development:', fs.existsSync(reactJsxDevPath));
+    
+    config.resolve.alias = config.resolve.alias || {};
+    
+    // Map the problematic imports to actual filesystem paths
+    config.resolve.alias['./cjs/react.production.min.js'] = reactProdPath;
+    config.resolve.alias['./cjs/react-jsx-runtime.production.min.js'] = reactJsxProdPath;
+    config.resolve.alias['./cjs/react.development.js'] = reactDevPath;
+    config.resolve.alias['./cjs/react-jsx-runtime.development.js'] = reactJsxDevPath;
+    
+    // Also handle absolute imports
+    config.resolve.alias['react/cjs/react.production.min.js'] = reactProdPath;
+    config.resolve.alias['react/cjs/react-jsx-runtime.production.min.js'] = reactJsxProdPath;
+    config.resolve.alias['react/cjs/react.development.js'] = reactDevPath;
+    config.resolve.alias['react/cjs/react-jsx-runtime.development.js'] = reactJsxDevPath;
 
     // Handle private fields syntax
     config.module.rules.push({
