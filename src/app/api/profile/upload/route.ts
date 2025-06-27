@@ -2,9 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { writeFile, mkdir } from 'fs/promises';
-import { join } from 'path';
-import { existsSync } from 'fs';
+import { supabase } from '@/lib/supabaseClient';
 import crypto from 'crypto';
 
 export async function POST(request: Request) {
@@ -40,17 +38,24 @@ export async function POST(request: Request) {
     const hash = crypto.createHash('md5').update(buffer).digest('hex');
     const extension = file.type.split('/')[1];
     const filename = `${type}-${hash}.${extension}`;
+    const userId = session.user.id || session.user.email;
 
-    // Ensure uploads directory exists
-    const uploadsDir = join(process.cwd(), 'public/uploads');
-    if (!existsSync(uploadsDir)) {
-      await mkdir(uploadsDir, { recursive: true });
+    // Upload to Supabase Storage
+    const filePath = `profile-pictures/${userId}/${filename}`;
+    const { error: uploadError } = await supabase.storage
+      .from('user-uploads')
+      .upload(filePath, buffer, { upsert: true, contentType: file.type });
+
+    if (uploadError) {
+      return NextResponse.json({ error: uploadError.message }, { status: 500 });
     }
 
-    // Save file to public directory
-    const path = join(uploadsDir, filename);
-    await writeFile(path, buffer);
-    const imageUrl = `/uploads/${filename}`;
+    // Get public URL
+    const { data: publicUrlData } = supabase.storage
+      .from('user-uploads')
+      .getPublicUrl(filePath);
+
+    const imageUrl = publicUrlData?.publicUrl;
 
     // Update user profile in database with the image URL
     const user = await prisma.user.update({
