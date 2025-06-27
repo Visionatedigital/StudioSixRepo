@@ -54,6 +54,7 @@ import CollaboratorCursor from './CollaboratorCursor';
 import SiteAnalysisGenerator from './SiteAnalysisGenerator';
 import SiteAnalysisDisplay from './SiteAnalysisDisplay';
 import { Html } from 'react-konva-utils';
+import OnboardingTutorial from './OnboardingTutorial';
 import FileUploadContainer from './FileUploadContainer';
 import { generateSiteAnalysis } from '@/services/siteAnalysis';
 import { processFile } from '@/utils/imageProcessing';
@@ -70,6 +71,7 @@ import UploadMenu from './UploadMenu';
 import AIPopupMenu from './AIPopupMenu';
 import TableFormatMenu from './TableFormatMenu';
 import SpatialPlanningMenu from './SpatialPlanningMenu';
+import ImageMenu from './ImageMenu';
 import { LibraryAsset } from '@/lib/library-assets';
 
 type ShapeType = 'rect' | 'circle';
@@ -406,6 +408,7 @@ export default function Canvas({ name, description, projectId }: Props) {
       endX: number;
       endY: number;
     } | null>(null);
+    const [selectedElementIds, setSelectedElementIds] = useState<string[]>([]);
     const [selectedDrawing, setSelectedDrawing] = useState<{
       id: string;
       position: { x: number; y: number };
@@ -444,7 +447,9 @@ export default function Canvas({ name, description, projectId }: Props) {
     const [shapeMenuPosition, setShapeMenuPosition] = useState<{ x: number; y: number } | null>(null);
     const [pendingStickerUrl, setPendingStickerUrl] = useState<string | null>(null);
     const stickerTransformerRef = useRef<any>(null);
+    const generatedImageTransformerRef = useRef<any>(null);
     const [showStickersMenu, setShowStickersMenu] = useState(false);
+    const [isDragOverCanvas, setIsDragOverCanvas] = useState(false);
     const [showUploadMenu, setShowUploadMenu] = useState(false);
     const [uploadMenuFiles, setUploadMenuFiles] = useState<{
       id: string;
@@ -490,8 +495,26 @@ export default function Canvas({ name, description, projectId }: Props) {
     const [editingMindMapNodeValue, setEditingMindMapNodeValue] = useState('');
     
     // 3. Add state for spatial planning tool
-    const [showSpatialPlanningMenu, setShowSpatialPlanningMenu] = useState(false);
-    const [spatialPlanningTool, setSpatialPlanningTool] = useState<string>('wall');
+      const [showSpatialPlanningMenu, setShowSpatialPlanningMenu] = useState(false);
+  const [spatialPlanningTool, setSpatialPlanningTool] = useState<string>('wall');
+
+  // Image menu state (for both uploaded and generated images)
+  const [selectedImageElement, setSelectedImageElement] = useState<UploadedElement | GeneratedImageElement | null>(null);
+  const [imageMenuPosition, setImageMenuPosition] = useState<{ x: number; y: number } | null>(null);
+
+  // Close image menu when selectedId changes and it's not an image
+  useEffect(() => {
+    if (selectedId) {
+      const element = elements.find(el => el.id === selectedId);
+      if (!element || (element.type !== 'uploaded' && element.type !== 'generated-image')) {
+        setSelectedImageElement(null);
+        setImageMenuPosition(null);
+      }
+    } else {
+      setSelectedImageElement(null);
+      setImageMenuPosition(null);
+    }
+  }, [selectedId, elements]);
     
     // Wall drawing state
     const [isDrawingWall, setIsDrawingWall] = useState(false);
@@ -626,6 +649,19 @@ export default function Canvas({ name, description, projectId }: Props) {
     const [pendingFill, setPendingFill] = useState<{ points: { x: number; y: number }[] } | null>(null);
     const [fillSnapPoint, setFillSnapPoint] = useState<{ x: number; y: number; isCorner?: boolean } | null>(null);
 
+    // Onboarding tutorial state
+    const [showOnboarding, setShowOnboarding] = useState(false);
+    const [hasSeenOnboarding, setHasSeenOnboarding] = useState(false);
+
+    // Debug logging for showOnboarding state changes
+    useEffect(() => {
+      console.log('Canvas showOnboarding state changed:', {
+        showOnboarding,
+        hasSeenOnboarding,
+        timestamp: new Date().toISOString()
+      });
+    }, [showOnboarding, hasSeenOnboarding]);
+
     // Get current canvas data with safety check
     const currentCanvas = canvasStack[currentCanvasIndex] || canvasStack[0];
     
@@ -688,16 +724,26 @@ export default function Canvas({ name, description, projectId }: Props) {
           if (allElements.length > 0) {
             // Convert any saved image data back to Image objects
             const processedElements = await Promise.all(allElements.map(async (element: any) => {
-              if (element.type === 'upload' || element.type === 'generated') {
-                if (element.image) {
+              if (element.type === 'upload' || element.type === 'generated' || element.type === 'generated-image') {
+                if (element.src || element.image) {
                   const img = new window.Image();
-                  img.src = element.image.src || element.image;
-                  await new Promise(resolve => img.onload = resolve);
+                  // For generated images, use src, for others use image.src or image
+                  const imageSource = element.src || (element.image?.src || element.image);
+                  img.src = imageSource;
+                  
+                  await new Promise((resolve, reject) => {
+                    img.onload = resolve;
+                    img.onerror = () => {
+                      console.warn('Failed to load image:', imageSource);
+                      resolve(null); // Continue even if image fails to load
+                    };
+                  });
                   
                   // Ensure all image properties are properly set
                   return {
                     ...element,
                     image: img,
+                    src: imageSource, // Ensure src is set for generated images
                     width: element.width || img.width || 0,
                     height: element.height || img.height || 0,
                     naturalWidth: element.naturalWidth || img.naturalWidth,
@@ -759,6 +805,30 @@ export default function Canvas({ name, description, projectId }: Props) {
 
       loadProjectData();
     }, [projectId, projectName]);
+
+    // Check localStorage for onboarding status and trigger after canvas loads
+    useEffect(() => {
+      const hasSeenOnboardingKey = `hasSeenOnboarding_${projectId}`;
+      const hasSeenBefore = localStorage.getItem(hasSeenOnboardingKey) === 'true';
+      setHasSeenOnboarding(hasSeenBefore);
+
+      // Show onboarding for new users after a short delay
+      if (!hasSeenBefore && projectId) {
+        const timer = setTimeout(() => {
+          setShowOnboarding(true);
+        }, 2000); // Show after 2 seconds
+
+        return () => clearTimeout(timer);
+      }
+    }, [projectId]);
+
+    // Handle onboarding completion
+    const handleOnboardingComplete = () => {
+      const hasSeenOnboardingKey = `hasSeenOnboarding_${projectId}`;
+      localStorage.setItem(hasSeenOnboardingKey, 'true');
+      setHasSeenOnboarding(true);
+      setShowOnboarding(false);
+    };
 
     // Initialize WebSocket connection
     useEffect(() => {
@@ -831,11 +901,14 @@ export default function Canvas({ name, description, projectId }: Props) {
       const point = stage.getPointerPosition();
       if (!point) return;
 
-      // Update selection box if active
-      if (selectionBox?.isSelecting) {
+      // Update selection box if active (but not during screenshot mode)
+      if (selectionBox?.isSelecting && !isScreenshotModeActive) {
         const transform = stage.getAbsoluteTransform().copy().invert();
         const pos = transform.point(point);
         setSelectionBox(prev => prev ? { ...prev, endX: pos.x, endY: pos.y } : null);
+        
+        // Ensure cursor stays as crosshair during selection
+        stage.container().style.cursor = 'crosshair';
         return;
       }
 
@@ -847,10 +920,10 @@ export default function Canvas({ name, description, projectId }: Props) {
         });
       }
 
-      if (tool === 'mouse' && isDraggingCanvas && e.evt.button !== 2) { // Only allow dragging if not right-click
+      if (tool === 'mouse' && isDraggingCanvas) {
         const newPosition = {
-          x: e.evt.clientX - mouseStartPos.x,
-          y: e.evt.clientY - mouseStartPos.y
+          x: position.x + e.evt.movementX,
+          y: position.y + e.evt.movementY
         };
         setPosition(newPosition);
         return;
@@ -895,6 +968,10 @@ export default function Canvas({ name, description, projectId }: Props) {
                   width: element.image.width,
                   height: element.image.height,
                 };
+                // For generated images, also store the src directly for easier restoration
+                if (element.type === 'generated-image') {
+                  (serializedElement as any).src = element.image.src;
+                }
               } else if (typeof element.image === 'object') {
                 (serializedElement as any).image = {
                   src: (element.image as any).src || '',
@@ -903,7 +980,16 @@ export default function Canvas({ name, description, projectId }: Props) {
                   naturalWidth: (element.image as any).naturalWidth || (element as any).naturalWidth,
                   naturalHeight: (element.image as any).naturalHeight || (element as any).naturalHeight
                 };
+                // For generated images, also store the src directly for easier restoration
+                if (element.type === 'generated-image') {
+                  (serializedElement as any).src = (element.image as any).src || (element as any).src || '';
+                }
               }
+            }
+            
+            // Ensure generated images have their src field preserved
+            if (element.type === 'generated-image' && 'src' in element && element.src) {
+              (serializedElement as any).src = element.src;
             }
             
             // Remove any circular references or complex objects
@@ -1089,6 +1175,19 @@ export default function Canvas({ name, description, projectId }: Props) {
 
     const handleCanvasClick = (e: KonvaEventObject<MouseEvent>) => {
       console.log('[DEBUG] handleCanvasClick TOP', { pendingShape, selectedTool });
+      
+      // Handle middle mouse button for panning
+      if (e.evt.button === 1) { // Middle mouse button
+        e.evt.preventDefault(); // Prevent context menu or other default behaviors
+        const stage = e.target.getStage();
+        if (stage && e.target === stage) {
+          setIsDraggingCanvas(true);
+          const container = stage.container();
+          container.style.cursor = 'grabbing';
+          return;
+        }
+      }
+      
       // Clear selection box on right click
       if (e.evt.button === 2) {
         console.log('[DEBUG] handleCanvasClick: right click, returning early');
@@ -1209,6 +1308,32 @@ export default function Canvas({ name, description, projectId }: Props) {
         return;
       }
 
+      // Handle left-click drag-to-select when using mouse tool (must be before clearing logic!)
+      // But skip if screenshot mode is active
+      if (e.evt.button === 0 && tool === 'mouse' && isClickOnStage && !isScreenshotModeActive) { // 0 is left mouse button
+        // Only start selection if we're not clicking on any element
+        const clickedElement = elements.find(element => {
+          const elementLeft = element.x;
+          const elementTop = element.y;
+          const elementRight = element.x + (element.width || 0);
+          const elementBottom = element.y + (element.height || 0);
+          
+          return pos.x >= elementLeft && pos.x <= elementRight && 
+                 pos.y >= elementTop && pos.y <= elementBottom;
+        });
+        
+        if (!clickedElement) {
+          setSelectionBox({
+            isSelecting: true,
+            startX: pos.x,
+            startY: pos.y,
+            endX: pos.x,
+            endY: pos.y
+          });
+          return;
+        }
+      }
+
       // Clear text menu when clicking on stage
       if (isClickOnStage) {
         console.log('[DEBUG] handleCanvasClick: isClickOnStage, returning early (default clear)');
@@ -1219,10 +1344,14 @@ export default function Canvas({ name, description, projectId }: Props) {
         setIsExplicitlySelected(false);
         setSelectedCell(null); // Deselect cell/table
         setSelectedId(null); // Deselect table
+        setSelectedElementIds([]); // Clear multi-selection
+        // Close image menu when clicking on canvas
+        setSelectedImageElement(null);
+        setImageMenuPosition(null);
         return;
       }
 
-      // Handle right-click for selection box
+      // Handle right-click for selection box (alternative method)
       if (e.evt.button === 2 && isClickOnStage) { // 2 is right mouse button
         setSelectionBox({
           isSelecting: true,
@@ -1282,6 +1411,7 @@ export default function Canvas({ name, description, projectId }: Props) {
         setIsExplicitlySelected(false);
         setSelectedCell(null); // Deselect cell/table
         setSelectedId(null); // Deselect table
+        setSelectedElementIds([]); // Clear multi-selection
         return;
       }
 
@@ -1352,6 +1482,7 @@ export default function Canvas({ name, description, projectId }: Props) {
         setIsExplicitlySelected(false);
         setSelectedCell(null); // Deselect cell/table
         setSelectedId(null); // Deselect table
+        setSelectedElementIds([]); // Clear multi-selection
         return;
       }
 
@@ -1907,6 +2038,88 @@ export default function Canvas({ name, description, projectId }: Props) {
       e.preventDefault();
       e.stopPropagation();
       setIsDragging(false);
+      setIsDragOverCanvas(false); // Clear drag state
+
+      // Check for files first (images)
+      const files = Array.from(e.dataTransfer.files);
+      const imageFiles = files.filter(file => file.type.startsWith('image/'));
+      
+      console.log('[DEBUG] Dropped files:', files.length, 'Image files:', imageFiles.length);
+      
+      if (imageFiles.length > 0 && stageRef.current) {
+        console.log('[DEBUG] Processing image files');
+        const stage = stageRef.current;
+        const pointer = stage.getPointerPosition();
+        
+        if (pointer) {
+          const transform = stage.getAbsoluteTransform().copy().invert();
+          const pos = transform.point(pointer);
+          console.log('[DEBUG] Drop position:', pos);
+          
+          imageFiles.forEach((file, index) => {
+            console.log(`[DEBUG] Processing image ${index + 1}:`, file.name, file.type);
+            const reader = new FileReader();
+            reader.onload = (event) => {
+              if (event.target?.result) {
+                const img = new window.Image();
+                img.onload = () => {
+                  console.log(`[DEBUG] Image loaded: ${img.naturalWidth}x${img.naturalHeight}`);
+                  // Calculate natural aspect ratio
+                  const aspectRatio = img.naturalWidth / img.naturalHeight;
+                  const maxSize = 200; // Maximum size for dropped images
+                  let width = maxSize;
+                  let height = maxSize;
+                  
+                  // Maintain aspect ratio
+                  if (aspectRatio > 1) {
+                    height = width / aspectRatio;
+                  } else {
+                    width = height * aspectRatio;
+                  }
+                  
+                  const imageX = pos.x - width/2 + (index * 20);
+                  const imageY = pos.y - height/2 + (index * 20);
+                  
+                  console.log(`[DEBUG] Placing image at: x=${imageX}, y=${imageY}, w=${width}, h=${height}`);
+                  
+                  const newImage: UploadedElement = {
+                    id: uuidv4(),
+                    type: 'uploaded' as const,
+                    x: imageX,
+                    y: imageY,
+                    width,
+                    height,
+                    image: img,
+                    file: file,
+                    canvasId: currentCanvas?.id || 'default',
+                    rotation: 0
+                  };
+                  
+                  console.log('[DEBUG] Created new image element:', newImage);
+                  setElements(prev => {
+                    console.log('[DEBUG] Adding to elements array. Current count:', prev.length);
+                    return [...prev, newImage];
+                  });
+                  
+                  // Show success notification
+                  showNotification('success', 'Image Added', `${file.name} was added to the canvas`);
+                };
+                img.onerror = (error) => {
+                  console.error('[DEBUG] Failed to load image:', error);
+                  showNotification('error', 'Image Error', `Failed to load ${file.name}`);
+                };
+                img.src = event.target.result as string;
+              }
+            };
+            reader.onerror = (error) => {
+              console.error('[DEBUG] Failed to read file:', error);
+              showNotification('error', 'File Error', `Failed to read ${file.name}`);
+            };
+            reader.readAsDataURL(file);
+          });
+        }
+        return;
+      }
 
       // Log all available data
       for (let i = 0; i < e.dataTransfer.types.length; i++) {
@@ -1923,39 +2136,39 @@ export default function Canvas({ name, description, projectId }: Props) {
       } catch (error) {
         console.log('[DEBUG] Failed to parse JSON:', error);
         // Not a JSON object, might be a URL for a sticker
-      const url = e.dataTransfer.getData('text/plain');
+        const url = e.dataTransfer.getData('text/plain');
         console.log('[DEBUG] URL data received:', url);
         if (url && (url.startsWith('http') || url.startsWith('data:image'))) {
           console.log('[DEBUG] Processing URL as sticker');
-        if (stageRef.current) {
-          const stage = stageRef.current;
-          const pointer = stage.getPointerPosition();
+          if (stageRef.current) {
+            const stage = stageRef.current;
+            const pointer = stage.getPointerPosition();
             console.log('[DEBUG] Stage pointer position:', pointer);
-          if (pointer) {
+            if (pointer) {
               const transform = stage.getAbsoluteTransform().copy().invert();
               const pos = transform.point(pointer);
               console.log('[DEBUG] Transformed position:', pos);
-          const img = new window.Image();
-            img.src = url;
-            img.onload = () => {
+              const img = new window.Image();
+              img.src = url;
+              img.onload = () => {
                 console.log('[DEBUG] Sticker image loaded, creating element');
-              const newSticker: UploadedElement = {
-                id: uuidv4(),
-                type: 'uploaded' as const,
+                const newSticker: UploadedElement = {
+                  id: uuidv4(),
+                  type: 'uploaded' as const,
                   x: pos.x - 40,
                   y: pos.y - 40,
-                width: 80,
-                height: 80,
-                image: img,
-                file: undefined as any,
-                canvasId: currentCanvas.id,
-                rotation: 0
-              };
+                  width: 80,
+                  height: 80,
+                  image: img,
+                  file: undefined as any,
+                  canvasId: currentCanvas?.id || 'default',
+                  rotation: 0
+                };
                 console.log('[DEBUG] Adding sticker to elements:', newSticker);
-              setElements(prev => [...prev, newSticker]);
-            };
+                setElements(prev => [...prev, newSticker]);
+              };
+            }
           }
-        }
         }
         return;
       }
@@ -2056,9 +2269,7 @@ export default function Canvas({ name, description, projectId }: Props) {
     const handleElementChange = (id: string, newAttrs: Partial<CanvasElement>) => {
       setElements(prev => prev.map(el => {
         if (el.id === id) {
-          const width = el.width !== undefined ? el.width : (newAttrs.width || el.width);
-          const height = el.height !== undefined ? el.height : (newAttrs.height || el.height);
-          return { ...el, ...newAttrs, width, height } as CanvasElement;
+          return { ...el, ...newAttrs } as CanvasElement;
         }
         return el;
       }));
@@ -2185,54 +2396,56 @@ export default function Canvas({ name, description, projectId }: Props) {
           );
         }
         case 'uploaded': {
-          const uploadImage = element as UploadedElement;
-          if (!(uploadImage.image instanceof window.Image)) return null;
-          return (
-            <KonvaImage
-              key={uploadImage.id}
-              id={uploadImage.id}
-              image={uploadImage.image}
-              alt={uploadImage.alt}
-              x={uploadImage.x}
-              y={uploadImage.y}
-              width={uploadImage.width}
-              height={uploadImage.height}
-              draggable
-              onClick={() => setSelectedId(uploadImage.id)}
-              onDragEnd={e => {
-                const node = e.target;
-                handleElementChange(uploadImage.id, { x: node.x(), y: node.y() });
-              }}
-              onTransformEnd={e => {
-                const node = e.target;
-                const scaleX = node.scaleX();
-                const scaleY = node.scaleY();
-                handleElementChange(uploadImage.id, {
-                  x: node.x(),
-                  y: node.y(),
-                  width: Math.max(10, node.width() * scaleX),
-                  height: Math.max(10, node.height() * scaleY),
-                });
-                node.scaleX(1);
-                node.scaleY(1);
-              }}
-              style={{
-                transform: `rotate(${uploadImage.rotation}deg)`,
-                transformOrigin: 'center center',
-              }}
-            />
-          );
+          // Uploaded images are rendered in their own dedicated layer with transformer
+          // Skip rendering here to avoid conflicts
+          return null;
         }
         case 'generated-image': {
           const genImage = element as GeneratedImageElement;
+          
+          // If image object is missing but we have a src, create the image object
+          if (!(genImage.image instanceof window.Image) && genImage.src) {
+            const img = new window.Image();
+            img.src = genImage.src;
+            img.onload = () => {
+              // Update the element with the loaded image object
+              setElements(prev => prev.map(el => 
+                el.id === genImage.id 
+                  ? { ...el, image: img }
+                  : el
+              ));
+            };
+            // Don't render until image is loaded
+            return null;
+          }
+          
           if (!(genImage.image instanceof window.Image)) return null;
+          
           return (
             <KonvaImage
               key={genImage.id}
+              id={genImage.id}
               image={genImage.image}
               alt={genImage.alt}
+              x={genImage.x}
+              y={genImage.y}
               width={genImage.width}
               height={genImage.height}
+              draggable
+              onClick={() => {
+                setSelectedId(genImage.id);
+                setSelectedImageElement(genImage);
+                
+                // Position menu intelligently near the image
+                const menuPosition = calculateMenuPosition(genImage);
+                if (menuPosition) {
+                  setImageMenuPosition(menuPosition);
+                }
+              }}
+              onDragEnd={e => {
+                const node = e.target;
+                handleElementChange(genImage.id, { x: node.x(), y: node.y() });
+              }}
               style={{
                 transform: `rotate(${genImage.rotation}deg)`,
                 transformOrigin: 'center center',
@@ -2949,7 +3162,7 @@ export default function Canvas({ name, description, projectId }: Props) {
         <div className="relative group">
           <button
             onClick={() => setShowInviteModal(true)}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+            className="invite-button flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
           >
             <div className="flex -space-x-2">
               {collaborators.slice(0, maxAvatars).map((collaborator) => (
@@ -3003,19 +3216,40 @@ export default function Canvas({ name, description, projectId }: Props) {
 
     const handleScreenshotModeChange = (isActive: boolean) => {
       setIsScreenshotModeActive(isActive);
+      
+      // Clear selection box when screenshot mode is activated
+      if (isActive && selectionBox?.isSelecting) {
+        setSelectionBox(null);
+        setSelectedElementIds([]);
+      }
     };
 
     const handleAddGeneratedImage = (imageUrl: string, prompt: string) => {
       const img = new window.Image();
       img.src = imageUrl;
       img.onload = () => {
+        // Scale down the image to a reasonable size for canvas
+        const maxSize = 300; // Maximum width or height
+        const aspectRatio = img.width / img.height;
+        
+        let scaledWidth, scaledHeight;
+        if (img.width > img.height) {
+          // Landscape orientation
+          scaledWidth = Math.min(img.width, maxSize);
+          scaledHeight = scaledWidth / aspectRatio;
+        } else {
+          // Portrait or square orientation
+          scaledHeight = Math.min(img.height, maxSize);
+          scaledWidth = scaledHeight * aspectRatio;
+        }
+
         const newElement: GeneratedImageElement = {
           id: uuidv4(),
           type: 'generated-image',
-          x: Math.random() * (canvasDimensions.width - 200),
-          y: Math.random() * (canvasDimensions.height - 200),
-          width: img.width,
-          height: img.height,
+          x: Math.random() * (canvasDimensions.width - scaledWidth),
+          y: Math.random() * (canvasDimensions.height - scaledHeight),
+          width: scaledWidth,
+          height: scaledHeight,
           src: imageUrl,
           image: img,
           prompt,
@@ -3423,8 +3657,120 @@ export default function Canvas({ name, description, projectId }: Props) {
     };
 
     // Add missing handler stubs if not already defined
+    // Function to check if an element intersects with the selection box
+    const isElementInSelection = (element: CanvasElement, selectionBox: { startX: number; startY: number; endX: number; endY: number }) => {
+      // Skip invalid elements
+      if (!element || !element.id || element.x === undefined || element.y === undefined) {
+        return false;
+      }
+      
+      // Skip elements with zero or very small dimensions (likely ghosts)
+      const elementWidth = element.width || 0;
+      const elementHeight = element.height || 0;
+      if (elementWidth < 10 || elementHeight < 10) {
+        return false;
+      }
+
+      const minX = Math.min(selectionBox.startX, selectionBox.endX);
+      const maxX = Math.max(selectionBox.startX, selectionBox.endX);
+      const minY = Math.min(selectionBox.startY, selectionBox.endY);
+      const maxY = Math.max(selectionBox.startY, selectionBox.endY);
+
+      // Skip selection boxes that are unreasonably large (likely coordinate transformation errors)
+      const selectionWidth = maxX - minX;
+      const selectionHeight = maxY - minY;
+      if (selectionWidth > 3000 || selectionHeight > 3000) {
+        return false;
+      }
+
+      // Check intersection based on element type
+      const elementLeft = element.x;
+      const elementTop = element.y;
+      const elementRight = element.x + elementWidth;
+      const elementBottom = element.y + elementHeight;
+
+      // Check if element intersects with selection box
+      return !(elementRight < minX || elementLeft > maxX || elementBottom < minY || elementTop > maxY);
+    };
+
     const handleMouseUp = (e: KonvaEventObject<MouseEvent>) => {
-      console.log('[DEBUG] handleMouseUp triggered', e);
+      
+            // Handle selection box completion (but not during screenshot mode)
+      if (selectionBox?.isSelecting && !isScreenshotModeActive) {
+        const selectedIds: string[] = [];
+        
+        // Check if selection box is reasonable size
+        const selectionWidth = Math.abs(selectionBox.endX - selectionBox.startX);
+        const selectionHeight = Math.abs(selectionBox.endY - selectionBox.startY);
+        
+        if (selectionWidth > 3000 || selectionHeight > 3000) {
+          setSelectionBox(null);
+          
+          // Reset cursor
+          const stage = e.target.getStage();
+          if (stage) {
+            stage.container().style.cursor = 'default';
+          }
+          return;
+        }
+        
+        // Filter elements to only selectable types and reasonable positions
+        const selectableElements = elements.filter(element => {
+          // Only include elements that should be selectable
+          const selectableTypes = ['uploaded', 'generated-image', 'text', 'sticky-note', 'shape', 'table', 'library-asset'];
+          if (!element || !element.id || !selectableTypes.includes(element.type)) {
+            return false;
+          }
+          
+          // Filter out elements that are way off-screen (likely orphaned/ghost elements)
+          // Allow some reasonable margin for off-screen elements, but exclude extreme positions
+          const maxOffScreenDistance = 2000; // Reduced to 2000 pixels off-screen
+          if (Math.abs(element.x) > maxOffScreenDistance || Math.abs(element.y) > maxOffScreenDistance) {
+            return false;
+          }
+          
+          return true;
+        });
+        
+        // Check all selectable elements for intersection with selection box
+        selectableElements.forEach(element => {
+          if (isElementInSelection(element, selectionBox)) {
+            selectedIds.push(element.id);
+          }
+        });
+
+        // Filter out any undefined or invalid elements
+        const validSelectedIds = selectedIds.filter(id => {
+          const element = elements.find(el => el.id === id);
+          return element && element.id;
+        });
+
+        // Set selected elements
+        setSelectedElementIds(validSelectedIds);
+        
+        // Clear selection box
+        setSelectionBox(null);
+        
+        // Reset cursor to default after selection
+        const stage = e.target.getStage();
+        if (stage) {
+          stage.container().style.cursor = 'default';
+        }
+        
+        return;
+      }
+      
+      // Stop canvas panning on middle mouse button release
+      if (e.evt.button === 1 && isDraggingCanvas) {
+        setIsDraggingCanvas(false);
+        const stage = e.target.getStage();
+        if (stage) {
+          const container = stage.container();
+          container.style.cursor = 'default';
+        }
+        return;
+      }
+      
       if (isDrawing && currentLine) {
         console.log('[DRAW] Finish line:', currentLine);
         setLines(prev => [...prev, currentLine]);
@@ -3472,14 +3818,26 @@ export default function Canvas({ name, description, projectId }: Props) {
 
       // Set the cursor based on the current tool and dragging state
       if (tool === 'mouse') {
-        stage.container().style.cursor = isDraggingCanvas ? 'grabbing' : 'default';
+        // Only show grab cursor during canvas panning, otherwise default cursor for selection
+        if (isDraggingCanvas) {
+          stage.container().style.cursor = 'grabbing';
+        } else if (selectionBox?.isSelecting) {
+          stage.container().style.cursor = 'crosshair'; // Show crosshair during selection
+        } else {
+          stage.container().style.cursor = 'default'; // Default arrow cursor for mouse tool
+        }
       } else if (tool === 'draw') {
         stage.container().style.cursor = 'crosshair';
       } else {
         stage.container().style.cursor = 'default';
       }
     };
-    const handleMouseLeave = () => {};
+    const handleMouseLeave = () => {
+      // Stop panning if mouse leaves canvas
+      if (isDraggingCanvas) {
+        setIsDraggingCanvas(false);
+      }
+    };
     const handleUpdateNote = () => {};
     const handleDeleteNote = () => {};
     const handleMoveNote = () => {};
@@ -3710,19 +4068,114 @@ export default function Canvas({ name, description, projectId }: Props) {
       }
     };
 
-    // Add drag-and-drop for stickers
+    // Add drag-and-drop for stickers and images
     const handleCanvasDragOver = (e: React.DragEvent) => {
       e.preventDefault();
+      
+      // Check if dragging files (images) to show visual feedback
+      const hasFiles = e.dataTransfer.types.includes('Files');
+      const hasImageFiles = Array.from(e.dataTransfer.items || []).some(
+        item => item.kind === 'file' && item.type.startsWith('image/')
+      );
+      
+      if (hasFiles && hasImageFiles) {
+        setIsDragOverCanvas(true);
+      }
+    };
+    
+    const handleCanvasDragLeave = (e: React.DragEvent) => {
+      e.preventDefault();
+      // Only hide drag feedback when leaving the canvas container
+      if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+        setIsDragOverCanvas(false);
+      }
     };
     const handleCanvasDrop = (e: React.DragEvent) => {
       e.preventDefault();
+      setIsDragOverCanvas(false); // Clear drag state
+      
+      if (!stageRef.current) return;
+      
+      const stage = stageRef.current;
+      const containerRect = stage.container().getBoundingClientRect();
+      // Calculate position relative to the stage, then adjust for scale and pan
+      const x = (e.clientX - containerRect.left - position.x) / scale;
+      const y = (e.clientY - containerRect.top - position.y) / scale;
+      
+      // Handle file drops (images)
+      const files = Array.from(e.dataTransfer.files);
+      const imageFiles = files.filter(file => file.type.startsWith('image/'));
+      
+      console.log('Dropped files:', files.length, 'Image files:', imageFiles.length);
+      
+      if (imageFiles.length > 0) {
+        imageFiles.forEach((file, index) => {
+          console.log(`Processing image ${index + 1}:`, file.name, file.type);
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            if (event.target?.result) {
+              const img = new window.Image();
+              img.onload = () => {
+                console.log(`Image loaded: ${img.naturalWidth}x${img.naturalHeight}`);
+                // Calculate natural aspect ratio
+                const aspectRatio = img.naturalWidth / img.naturalHeight;
+                const maxSize = 200; // Maximum size for dropped images
+                let width = maxSize;
+                let height = maxSize;
+                
+                // Maintain aspect ratio
+                if (aspectRatio > 1) {
+                  height = width / aspectRatio;
+                } else {
+                  width = height * aspectRatio;
+                }
+                
+                const imageX = x - width/2 + (index * 20);
+                const imageY = y - height/2 + (index * 20);
+                
+                console.log(`Placing image at: x=${imageX}, y=${imageY}, w=${width}, h=${height}`);
+                
+                const newImage: UploadedElement = {
+                  id: uuidv4(),
+                  type: 'uploaded' as const,
+                  x: imageX,
+                  y: imageY,
+                  width,
+                  height,
+                  image: img,
+                  file: file,
+                  canvasId: currentCanvas?.id || 'default',
+                  rotation: 0
+                };
+                
+                console.log('Created new image element:', newImage);
+                setElements(prev => {
+                  console.log('Adding to elements array. Current count:', prev.length);
+                  return [...prev, newImage];
+                });
+                
+                // Show success notification
+                showNotification('success', 'Image Added', `${file.name} was added to the canvas`);
+              };
+              img.onerror = (error) => {
+                console.error('Failed to load image:', error);
+                showNotification('error', 'Image Error', `Failed to load ${file.name}`);
+              };
+              img.src = event.target.result as string;
+            }
+          };
+          reader.onerror = (error) => {
+            console.error('Failed to read file:', error);
+            showNotification('error', 'File Error', `Failed to read ${file.name}`);
+          };
+          reader.readAsDataURL(file);
+        });
+        return;
+      }
+      
+      // Handle URL drops (existing sticker functionality)
       const url = e.dataTransfer.getData('text/plain');
-      if (url && url.startsWith('http') && stageRef.current) {
-        const stage = stageRef.current;
-        const containerRect = stage.container().getBoundingClientRect();
-        // Calculate position relative to the stage, then adjust for scale and pan
-        const x = (e.clientX - containerRect.left - position.x) / scale;
-        const y = (e.clientY - containerRect.top - position.y) / scale;
+      if (url && url.startsWith('http')) {
         const img = new window.Image();
         img.src = url;
         img.onload = () => {
@@ -3739,6 +4192,7 @@ export default function Canvas({ name, description, projectId }: Props) {
             rotation: 0
           };
           setElements(prev => [...prev, newSticker]);
+          showNotification('success', 'Image Added', 'Image was added to the canvas');
         };
         // Close the sticker menu and switch back to mouse tool
         setShowStickersMenu(false);
@@ -3747,20 +4201,7 @@ export default function Canvas({ name, description, projectId }: Props) {
       }
     };
 
-    useEffect(() => {
-      if (!selectedId || !stickerTransformerRef.current) return;
-      const selectedElement = elements.find(el => el.id === selectedId && el.type === 'uploaded');
-      if (selectedElement && stageRef.current) {
-        const stage = stageRef.current;
-        if (!stage) return;
-        const node = stage.findOne(`#${selectedId}`);
-        if (node && typeof stickerTransformerRef.current.nodes === 'function') {
-          stickerTransformerRef.current.nodes([node]);
-          const layer = stickerTransformerRef.current.getLayer();
-          if (layer) layer.batchDraw();
-        }
-      }
-    }, [selectedId, elements]);
+
 
     // Keydown handler for deleting selected elements and zoom shortcuts
     useEffect(() => {
@@ -3770,7 +4211,16 @@ export default function Canvas({ name, description, projectId }: Props) {
           setIsShiftPressed(true);
         }
         
-        // Delete selected element
+        // Delete selected elements (multi-selection)
+        if ((e.key === 'Backspace' || e.key === 'Delete') && selectedElementIds.length > 0) {
+          e.preventDefault();
+          setElements(prev => prev.filter(el => !selectedElementIds.includes(el.id)));
+          setSelectedElementIds([]);
+          console.log('[DEBUG] Deleted selected elements:', selectedElementIds);
+          return;
+        }
+        
+        // Delete selected element (single selection)
         if ((e.key === 'Backspace' || e.key === 'Delete') && selectedId) {
           const selectedElement = elements.find(el => el.id === selectedId);
           if (selectedElement && (selectedElement.type === 'uploaded' || selectedElement.type === 'library-asset')) {
@@ -3783,6 +4233,19 @@ export default function Canvas({ name, description, projectId }: Props) {
         // Delete selected annotation
         if ((e.key === 'Backspace' || e.key === 'Delete') && selectedAnnotation) {
           handleAnnotationDelete(selectedAnnotation);
+        }
+        
+        // Select all shortcut
+        if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+          e.preventDefault();
+          const allSelectableIds = elements
+            .filter(el => el.type === 'uploaded' || el.type === 'generated-image' || 
+                         el.type === 'text' || el.type === 'sticky-note' || 
+                         el.type === 'shape' || el.type === 'table')
+            .map(el => el.id);
+          setSelectedElementIds(allSelectableIds);
+          console.log('[DEBUG] Selected all elements:', allSelectableIds);
+          return;
         }
         
         // Zoom shortcuts
@@ -3800,6 +4263,14 @@ export default function Canvas({ name, description, projectId }: Props) {
             setScale(1);
             setPosition({ x: 0, y: 0 });
           }
+        }
+        
+        // Handle Escape key to clear selection
+        if (e.key === 'Escape' && selectedElementIds.length > 0) {
+          e.preventDefault();
+          setSelectedElementIds([]);
+          console.log('[DEBUG] Cleared multi-selection');
+          return;
         }
         
         // Handle Escape key for wall drawing
@@ -3884,29 +4355,34 @@ export default function Canvas({ name, description, projectId }: Props) {
         window.removeEventListener('keydown', handleKeyDown);
         window.removeEventListener('keyup', handleKeyUp);
       };
-    }, [selectedId, elements, scale, isDrawingWall, isWindowPlacement, windowPlacementStep, selectedWindowType, selectedWindowWidth, windowWidthInput, nearbyMeasurements, selectedAnnotation]);
+    }, [selectedId, selectedElementIds, elements, scale, isDrawingWall, isWindowPlacement, windowPlacementStep, selectedWindowType, selectedWindowWidth, windowWidthInput, nearbyMeasurements, selectedAnnotation]);
 
-    // Attach transformer to selected sticker
-    useEffect(() => {
-      if (!selectedId || !stageRef.current || !stickerTransformerRef.current) return;
-      const node = stageRef.current.findOne(`#${selectedId}`);
-      if (node) {
-        stickerTransformerRef.current.nodes([node]);
-        stickerTransformerRef.current.getLayer()?.batchDraw();
-      }
-    }, [selectedId, elements]);
 
-    // Attach transformer to selected library asset
+
+    // Unified transformer for all image elements (uploaded, generated, library assets)
     useEffect(() => {
-      if (!selectedId || !stageRef.current || !libraryAssetTransformerRef.current) return;
+      if (!selectedId || !stageRef.current || !generatedImageTransformerRef.current) return;
       
-      const selectedElement = elements.find(el => el.id === selectedId && el.type === 'library-asset');
+      const selectedElement = elements.find(el => 
+        el.id === selectedId && 
+        (el.type === 'uploaded' || el.type === 'generated-image' || el.type === 'library-asset')
+      );
+      
       if (selectedElement) {
         const node = stageRef.current.findOne(`#${selectedId}`);
+        
         if (node) {
-          libraryAssetTransformerRef.current.nodes([node]);
-          libraryAssetTransformerRef.current.getLayer()?.batchDraw();
+          generatedImageTransformerRef.current.nodes([node]);
+          generatedImageTransformerRef.current.getLayer()?.batchDraw();
+        } else {
+          // Clear transformer if no node found
+          generatedImageTransformerRef.current.nodes([]);
+          generatedImageTransformerRef.current.getLayer()?.batchDraw();
         }
+      } else {
+        // Clear transformer if no valid selection
+        generatedImageTransformerRef.current.nodes([]);
+        generatedImageTransformerRef.current.getLayer()?.batchDraw();
       }
     }, [selectedId, elements]);
 
@@ -4367,6 +4843,124 @@ export default function Canvas({ name, description, projectId }: Props) {
       setFillPoints([]);
       setFillSnapPoint(null);
       setShowFillDoneButton(false);
+    };
+
+    // Helper function to calculate smart menu positioning
+    const calculateMenuPosition = (element: UploadedElement | GeneratedImageElement) => {
+      const stage = stageRef.current;
+      if (!stage) return null;
+
+      const container = stage.container();
+      const containerRect = container.getBoundingClientRect();
+      
+      // Calculate image position in screen coordinates
+      const imageScreenX = containerRect.left + (element.x * scale) + position.x;
+      const imageScreenY = containerRect.top + (element.y * scale) + position.y;
+      const imageScreenWidth = element.width * scale;
+      
+      // Menu dimensions (approximate)
+      const menuWidth = 200;
+      const menuHeight = 240; // Slightly larger for generated image actions
+      
+      // Check if image is close to right edge of viewport
+      const viewportWidth = window.innerWidth;
+      const spaceOnRight = viewportWidth - (imageScreenX + imageScreenWidth);
+      const spaceOnLeft = imageScreenX;
+      
+      let menuX, menuY;
+      
+      // Position menu on the side with more space
+      if (spaceOnRight >= menuWidth + 20) {
+        // Place on right side
+        menuX = imageScreenX + imageScreenWidth + 10;
+      } else if (spaceOnLeft >= menuWidth + 20) {
+        // Place on left side
+        menuX = imageScreenX - menuWidth - 10;
+      } else {
+        // Not enough space on either side, place on the side with more space
+        if (spaceOnRight > spaceOnLeft) {
+          menuX = imageScreenX + imageScreenWidth + 10;
+        } else {
+          menuX = imageScreenX - menuWidth - 10;
+        }
+      }
+      
+      // Vertically center the menu with the image, but keep it on screen
+      const imageScreenHeight = element.height * scale;
+      menuY = imageScreenY + (imageScreenHeight - menuHeight) / 2;
+      
+      // Ensure menu stays within viewport bounds
+      menuX = Math.max(10, Math.min(menuX, viewportWidth - menuWidth - 10));
+      menuY = Math.max(10, Math.min(menuY, window.innerHeight - menuHeight - 10));
+      
+      return { x: menuX, y: menuY };
+    };
+
+    // Image menu handlers
+    const handleImageCrop = () => {
+      // TODO: Implement crop functionality
+      console.log('Crop image:', selectedImageElement?.id);
+      setSelectedImageElement(null);
+      setImageMenuPosition(null);
+    };
+
+    const handleImageDownload = () => {
+      if (!selectedImageElement) return;
+
+      if (selectedImageElement.type === 'uploaded' && selectedImageElement.image instanceof HTMLImageElement) {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          canvas.width = selectedImageElement.image.naturalWidth;
+          canvas.height = selectedImageElement.image.naturalHeight;
+          ctx.drawImage(selectedImageElement.image, 0, 0);
+          
+          const link = document.createElement('a');
+          link.download = selectedImageElement.alt || 'image.png';
+          link.href = canvas.toDataURL();
+          link.click();
+        }
+             } else if (selectedImageElement.type === 'generated-image') {
+         const link = document.createElement('a');
+         link.download = `generated-${selectedImageElement.id}.png`;
+         link.href = selectedImageElement.src;
+         link.click();
+       }
+      setSelectedImageElement(null);
+      setImageMenuPosition(null);
+    };
+
+    const handleImageDelete = () => {
+      if (selectedImageElement) {
+        setElements(prev => prev.filter(el => el.id !== selectedImageElement.id));
+        setSelectedId(null);
+      }
+      setSelectedImageElement(null);
+      setImageMenuPosition(null);
+    };
+
+    const handleImageRegenerate = () => {
+      if (selectedImageElement && selectedImageElement.type === 'generated-image') {
+        // TODO: Implement regenerate functionality
+        console.log('Regenerate image:', selectedImageElement.id, 'with prompt:', selectedImageElement.prompt);
+      }
+      setSelectedImageElement(null);
+      setImageMenuPosition(null);
+    };
+
+    const handleImageCopyPrompt = () => {
+      if (selectedImageElement && selectedImageElement.type === 'generated-image') {
+        navigator.clipboard.writeText(selectedImageElement.prompt).then(() => {
+          showNotification('success', 'Copied!', 'Prompt copied to clipboard');
+        });
+      }
+      setSelectedImageElement(null);
+      setImageMenuPosition(null);
+    };
+
+    const handleImageMenuClose = () => {
+      setSelectedImageElement(null);
+      setImageMenuPosition(null);
     };
 
     // Line intersection utility function for wall hatching
@@ -5518,6 +6112,7 @@ export default function Canvas({ name, description, projectId }: Props) {
       <div
         className="h-screen w-full relative bg-[#fafafa]"
         onDragOver={handleCanvasDragOver}
+        onDragLeave={handleCanvasDragLeave}
         onDrop={handleCanvasDrop}
       >
         <CanvasHeader
@@ -7574,8 +8169,8 @@ export default function Canvas({ name, description, projectId }: Props) {
                 )}
               </KonvaGroup>
 
-              {/* Elements Layer */}
-              {visibleElements.map((el) => (
+              {/* Elements Layer - excluding generated images and uploaded images which have their own layers */}
+              {visibleElements.filter(el => el.type !== 'generated-image' && el.type !== 'uploaded').map((el) => (
                 <KonvaGroup
                   key={el.id}
                   id={el.id}
@@ -7611,11 +8206,34 @@ export default function Canvas({ name, description, projectId }: Props) {
                   y={Math.min(selectionBox.startY, selectionBox.endY)}
                   width={Math.abs(selectionBox.endX - selectionBox.startX)}
                   height={Math.abs(selectionBox.endY - selectionBox.startY)}
-                  fill="rgba(0, 0, 255, 0.1)"
-                  stroke="blue"
+                  fill="rgba(74, 144, 226, 0.1)"
+                  stroke="#4A90E2"
                   strokeWidth={1}
+                  dash={[5, 5]}
+                  listening={false}
                 />
               )}
+
+              {/* Render selection highlight for selected elements */}
+              {selectedElementIds.map(elementId => {
+                const element = elements.find(el => el.id === elementId);
+                if (!element) return null;
+                
+                return (
+                  <KonvaRect
+                    key={`selection-${elementId}`}
+                    x={element.x - 2}
+                    y={element.y - 2}
+                    width={(element.width || 0) + 4}
+                    height={(element.height || 0) + 4}
+                    fill="transparent"
+                    stroke="#4A90E2"
+                    strokeWidth={2}
+                    dash={[3, 3]}
+                    listening={false}
+                  />
+                );
+              })}
             </Layer>
             {/* SimpleDraw Layer - moved inside Stage */}
             <Layer>
@@ -7794,23 +8412,19 @@ export default function Canvas({ name, description, projectId }: Props) {
                     width={element.width}
                     height={element.height}
                     draggable
-                    onClick={() => setSelectedId(element.id)}
+                    onClick={() => {
+                      setSelectedId(element.id);
+                      setSelectedImageElement(element);
+                      
+                      // Position menu intelligently near the image
+                      const menuPosition = calculateMenuPosition(element);
+                      if (menuPosition) {
+                        setImageMenuPosition(menuPosition);
+                      }
+                    }}
                     onDragEnd={e => {
                       const node = e.target;
                       handleElementChange(element.id, { x: node.x(), y: node.y() });
-                    }}
-                    onTransformEnd={e => {
-                      const node = e.target;
-                      const scaleX = node.scaleX();
-                      const scaleY = node.scaleY();
-                      handleElementChange(element.id, {
-                        x: node.x(),
-                        y: node.y(),
-                        width: Math.max(10, node.width() * scaleX),
-                        height: Math.max(10, node.height() * scaleY),
-                      });
-                      node.scaleX(1);
-                      node.scaleY(1);
                     }}
                     style={{
                       transform: `rotate(${element.rotation}deg)`,
@@ -7819,12 +8433,13 @@ export default function Canvas({ name, description, projectId }: Props) {
                   />
                 );
               })}
-              {/* Single transformer for stickers */}
-              {(() => {
-                const selectedElement = elements.find(el => el.id === selectedId && el.type === 'uploaded');
-                return selectedElement ? (
+              {/* Unified transformer for all image elements */}
+              {selectedId && elements.find(el => 
+                el.id === selectedId && 
+                (el.type === 'uploaded' || el.type === 'generated-image' || el.type === 'library-asset')
+              ) && (
                   <KonvaTransformer
-                    ref={stickerTransformerRef}
+                    ref={generatedImageTransformerRef}
                     enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
                     borderEnabled={true}
                     rotateEnabled={true}
@@ -7833,28 +8448,74 @@ export default function Canvas({ name, description, projectId }: Props) {
                     anchorFill="#fff"
                     borderStroke="#E91E63"
                     borderDash={[4, 4]}
-                  />
-                ) : null;
-              })()}
-              
-              {/* Transformer for library assets (SVG elements) */}
-              {(() => {
-                const selectedLibraryElement = elements.find(el => el.id === selectedId && el.type === 'library-asset');
-                return selectedLibraryElement ? (
-                  <KonvaTransformer
-                    ref={libraryAssetTransformerRef}
-                    node={stageRef.current?.findOne(`#${selectedLibraryElement.id}`)}
-                    enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
-                    borderEnabled={true}
-                    rotateEnabled={true}
-                    anchorSize={6}
-                    anchorStroke="#E91E63"
-                    anchorFill="#fff"
-                    borderStroke="#E91E63"
-                    borderDash={[4, 4]}
-                  />
-                ) : null;
-              })()}
+                  rotationSnaps={[0, 90, 180, 270]}
+                  rotationSnapTolerance={10}
+                  onTransform={(e) => {
+                    const node = e.target;
+                    const stage = node.getStage();
+                    
+                    // Check if shift key is pressed
+                    if (stage && stage.container()) {
+                      const container = stage.container();
+                      const isShiftPressed = container._pointerPositions?.[0]?.shiftKey || 
+                                           (window.event as any)?.shiftKey ||
+                                           false;
+                      
+                      if (isShiftPressed) {
+                        const rotation = node.rotation();
+                        // Snap to nearest 90-degree increment
+                        const snapAngles = [0, 90, 180, 270, 360];
+                        let closestAngle = 0;
+                        let minDiff = Infinity;
+                        
+                        snapAngles.forEach(angle => {
+                          const diff = Math.abs(rotation - angle);
+                          const wrappedDiff = Math.abs(rotation - (angle - 360));
+                          const minCurrentDiff = Math.min(diff, wrappedDiff);
+                          
+                          if (minCurrentDiff < minDiff) {
+                            minDiff = minCurrentDiff;
+                            closestAngle = angle === 360 ? 0 : angle;
+                          }
+                        });
+                        
+                        // Apply snap if within tolerance
+                        if (minDiff <= 15) { // 15-degree tolerance
+                          node.rotation(closestAngle);
+                        }
+                      }
+                    }
+                  }}
+                  onTransformEnd={(e) => {
+                    const node = e.target;
+                    const scaleX = node.scaleX();
+                    const scaleY = node.scaleY();
+                    const rotation = node.rotation();
+                    
+                    // Find the selected element regardless of type
+                    const selectedElement = elements.find(el => 
+                      el.id === selectedId && 
+                      (el.type === 'uploaded' || el.type === 'generated-image' || el.type === 'library-asset')
+                    );
+                    
+                    if (selectedElement) {
+                      handleElementChange(selectedElement.id, {
+                        x: node.x(),
+                        y: node.y(),
+                        width: Math.max(10, node.width() * scaleX),
+                        height: Math.max(10, node.height() * scaleY),
+                        rotation: rotation,
+                      });
+                      node.scaleX(1);
+                      node.scaleY(1);
+                    }
+                  }}
+                />
+              )}
+            </Layer>
+            {/* Layer for generated images (AI renders) */}
+            <Layer>
+              {elements.filter(el => el.type === 'generated-image').map(renderElement)}
             </Layer>
             {/* Render mind map nodes and connections */}
             <Layer>
@@ -8022,6 +8683,17 @@ export default function Canvas({ name, description, projectId }: Props) {
               ))}
             </Layer>
           </Stage>
+          
+          {/* Drag and Drop Overlay */}
+          {isDragOverCanvas && (
+            <div className="absolute inset-0 bg-blue-500 bg-opacity-20 border-4 border-blue-500 border-dashed flex items-center justify-center z-50 pointer-events-none">
+              <div className="bg-white rounded-lg shadow-lg p-6 text-center">
+                <div className="text-2xl mb-2">📁</div>
+                <div className="text-lg font-semibold text-gray-800">Drop images here</div>
+                <div className="text-sm text-gray-600">Images will be added to the canvas</div>
+              </div>
+            </div>
+          )}
       </div>
 
         {/* Tools Panel */}
@@ -8049,7 +8721,7 @@ export default function Canvas({ name, description, projectId }: Props) {
       {!isChatOpen && (
         <button
           onClick={() => setIsChatOpen(true)}
-          className="fixed bottom-4 right-4 p-3 bg-white border border-[#E0DAF3] hover:bg-gray-50 text-[#814ADA] rounded-full shadow-lg transition-colors pointer-events-auto"
+          className="ai-chat-toggle fixed bottom-4 right-4 p-3 bg-white border border-[#E0DAF3] hover:bg-gray-50 text-[#814ADA] rounded-full shadow-lg transition-colors pointer-events-auto"
         >
           <div className="w-6 h-6 relative">
             <NextImage
@@ -8073,6 +8745,7 @@ export default function Canvas({ name, description, projectId }: Props) {
           canvasPosition={position}
           canvasScale={scale}
           onScreenshotModeChange={handleScreenshotModeChange}
+          isOnboardingActive={showOnboarding}
         />
       )}
 
@@ -8234,51 +8907,137 @@ export default function Canvas({ name, description, projectId }: Props) {
 
       {/* Zoom Controls */}
       <div className="fixed bottom-4 left-4 flex items-center gap-2 z-50">
-        {/* Zoom Out Button */}
-        <button
-          onClick={() => {
-            const newScale = Math.max(0.1, scale / 1.2);
-            setScale(newScale);
-          }}
-          disabled={scale <= 0.1}
-          className="p-2 bg-white border border-[#E0DAF3] hover:bg-gray-50 text-[#814ADA] rounded-lg shadow-lg transition-colors pointer-events-auto disabled:opacity-50 disabled:cursor-not-allowed"
-          title="Zoom Out"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
-          </svg>
-        </button>
-        
-        {/* Zoom Percentage Indicator */}
-        <div className="px-3 py-2 bg-white border border-[#E0DAF3] rounded-lg shadow-lg text-sm font-medium text-gray-700 pointer-events-auto min-w-[60px] text-center">
-          {Math.round(scale * 100)}%
-        </div>
-        
-        {/* Zoom In Button */}
-        <button
-          onClick={() => {
-            const newScale = Math.min(5, scale * 1.2);
-            setScale(newScale);
-          }}
-          disabled={scale >= 5}
-          className="p-2 bg-white border border-[#E0DAF3] hover:bg-gray-50 text-[#814ADA] rounded-lg shadow-lg transition-colors pointer-events-auto disabled:opacity-50 disabled:cursor-not-allowed"
-          title="Zoom In"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-        </button>
+        {/* Zoom Controls */}
+        <div className="flex items-center gap-2">
+          {/* Zoom Out Button */}
+          <button
+            onClick={() => {
+              const newScale = Math.max(0.1, scale / 1.2);
+              setScale(newScale);
+            }}
+            disabled={scale <= 0.1}
+            className="p-2 bg-white border border-[#E0DAF3] hover:bg-gray-50 text-[#814ADA] rounded-lg shadow-lg transition-colors pointer-events-auto disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Zoom Out"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+            </svg>
+          </button>
+          
+          {/* Zoom Percentage Indicator */}
+          <div className="px-3 py-2 bg-white border border-[#E0DAF3] rounded-lg shadow-lg text-sm font-medium text-gray-700 pointer-events-auto min-w-[60px] text-center">
+            {Math.round(scale * 100)}%
+          </div>
+          
+          {/* Zoom In Button */}
+          <button
+            onClick={() => {
+              const newScale = Math.min(5, scale * 1.2);
+              setScale(newScale);
+            }}
+            disabled={scale >= 5}
+            className="p-2 bg-white border border-[#E0DAF3] hover:bg-gray-50 text-[#814ADA] rounded-lg shadow-lg transition-colors pointer-events-auto disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Zoom In"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+          </button>
 
-      {/* Reset View Button */}
-      <button
-        onClick={resetView}
-          className="p-2 bg-white border border-[#E0DAF3] hover:bg-gray-50 text-[#814ADA] rounded-lg shadow-lg transition-colors pointer-events-auto"
-          title="Reset View"
-      >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-        </svg>
-      </button>
+          {/* Reset View Button */}
+          <button
+            onClick={resetView}
+            className="p-2 bg-white border border-[#E0DAF3] hover:bg-gray-50 text-[#814ADA] rounded-lg shadow-lg transition-colors pointer-events-auto"
+            title="Reset View"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Scale Indicator */}
+        <div className="pointer-events-auto max-w-[200px]">
+          <div className="flex flex-col gap-0.5">
+            {/* Scale Bar */}
+            <div className="flex items-end">
+              {(() => {
+                // Calculate the grid size in current view (50 pixels = 1 meter at 1x scale)
+                const gridPixelsAtCurrentZoom = GRID_SIZE_PIXELS * scale;
+                
+                // Choose appropriate intervals based on zoom level, keeping max width around 120px
+                let intervals: { meters: number; segments: number }[];
+                
+                if (gridPixelsAtCurrentZoom >= 150) {
+                  // Very zoomed in: show 0.5m segments
+                  intervals = [{ meters: 0.5, segments: 2 }];
+                } else if (gridPixelsAtCurrentZoom >= 60) {
+                  // Medium zoom: show 1m segments  
+                  intervals = [{ meters: 1, segments: 2 }];
+                } else if (gridPixelsAtCurrentZoom >= 30) {
+                  // Normal zoom: show 2m segments
+                  intervals = [{ meters: 2, segments: 2 }];
+                } else if (gridPixelsAtCurrentZoom >= 15) {
+                  // Zoomed out: show 5m segments
+                  intervals = [{ meters: 5, segments: 2 }];
+                } else {
+                  // Very zoomed out: show 10m segments
+                  intervals = [{ meters: 10, segments: 2 }];
+                }
+                
+                const { meters, segments } = intervals[0];
+                const segmentPixels = (meters * 1000 / SCALE_MM_PER_PIXEL) * scale;
+                
+                // Cap the maximum width to keep it reasonable
+                const cappedSegmentPixels = Math.min(segmentPixels, 60);
+                const totalWidth = cappedSegmentPixels * segments;
+                
+                return (
+                  <div className="flex flex-col relative">
+                    {/* Scale numbers */}
+                    <div className="relative text-xs text-gray-700 mb-0.5 h-4">
+                      <span className="absolute left-0">0</span>
+                      <span className="absolute right-0">
+                        {segments * meters >= 1000 ? 
+                          `${(segments * meters / 1000).toFixed(1)}km` : 
+                          `${segments * meters}m`
+                        }
+                      </span>
+                    </div>
+                    
+                    {/* Main scale bar */}
+                    <div className="flex">
+                      {Array.from({ length: segments }, (_, i) => (
+                        <div key={i} className="flex flex-col items-start">
+                          {/* Alternating black/white segments for better visibility */}
+                          <div 
+                            className={`h-1.5 border border-gray-800 ${
+                              i % 2 === 0 ? 'bg-gray-800' : 'bg-white'
+                            }`}
+                            style={{ width: `${cappedSegmentPixels}px` }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    
+                    {/* Tick marks */}
+                    <div className="flex">
+                      {Array.from({ length: segments + 1 }, (_, i) => (
+                        <div 
+                          key={i} 
+                          className="h-1 w-0.5 bg-gray-800"
+                          style={{ 
+                            marginLeft: i === 0 ? '0' : `${cappedSegmentPixels - 1}px` 
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
       </div>
 
       {boardToDelete && (
@@ -8543,6 +9302,26 @@ export default function Canvas({ name, description, projectId }: Props) {
           selectedTool={spatialPlanningTool}
           onToolSelect={handleSpatialPlanningToolSelect}
           onClose={handleSpatialPlanningMenuClose}
+        />
+      )}
+
+      {/* Image Menu (for both uploaded and generated images) */}
+      {selectedImageElement && imageMenuPosition && (
+        <ImageMenu
+          position={imageMenuPosition}
+          imageName={selectedImageElement.type === 'uploaded' ? selectedImageElement.alt : selectedImageElement.prompt}
+          imageUrl={selectedImageElement.type === 'uploaded' 
+            ? (selectedImageElement.image instanceof HTMLImageElement ? selectedImageElement.image.src : '')
+            : selectedImageElement.src
+          }
+          imageType={selectedImageElement.type === 'uploaded' ? 'uploaded' : 'generated'}
+          onCrop={handleImageCrop}
+          onDownload={handleImageDownload}
+          onDelete={handleImageDelete}
+          onClose={handleImageMenuClose}
+          onPositionChange={setImageMenuPosition}
+          onRegenerate={selectedImageElement.type === 'generated-image' ? handleImageRegenerate : undefined}
+          onCopyPrompt={selectedImageElement.type === 'generated-image' ? handleImageCopyPrompt : undefined}
         />
       )}
 
@@ -9074,6 +9853,13 @@ export default function Canvas({ name, description, projectId }: Props) {
           onDelete={() => handleDeleteElement(selectedTable.id)}
         />
       )}
+
+      {/* Onboarding Tutorial */}
+      <OnboardingTutorial
+        isOpen={showOnboarding}
+        onClose={() => setShowOnboarding(false)}
+        onComplete={handleOnboardingComplete}
+      />
     </div>
   );
   } catch (error) {

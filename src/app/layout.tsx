@@ -5,6 +5,7 @@ import { Providers } from './providers'
 import ClientScrollProvider from '@/components/ClientScrollProvider'
 import AuthProvider from '@/components/AuthProvider'
 import { NotificationProvider } from '@/contexts/NotificationContext'
+import { RenderTaskProvider } from '@/contexts/RenderTaskContext'
 import ToastContainer from '@/components/notifications/ToastContainer'
 
 // Load Google Fonts
@@ -52,9 +53,9 @@ export const metadata: Metadata = {
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
     <html lang="en" className={`${inter.variable} ${poppins.variable} ${lato.variable} ${cabin.variable} ${roboto.variable} ${caveat.variable}`}>
       <head>
@@ -64,12 +65,14 @@ export default function RootLayout({
         <AuthProvider>
           <ClientScrollProvider>
             <NotificationProvider>
+              <RenderTaskProvider>
               <Providers>{children}</Providers>
               <ToastContainer />
+              </RenderTaskProvider>
             </NotificationProvider>
           </ClientScrollProvider>
         </AuthProvider>
       </body>
     </html>
-  )
+  );
 }

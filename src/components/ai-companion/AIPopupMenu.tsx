@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { useRenderTasks } from '@/contexts/RenderTaskContext';
 
 const TOOL_OPTIONS = [
   { value: 'interior', label: 'Interior AI' },
@@ -14,24 +15,56 @@ interface AIPopupMenuProps {
 export default function AIPopupMenu({ onAddToCanvas }: AIPopupMenuProps) {
   const [mode, setMode] = useState<'render' | 'refine'>('render');
   const [selectedTool, setSelectedTool] = useState(TOOL_OPTIONS[0].value);
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [prompt, setPrompt] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([]);
+  const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
+
+  const { addTask, updateTask } = useRenderTasks();
+
+  // Update image previews when uploadedFiles changes
+  React.useEffect(() => {
+    // Clean up previous URLs
+    imagePreviewUrls.forEach(url => URL.revokeObjectURL(url));
+    
+    if (uploadedFiles.length > 0) {
+      const newUrls = uploadedFiles.map(file => {
+        const isImage = file.type.startsWith('image/') || /\.(png|jpe?g)$/i.test(file.name);
+        return isImage ? URL.createObjectURL(file) : null;
+      }).filter(Boolean) as string[];
+      
+      setImagePreviewUrls(newUrls);
+      
+      // Cleanup function
+      return () => {
+        newUrls.forEach(url => URL.revokeObjectURL(url));
+      };
+    } else {
+      setImagePreviewUrls([]);
+    }
+  }, [uploadedFiles]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      setUploadedFile(e.target.files[0]);
+      const newFiles = Array.from(e.target.files);
+      setUploadedFiles(prev => [...prev, ...newFiles]);
     }
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      setUploadedFile(e.dataTransfer.files[0]);
+      const newFiles = Array.from(e.dataTransfer.files);
+      setUploadedFiles(prev => [...prev, ...newFiles]);
     }
+  };
+
+  const removeFile = (index: number) => {
+    setUploadedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -40,34 +73,78 @@ export default function AIPopupMenu({ onAddToCanvas }: AIPopupMenuProps) {
 
   const handleGenerate = async () => {
     setError(null);
-    if (!uploadedFile || !prompt.trim()) {
-      setError('Please provide both an image and a prompt.');
+    if (uploadedFiles.length === 0 || !prompt.trim()) {
+      setError('Please provide at least one image and a prompt.');
       return;
     }
+
+    console.log('🎬 AIPopupMenu: Generate clicked with prompt:', prompt);
+    console.log('🎬 AIPopupMenu: About to add render task with', uploadedFiles.length, 'images');
+
+    // Use first image for progress tracker thumbnail
+    const uploadedImageUrl = imagePreviewUrls.length > 0 ? imagePreviewUrls[0] : URL.createObjectURL(uploadedFiles[0]);
+
+    // Add task to render tracker with uploaded image
+    const taskId = addTask(prompt, 198000, uploadedImageUrl); // 3 minutes 18 seconds
+    console.log('🎬 AIPopupMenu: Added render task with ID:', taskId);
+    
     setLoading(true);
+    setCurrentTaskId(taskId);
+    
+    // Update task to processing status
+    updateTask(taskId, { status: 'processing' });
+    
     try {
       const formData = new FormData();
       formData.append('prompt', prompt);
-      formData.append('file', uploadedFile);
-      const res = await fetch('/api/generate-image-canvas', {
+      
+      // Add all uploaded images to the form data
+      uploadedFiles.forEach((file, index) => {
+        formData.append(`image${index}`, file);
+      });
+      formData.append('imageCount', uploadedFiles.length.toString());
+      
+      const res = await fetch('/api/chatgpt-proxy/image', {
         method: 'POST',
         body: formData,
       });
+      
       if (!res.ok) {
         const data = await res.json();
+        updateTask(taskId, { 
+          status: 'error', 
+          error: data.error || 'Failed to generate image.'
+        });
         setError(data.error || 'Failed to generate image.');
         setLoading(false);
         return;
       }
+      
       const data = await res.json();
-      const imageUrl = data.imageUrl || data.image;
+      const imageUrl = data.image;
+      
+      updateTask(taskId, { 
+        status: 'completed', 
+        imageUrl: imageUrl,
+        completedAt: new Date()
+      });
+      
       if (onAddToCanvas && imageUrl) {
         onAddToCanvas(imageUrl, prompt);
       }
+      
+      setError(null);
       setLoading(false);
+      setCurrentTaskId(null);
+      
     } catch (err: any) {
+      updateTask(taskId, { 
+        status: 'error', 
+        error: err.message || 'Unknown error occurred.'
+      });
       setError(err.message || 'Unknown error occurred.');
       setLoading(false);
+      setCurrentTaskId(null);
     }
   };
 
@@ -104,32 +181,56 @@ export default function AIPopupMenu({ onAddToCanvas }: AIPopupMenuProps) {
 
       {/* File Upload Area */}
       <div
-        className="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg p-6 mb-4 bg-gray-50 hover:bg-purple-50 transition-colors cursor-pointer"
+        className={`flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg mb-4 bg-gray-50 hover:bg-purple-50 transition-colors cursor-pointer ${
+          uploadedFiles.length > 0 ? 'p-2' : 'p-6'
+        }`}
         onDrop={handleDrop}
         onDragOver={handleDragOver}
         onClick={() => fileInputRef.current?.click()}
-        style={{ minHeight: 120 }}
       >
         <input
           ref={fileInputRef}
           type="file"
+          multiple
+          accept="image/*"
           className="hidden"
           onChange={handleFileChange}
         />
-        {uploadedFile ? (
-          <div className="flex flex-col items-center gap-2">
-            <span className="text-gray-700 text-sm font-medium">{uploadedFile.name}</span>
+        {uploadedFiles.length > 0 ? (
+          <div className="w-full">
+            <div className="flex flex-wrap gap-2 mb-3">
+              {uploadedFiles.map((file, index) => (
+                <div key={index} className="relative">
+                  {imagePreviewUrls[index] ? (
+              <img
+                      src={imagePreviewUrls[index]}
+                      alt={`Preview ${index + 1}`}
+                      className="w-20 h-20 object-cover rounded border"
+              />
+            ) : (
+                    <div className="w-20 h-20 bg-gray-200 rounded border flex items-center justify-center">
+                      <span className="text-xs text-gray-500 text-center px-1">{file.name}</span>
+                    </div>
+            )}
             <button
-              className="text-xs text-red-500 hover:text-red-700 underline"
-              onClick={e => { e.stopPropagation(); setUploadedFile(null); }}
+                    className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center hover:bg-red-600"
+                    onClick={e => { e.stopPropagation(); removeFile(index); }}
             >
-              Remove
+                    ×
             </button>
+                </div>
+              ))}
+            </div>
+            <div className="text-center">
+              <span className="text-sm text-gray-600">{uploadedFiles.length} image{uploadedFiles.length > 1 ? 's' : ''} uploaded</span>
+              <br />
+              <span className="text-xs text-gray-400">Click to add more images</span>
+            </div>
           </div>
         ) : (
           <>
             <span className="text-gray-500 text-base mb-2">Drag & drop or click to upload</span>
-            <span className="text-xs text-gray-400">(Image, Sketch, or 3D Model)</span>
+            <span className="text-xs text-gray-400">(Multiple images supported)</span>
           </>
         )}
       </div>
@@ -178,8 +279,21 @@ export default function AIPopupMenu({ onAddToCanvas }: AIPopupMenuProps) {
         onClick={handleGenerate}
         disabled={loading}
       >
-        {loading ? 'Generating...' : 'Generate'}
+        {loading ? (
+          <div className="flex items-center justify-center gap-2">
+            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            Generating...
+          </div>
+        ) : (
+          'Generate'
+        )}
       </button>
+      
+      {currentTaskId && (
+        <div className="mt-2 text-xs text-center text-gray-500">
+          Track progress in the header taskbar ↗️
+        </div>
+      )}
     </div>
   );
 } 

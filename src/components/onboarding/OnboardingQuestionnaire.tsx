@@ -25,12 +25,12 @@ const roleOptions = [
 ];
 
 const useCaseOptions = [
-  'Client Presentations',
-  'School Assignments',
-  'Inspiration',
-  'Portfolio',
-  'Collaboration',
-  'Other'
+  'Student',
+  'Large company',
+  'Personal',
+  'Small business',
+  'Non-profit or charity',
+  'Teacher'
 ];
 
 const styleOptions = [
@@ -67,22 +67,10 @@ const steps = [
     type: 'useCase',
   },
   {
-    label: 'Preferred Style',
-    description: 'What style do you prefer?',
-    options: styleOptions,
-    type: 'style',
-  },
-  {
     label: 'Experience Level',
     description: 'What is your design experience?',
     options: experienceOptions,
     type: 'experience',
-  },
-  {
-    label: 'Tips Preference',
-    description: 'Would you like to receive tips and guidance?',
-    options: tipsOptions,
-    type: 'tips',
   },
 ];
 

@@ -137,17 +137,24 @@ export default function CommunityGallery() {
         </button>
       </div>
       
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 w-full overflow-visible pb-4">
-        {images.slice(0, 6).map((image, index) => {
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 w-full overflow-visible pb-4">
+        {images.slice(0, 8).map((image, index) => {
+          // Create a more balanced grid layout
           let gridSpan;
+          let aspectRatio;
+          
           if (index === 0) {
-            gridSpan = 'sm:col-span-2 sm:row-span-2';
+            // First image takes 2x2 space (featured)
+            gridSpan = 'col-span-2 row-span-2';
+            aspectRatio = '1/1';
           } else if (index === 1 || index === 2) {
-            gridSpan = 'col-span-1 row-span-1';
-          } else if (index === 3) {
-            gridSpan = 'sm:col-span-2 row-span-1';
+            // Second and third images are vertical (1x2)
+            gridSpan = 'col-span-1 row-span-2';
+            aspectRatio = '1/2';
           } else {
+            // Remaining images are standard squares (1x1)
             gridSpan = 'col-span-1 row-span-1';
+            aspectRatio = '1/1';
           }
 
           return (
@@ -155,10 +162,8 @@ export default function CommunityGallery() {
               key={image.id} 
               className={`${gridSpan} group relative overflow-hidden rounded-xl shadow-sm hover:shadow-md transition-shadow duration-300 touch-manipulation`}
               style={{
-                aspectRatio: index === 0 ? '2/2' : 
-                             index === 3 ? '2/1' : '1/1',
-                minHeight: index === 0 ? '180px' : '100px',
-                maxHeight: '320px'
+                aspectRatio: aspectRatio,
+                minHeight: '120px'
               }}
             >
               <Image

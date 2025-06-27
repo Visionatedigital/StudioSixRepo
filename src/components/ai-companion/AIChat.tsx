@@ -10,6 +10,7 @@ import type { Components } from 'react-markdown';
 import { ImageGenerationService } from '@/lib/services/imageGeneration';
 import { X } from 'lucide-react';
 import { Icon } from '@/components/Icons';
+import { useRenderTasks } from '@/contexts/RenderTaskContext';
 
 interface MarkdownProps {
   children: ReactNode;
@@ -20,18 +21,11 @@ interface Message {
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: Date;
-  hasGenerateAction?: boolean;
   isGeneratedImage?: boolean;
-  selectedElement?: any;
   prompt?: string;
   sources?: {
     name: string;
     path: string;
-  }[];
-  screenshots?: {
-    id: string;
-    dataUrl: string;
-    area?: { x: number; y: number; width: number; height: number };
   }[];
 }
 
@@ -50,11 +44,90 @@ interface AIChatProps {
   canvasPosition?: { x: number; y: number }; // Canvas pan position
   canvasScale?: number; // Canvas zoom scale
   onScreenshotModeChange?: (isActive: boolean) => void; // Notify parent about screenshot mode
+  isOnboardingActive?: boolean; // Whether onboarding tutorial is active
 }
 
-export default function AIChat({ onClose, canvasElements, onAddToCanvas, projectId, stageRef, canvasPosition = { x: 0, y: 0 }, canvasScale = 1, onScreenshotModeChange }: AIChatProps) {
+export default function AIChat({ onClose, canvasElements, onAddToCanvas, projectId, stageRef, canvasPosition = { x: 0, y: 0 }, canvasScale = 1, onScreenshotModeChange, isOnboardingActive = false }: AIChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
+
+  // Debug logging for onboarding state changes
+  const currentZIndex = isOnboardingActive ? 'z-0' : 'z-50';
+  console.log('AIChat render:', {
+    isOnboardingActive,
+    zIndex: currentZIndex,
+    timestamp: new Date().toISOString()
+  });
+
+  useEffect(() => {
+    console.log('AIChat onboarding state changed:', {
+      isOnboardingActive,
+      zIndex: isOnboardingActive ? 'z-0' : 'z-50',
+      timestamp: new Date().toISOString()
+    });
+  }, [isOnboardingActive]);
+
+  // Debug positioning and styling
+  useEffect(() => {
+    const chatPanel = document.querySelector('.ai-chat-panel');
+    if (chatPanel) {
+      const rect = chatPanel.getBoundingClientRect();
+      const computedStyle = window.getComputedStyle(chatPanel);
+      
+      console.log('AIChat positioning debug:', {
+        isOnboardingActive,
+        appliedZIndex: currentZIndex,
+        computedZIndex: computedStyle.zIndex,
+        position: {
+          top: rect.top,
+          left: rect.left,
+          right: rect.right,
+          bottom: rect.bottom,
+          width: rect.width,
+          height: rect.height
+        },
+        styling: {
+          position: computedStyle.position,
+          transform: computedStyle.transform,
+          visibility: computedStyle.visibility,
+          display: computedStyle.display,
+          zIndex: computedStyle.zIndex
+        },
+        cssClasses: chatPanel.className,
+        hasOnboardingHighlight: chatPanel.classList.contains('onboarding-highlight'),
+        allClasses: Array.from(chatPanel.classList),
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  // Also debug when isOnboardingActive specifically changes
+  useEffect(() => {
+    console.log('AIChat: isOnboardingActive changed to:', isOnboardingActive);
+    
+    setTimeout(() => {
+      const chatPanel = document.querySelector('.ai-chat-panel');
+      if (chatPanel) {
+        const rect = chatPanel.getBoundingClientRect();
+        const computedStyle = window.getComputedStyle(chatPanel);
+        
+        console.log('AIChat positioning after onboarding state change:', {
+          isOnboardingActive,
+          newZIndex: isOnboardingActive ? 'z-0' : 'z-50',
+          computedZIndex: computedStyle.zIndex,
+          position: {
+            top: rect.top,
+            left: rect.left,
+            right: rect.right,
+            bottom: rect.bottom
+          },
+          cssClasses: chatPanel.className,
+          hasHighlight: chatPanel.classList.contains('onboarding-highlight'),
+          timestamp: new Date().toISOString()
+        });
+      }
+    }, 100);
+  }, [isOnboardingActive]);
   const [isLoading, setIsLoading] = useState(false);
   const [screenshots, setScreenshots] = useState<Screenshot[]>([]);
   const [isCapturingScreenshot, setIsCapturingScreenshot] = useState(false);
@@ -63,33 +136,107 @@ export default function AIChat({ onClose, canvasElements, onAddToCanvas, project
   const [selectionEnd, setSelectionEnd] = useState<{ x: number; y: number } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [generatingImage, setGeneratingImage] = useState(false);
-  const [generatedImage, setGeneratedImage] = useState<string | null>(null);
-  const [showGenerateButton, setShowGenerateButton] = useState(false);
+  const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
+  
+  // Assistant name state
+  const [assistantName, setAssistantName] = useState('AI Assistant');
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editingNameValue, setEditingNameValue] = useState('');
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  
+  const { addTask, updateTask } = useRenderTasks();
 
-  // Load chat history when component mounts
+  // Focus on name input when editing starts
   useEffect(() => {
-    const loadChatHistory = async () => {
+    if (isEditingName && nameInputRef.current) {
+      nameInputRef.current.focus();
+      nameInputRef.current.select();
+    }
+  }, [isEditingName]);
+
+  // Handle name editing
+  const handleNameEdit = () => {
+    setEditingNameValue(assistantName);
+    setIsEditingName(true);
+  };
+
+  const handleNameSave = async () => {
+    const newName = editingNameValue.trim();
+    if (!newName) {
+      setIsEditingName(false);
+      setEditingNameValue('');
+      return;
+    }
+
+    setAssistantName(newName);
+    setIsEditingName(false);
+    setEditingNameValue('');
+
+    // Save to database if projectId is available
+    if (projectId) {
+      try {
+        const response = await fetch(`/api/projects/${projectId}/assistant-name`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ assistantName: newName }),
+        });
+
+        if (!response.ok) {
+          console.error('Failed to save assistant name');
+          // Could show a notification here if needed
+        }
+      } catch (error) {
+        console.error('Error saving assistant name:', error);
+        // Could show a notification here if needed
+      }
+    }
+  };
+
+  const handleNameCancel = () => {
+    setIsEditingName(false);
+    setEditingNameValue('');
+  };
+
+  const handleNameKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleNameSave();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      handleNameCancel();
+    }
+  };
+
+  // Load chat history and assistant name when component mounts
+  useEffect(() => {
+    const loadProjectData = async () => {
       if (!projectId) return;
 
       try {
-        const response = await fetch(`/api/projects/${projectId}/messages`);
-        if (!response.ok) throw new Error('Failed to load chat history');
-        
-        const history = await response.json();
-        setMessages(history.map((msg: any) => ({
-          id: msg.id,
-          role: msg.role,
-          content: msg.content,
-          timestamp: new Date(msg.createdAt),
-          hasGenerateAction: msg.hasGenerateAction
-        })));
+        // Load chat history
+        const historyResponse = await fetch(`/api/projects/${projectId}/messages`);
+        if (historyResponse.ok) {
+          const history = await historyResponse.json();
+          setMessages(history.map((msg: any) => ({
+            id: msg.id,
+            role: msg.role,
+            content: msg.content,
+            timestamp: new Date(msg.createdAt)
+          })));
+        }
+
+        // Load assistant name
+        const nameResponse = await fetch(`/api/projects/${projectId}/assistant-name`);
+        if (nameResponse.ok) {
+          const nameData = await nameResponse.json();
+          setAssistantName(nameData.assistantName);
+        }
       } catch (error) {
-        console.error('Error loading chat history:', error);
+        console.error('Error loading project data:', error);
       }
     };
 
-    loadChatHistory();
+    loadProjectData();
   }, [projectId]);
 
   const scrollToBottom = () => {
@@ -286,7 +433,7 @@ export default function AIChat({ onClose, canvasElements, onAddToCanvas, project
               
               setScreenshots(prev => [...prev, newScreenshot]);
               console.log('[SCREENSHOT] Alternative screenshot added successfully');
-      } else {
+            } else {
               console.error('[SCREENSHOT] Alternative cropped image still appears empty');
             }
           };
@@ -559,317 +706,124 @@ export default function AIChat({ onClose, canvasElements, onAddToCanvas, project
     ];
   };
 
-  const handleGenerate = async () => {
-    if (!onAddToCanvas) return;
-    
-    setIsLoading(true);
-    setGeneratingImage(true);
-    setShowGenerateButton(false); // Hide button immediately to prevent double-clicks
-    
-    try {
-      // Get the last message with design suggestions
-      const lastAssistantMessage = [...messages].reverse().find(m => 
-        m.role === 'assistant' && m.hasGenerateAction
-      );
-      
-      if (!lastAssistantMessage) {
-        throw new Error('No design suggestions found');
-      }
-      
-      // Show a generating message
-      const generatingMessage: Message = {
-        id: Date.now().toString(),
-        role: 'assistant',
-        content: 'Generating an improved design based on the suggestions... This may take a moment.',
-        timestamp: new Date(),
-      };
-      
-      setMessages(prev => [...prev, generatingMessage]);
-      
-      // Find the selected element with image
-      const selectedElement = lastAssistantMessage.selectedElement;
-      if (!selectedElement) {
-        throw new Error('No element selected. Please select an image element first.');
-      }
-      
-      // Get the image data from the correct property
-      let imageUrl = null;
-      
-      // Handle different element types and image data structures
-      if (selectedElement.type === 'image' || selectedElement.type === 'uploaded' || selectedElement.type === 'generated-image') {
-        // Try different possible locations for the image data
-        imageUrl = selectedElement.src || 
-                  selectedElement.image?.src || 
-                  selectedElement.image ||
-                  (selectedElement as any).imageData;
-                  
-        // If the image is a base64 string without the data URL prefix, add it
-        if (imageUrl && !imageUrl.startsWith('data:image') && !imageUrl.startsWith('http')) {
-          imageUrl = `data:image/png;base64,${imageUrl}`;
-        }
-      }
-      
-      if (!imageUrl) {
-        console.error('No image data found in selected element:', selectedElement);
-        throw new Error('Selected element has no image data. Please select a different image element.');
-      }
-      
-      // Call the image generation API
-      const response = await fetch('/api/generate-image', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: 'Improve the design based on the suggestions',
-          imageUrl,
-          selectedElement,
-          aiResponse: lastAssistantMessage.content
-        })
-      });
-      
-      if (!response.ok) {
-        // Get detailed error information
-        try {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Failed to generate image');
-        } catch (jsonError) {
-          throw new Error(`Failed to generate image: ${response.status} ${response.statusText}`);
-        }
-      }
-      
-      const data = await response.json();
-      
-      // Remove the generating message
-      setMessages(prev => prev.filter(msg => msg.id !== generatingMessage.id));
-      
-      // Create a message with the generated image
-      const generatedMessage: Message = {
-        id: Date.now().toString(),
-        role: 'assistant',
-        content: `Here's the generated design based on the suggestions:\n\n${data.imageData}`,
-        timestamp: new Date(),
-        isGeneratedImage: true,
-        prompt: data.prompt
-      };
-      
-      setMessages(prev => [...prev, generatedMessage]);
-      
-      // Save the message to the database if projectId is available
-      if (projectId) {
-        try {
-          await fetch(`/api/projects/${projectId}/messages`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              content: `Here's the generated design based on the suggestions:\n\n${data.imageData}`, 
-              role: 'assistant',
-              isGeneratedImage: true
-            })
-          });
-        } catch (error) {
-          console.error('Error saving generated image message:', error);
-        }
-      }
-    } catch (error: any) {
-      console.error('Error generating image:', error);
-      
-      // Show a more descriptive error message
-      const errorMessage: Message = {
-        id: Date.now().toString(),
-        role: 'assistant',
-        content: `Sorry, I encountered an error while generating the image: ${error.message || 'Unknown error'}. Please try again or select a different image element.`,
-        timestamp: new Date()
-      };
-      
-      setMessages(prev => [...prev, errorMessage]);
-      
-      // Show the generate button again so they can retry
-      setTimeout(() => setShowGenerateButton(true), 3000);
-    } finally {
-      setIsLoading(false);
-      setGeneratingImage(false);
-    }
-  };
 
-  const checkForGenerateAction = (content: string): boolean => {
-    const lowerContent = content.toLowerCase();
-    // Check for various suggestion patterns
-    const suggestivePatterns = [
-      'would you like me to generate',
-      'would you like to see',
-      'shall i create',
-      'i can show you',
-      'i can generate',
-      'would you like me to show',
-      'i can create',
-      'shall i show you',
-      'would you like a visualization',
-      'shall i create a new version',
-      'would you like me to create'
-    ];
-    
-    const designPatterns = [
-      'design',
-      'version',
-      'changes',
-      'improvement',
-      'modification',
-      'update',
-      'style',
-      'look',
-      'visualization'
-    ];
 
-    // Check if the message ends with a call-to-action
-    const lastParagraph = content.split('\n\n').pop()?.toLowerCase() || '';
-    const hasCallToAction = suggestivePatterns.some(pattern => 
-      lastParagraph.includes(pattern)
-    );
 
-    const hasDesignReference = designPatterns.some(pattern =>
-      lowerContent.includes(pattern)
-    );
 
-    // Also check if the message contains suggestions for improvements
-    const containsSuggestions = (
-      lowerContent.includes('suggest') ||
-      lowerContent.includes('could be') ||
-      lowerContent.includes('recommend') ||
-      lowerContent.includes('improve') ||
-      lowerContent.includes('enhance')
-    );
-
-    // Show the button if the last paragraph contains a call-to-action
-    // or if the message contains both suggestions and design references
-    return hasCallToAction || (containsSuggestions && hasDesignReference);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!input.trim() || isLoading) return;
+    if (!input.trim()) return;
 
-    const userMessage = input.trim();
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: input,
+      timestamp: new Date(),
+    };
+    setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsLoading(true);
 
-    // Add user message to chat
-    const userMsg: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: userMessage,
-      timestamp: new Date()
-    };
-    setMessages(prev => [...prev, userMsg]);
-
-    // Save user message to database
+    // Save user message to project history if projectId is available
     if (projectId) {
       try {
         await fetch(`/api/projects/${projectId}/messages`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content: userMessage, role: 'user' })
+          body: JSON.stringify({
+            role: userMessage.role,
+            content: userMessage.content
+          }),
         });
-      } catch (error) {
-        console.error('Error saving user message:', error);
+      } catch (saveError) {
+        console.error('Failed to save user message to project history:', saveError);
       }
     }
 
-    // Include screenshots in the message if available
-    const hasScreenshots = screenshots.length > 0;
-
+    // --- Text Chat Flow using OpenAI API ---
     try {
-      // Create a simplified message array with just the essential data
-      const simplifiedMessages = messages.map(msg => ({
+      // Prepare messages for OpenAI API
+      const apiMessages = messages.map(msg => ({
         role: msg.role,
         content: msg.content
       }));
-      
-      // Add the new user message
-      simplifiedMessages.push({
+
+      // Add the current user message
+      apiMessages.push({
         role: 'user',
-        content: userMessage
+        content: userMessage.content
       });
-      
-      // Prepare screenshots data for API
-      const screenshotsData = hasScreenshots ? getScreenshotsForAPI() : null;
-      
-      console.log('Sending request with screenshots:', screenshotsData);
-      
+
+      // Prepare screenshots data if any
+      const screenshotsData = screenshots.map(screenshot => ({
+        id: screenshot.id,
+        data: screenshot.dataUrl,
+        area: screenshot.area
+      }));
+
       const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: simplifiedMessages,
-          screenshots: screenshotsData
-        })
-      });
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          messages: apiMessages,
+          screenshots: screenshotsData.length > 0 ? screenshotsData : undefined
+        }),
+        });
 
-      if (!response.ok) {
-        // Get detailed error information if available
-        try {
+        if (!response.ok) {
           const errorData = await response.json();
-          console.error('API error details:', errorData);
-          throw new Error(errorData.error || 'Failed to get AI response');
-        } catch (jsonError) {
-          // If we can't parse the error as JSON, throw with the status text
-          throw new Error(`Failed to get AI response: ${response.status} ${response.statusText}`);
+          throw new Error(errorData.error || 'Failed to get response from AI assistant');
         }
-      }
 
-      const data = await response.json();
-      const assistantMessage: Message = {
-        id: Date.now().toString(),
-        role: 'assistant',
-        content: data.content || "I'm not sure how to respond to that.",
-        timestamp: new Date(),
-        hasGenerateAction: !!data.hasGenerateAction,
-        selectedElement: data.selectedElement // Store the selected element in the message
-      };
+        const data = await response.json();
 
-      // Add assistant message to chat
-      setMessages(prev => [...prev, assistantMessage]);
+        const assistantMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+        content: data.content,
+          timestamp: new Date(),
+        };
+        setMessages(prev => [...prev, assistantMessage]);
 
-      // Clear screenshots after successful submission
-      if (hasScreenshots) {
-        setScreenshots([]);
-      }
-
-      // Save assistant message to database
+      // Save message to project history if projectId is available
       if (projectId) {
         try {
           await fetch(`/api/projects/${projectId}/messages`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              content: data.content, 
-              role: 'assistant',
-              hasGenerateAction: data.hasGenerateAction 
-            })
+            body: JSON.stringify({
+              role: assistantMessage.role,
+              content: assistantMessage.content
+            }),
           });
-        } catch (error) {
-          console.error('Error saving assistant message:', error);
+        } catch (saveError) {
+          console.error('Failed to save message to project history:', saveError);
         }
       }
 
-      // If the message has a generate action, show the generate button
-      if (data.hasGenerateAction) {
-        setShowGenerateButton(true);
+      // Clear screenshots after successful message exchange
+      if (screenshots.length > 0) {
+        setScreenshots([]);
+        console.log('[SCREENSHOT] Automatically cleared screenshots after message sent');
       }
-    } catch (error) {
-      console.error('Error:', error);
-      const errorMessage: Message = {
-        id: Date.now().toString(),
-        role: 'assistant',
-        content: 'Sorry, I encountered an error connecting to the AI service. This could be due to temporary issues with the OpenAI API or server configuration. Please try again in a few moments.',
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, errorMessage]);
-    } finally {
-      setIsLoading(false);
+
+      } catch (error) {
+      console.error('Error fetching from /api/chat:', error);
+        const errorMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: 'Sorry, I encountered an error. Please try again.',
+          timestamp: new Date(),
+        };
+        setMessages(prev => [...prev, errorMessage]);
+      } finally {
+        setIsLoading(false);
     }
   };
 
   const markdownComponents: Components = {
     p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+    h1: ({ children }) => <h1 className="text-xl font-bold mt-4 mb-2">{children}</h1>,
     img: ({ src, alt, ...props }) => {
       if (!src) return null;
       return (
@@ -910,7 +864,7 @@ export default function AIChat({ onClose, canvasElements, onAddToCanvas, project
   };
 
   return (
-    <div className="fixed right-0 w-[400px] bg-white shadow-xl flex flex-col transform transition-transform duration-300 ease-in-out z-50" style={{ top: '88px', bottom: 0 }}>
+    <div className={`ai-chat-panel fixed right-0 w-[400px] bg-white shadow-xl flex flex-col transform transition-transform duration-300 ease-in-out ${isOnboardingActive ? 'z-0' : 'z-50'}`} style={{ top: '88px', bottom: 0 }}>
       <style jsx global>{`
         .generated-image {
           margin: 1rem 0;
@@ -923,8 +877,8 @@ export default function AIChat({ onClose, canvasElements, onAddToCanvas, project
       `}</style>
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-gray-100">
-        <div className="flex items-center gap-2">
-          <div className="w-5 h-5 relative">
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <div className="w-5 h-5 relative flex-shrink-0">
             <Image
               src="/icons/sparkles-icon.svg"
               alt="AI Assistant"
@@ -932,11 +886,30 @@ export default function AIChat({ onClose, canvasElements, onAddToCanvas, project
               className="text-purple-600"
             />
           </div>
-          <h2 className="font-medium text-[#202126]">AI Assistant</h2>
+          {isEditingName ? (
+            <input
+              ref={nameInputRef}
+              type="text"
+              value={editingNameValue}
+              onChange={(e) => setEditingNameValue(e.target.value)}
+              onKeyDown={handleNameKeyDown}
+              onBlur={handleNameSave}
+              className="font-medium text-[#202126] bg-transparent border-none outline-none focus:outline-none flex-1 min-w-0"
+              maxLength={30}
+            />
+          ) : (
+            <h2 
+              className="font-medium text-[#202126] cursor-pointer hover:text-[#814ADA] transition-colors truncate"
+              onClick={handleNameEdit}
+              title="Click to edit assistant name"
+            >
+              {assistantName}
+            </h2>
+          )}
         </div>
         <button
           onClick={onClose}
-          className="p-1.5 bg-white border border-[#E0DAF3] hover:bg-gray-50 rounded-md transition-colors"
+          className="p-1.5 bg-white border border-[#E0DAF3] hover:bg-gray-50 rounded-md transition-colors flex-shrink-0"
         >
           <X className="h-5 w-5 text-[#814ADA]" />
         </button>
@@ -954,7 +927,7 @@ export default function AIChat({ onClose, canvasElements, onAddToCanvas, project
                 className="text-[#814ADA] opacity-50"
               />
             </div>
-            <p className="text-sm mb-2">Hi! I'm your AI design assistant.</p>
+            <p className="text-sm mb-2">Hi! I'm {assistantName}.</p>
             <p className="text-xs">Ask me anything about your design project or canvas elements.</p>
           </div>
         )}
@@ -977,11 +950,11 @@ export default function AIChat({ onClose, canvasElements, onAddToCanvas, project
                   <div className="prose prose-sm max-w-none">
                     {message.isGeneratedImage ? (
                       <>
-                        <p>Here's the generated design variation based on the suggestions:</p>
+                        <p>Here's the generated design:</p>
                         <div className="my-4 relative group">
                           <div className="relative">
                             <img
-                              src={`data:image/png;base64,${message.content.split('\n\n')[1]}`}
+                              src={message.content.includes('data:image') ? message.content.split('\n\n')[1] : `data:image/png;base64,${message.content.split('\n\n')[1]}`}
                               alt="Generated Design"
                               className="max-w-full rounded-lg shadow-md"
                               style={{ maxHeight: '400px', objectFit: 'contain' }}
@@ -1012,29 +985,7 @@ export default function AIChat({ onClose, canvasElements, onAddToCanvas, project
                       <ReactMarkdown components={markdownComponents}>{message.content}</ReactMarkdown>
                     )}
                   </div>
-                  {message.hasGenerateAction && showGenerateButton && (
-                    <div className="mt-3">
-                      <button
-                        onClick={handleGenerate}
-                        disabled={isLoading}
-                        className={`w-full py-2 px-3 bg-white border border-[#814ADA] text-[#814ADA] hover:bg-[#814ADA]/5 rounded-md text-sm font-medium flex items-center justify-center gap-2 transition-colors ${
-                          isLoading ? 'opacity-70 cursor-not-allowed' : ''
-                        }`}
-                      >
-                        {isLoading ? (
-                          <>
-                            <span className="inline-block w-4 h-4 border-2 border-[#814ADA] border-t-transparent rounded-full animate-spin mr-2"></span>
-                            Generating...
-                          </>
-                        ) : (
-                          <>
-                            <Icon name="sparkles" size={16} className="text-[#814ADA]" />
-                            Generate Design
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  )}
+
                 </>
               ) : (
                 <p>{message.content}</p>
@@ -1169,27 +1120,35 @@ export default function AIChat({ onClose, canvasElements, onAddToCanvas, project
       </div>
 
       {/* Input Form */}
-      <form onSubmit={handleSubmit} className="p-4 border-t border-gray-100">
+      <form onSubmit={handleSubmit} className="p-4 border-t border-gray-200">
         <div className="relative">
           <textarea
             ref={textareaRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask AI anything..."
-            className="w-full pr-12 pl-4 py-3 bg-gray-50 rounded-lg resize-none outline-none focus:ring-2 focus:ring-purple-500 text-sm"
-            rows={1}
-            style={{ maxHeight: '120px' }}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSubmit(e);
+              if (e.key === 'Enter') {
+                if (e.shiftKey) {
+                  // Shift+Enter: Allow new line (default behavior)
+                  return;
+                } else {
+                  // Enter: Submit the form
+                  e.preventDefault();
+                  if (input.trim() && !isLoading) {
+                    handleSubmit(e as any);
+                  }
+                }
               }
             }}
+            placeholder="Ask AI anything..."
+            className="w-full p-2 pr-10 border border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-[#814ADA]"
+            rows={2}
+            disabled={isLoading}
           />
           <button
             type="submit"
+            className="absolute top-1/2 right-3 -translate-y-1/2 text-gray-500 hover:text-[#814ADA] disabled:text-gray-300"
             disabled={isLoading || !input.trim()}
-            className="absolute right-2 bottom-2 p-2 bg-gray-100 text-gray-600 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-200 transition-colors"
           >
             <Image
               src="/icons/paper-plane-tilt.svg"

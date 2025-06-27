@@ -213,6 +213,7 @@ export default function ToolsPanel({ onToolSelect, selectedTool, showShapesMenu,
         {tools.map((tool) => (
           <button
             key={tool.id}
+            data-tool={tool.id}
             onClick={() => {
               if (tool.id === 'container') {
                 setShowContainerSubmenu(!showContainerSubmenu);

@@ -79,8 +79,7 @@ const nextConfig = {
   },
   // Skip API routes and dynamic routes during static export
   experimental: {
-    // Only use this setting during static build
-    outputFileTracing: true,
+    serverComponentsExternalPackages: ['puppeteer-extra', 'puppeteer-extra-plugin-stealth'],
   },
 }
 

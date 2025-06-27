@@ -75,19 +75,20 @@ const DynamicCanvasSelector = dynamic(
 function AICompanionContent() {
   console.log('[DEBUG] Rendering AICompanionContent');
   const searchParams = useSearchParams();
-  const name = searchParams.get('name');
-  const description = searchParams.get('description');
-  const projectId = searchParams.get('projectId');
-  const isNewProject = searchParams.get('isNew') === 'true';
+  const name = searchParams?.get('name');
+  const description = searchParams?.get('description');
+  const projectId = searchParams?.get('projectId');
+  const isNewProject = searchParams?.get('isNew') === 'true';
   
   const [showTemplateModal, setShowTemplateModal] = useState(false);
 
   useEffect(() => {
     console.log('[DEBUG] AICompanionContent params:', { name, description, projectId, isNewProject });
-    // Show template modal for new projects
-    if (isNewProject && projectId) {
-      setShowTemplateModal(true);
-    }
+    // Show template modal for new projects - TEMPORARILY DISABLED
+    // TODO: Re-enable once actual templates are implemented
+    // if (isNewProject && projectId) {
+    //   setShowTemplateModal(true);
+    // }
   }, [isNewProject, projectId]);
 
   return (

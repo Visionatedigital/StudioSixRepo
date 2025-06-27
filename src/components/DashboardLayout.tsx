@@ -5,6 +5,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { Icon } from './Icons';
 import HeaderActions from './HeaderActions';
+import RenderProgressTracker from './RenderProgressTracker';
 import { useSession, signOut } from 'next-auth/react';
 import MessageInbox from './MessageInbox';
 import { usePathname, useRouter } from 'next/navigation';
@@ -122,9 +123,9 @@ export default function DashboardLayout({ children, currentPage }: DashboardLayo
 
   return (
     <>
-      <div className="flex h-screen overflow-hidden bg-[#F6F8FA]">
+      <div className="flex h-screen overflow-hidden bg-gray-50">
         {/* Sidebar */}
-        <div className="fixed left-0 top-0 bottom-0 w-[302px] bg-gradient-to-b from-[#F8F9FF] via-[#F0F2FF] to-[#E8EBFF] border-r border-[#E0DAF3] z-40 flex items-center justify-center">
+        <div className="fixed left-0 top-0 bottom-0 w-[302px] bg-gray-50 z-40 flex items-center justify-center">
           <div className="w-[270px] bg-gradient-to-br from-white/90 via-white/95 to-white/80 backdrop-blur-sm rounded-2xl p-8 shadow-xl border border-white/20">
             {/* Profile Section */}
             <div className="flex flex-col p-2.5 gap-2.5 w-[206px] bg-gradient-to-r from-[#814ADA] via-[#9B5DE5] to-[#B366F0] rounded-xl shadow-lg">
@@ -204,7 +205,8 @@ export default function DashboardLayout({ children, currentPage }: DashboardLayo
                     { id: 'exterior', title: 'Exterior AI', path: '/generate?tool=exterior', icon: 'exterior' },
                     { id: 'interior', title: 'Interior AI', path: '/generate?tool=interior', icon: 'interior' },
                     { id: 'enhancer', title: 'Render Enhancer', path: '/generate?tool=enhancer', icon: 'enhancer' },
-                    { id: 'video', title: 'Video Generator AI', path: '/generate/video', icon: 'video' }
+                    { id: 'video', title: 'Video Generator AI', path: '/generate/video', icon: 'video' },
+                    { id: 'chatgpt-proxy', title: 'ChatGPT Proxy', path: '/chatgpt-proxy', icon: 'message-circle' }
                   ].map((item: Tool) => {
                     const safePathname = pathname || '';
                     const isActive = item.path.startsWith('/generate?') 
@@ -327,7 +329,7 @@ export default function DashboardLayout({ children, currentPage }: DashboardLayo
         {/* Main Content Area */}
         <div className="flex-1 ml-[302px] flex flex-col h-screen overflow-hidden">
           {/* Fixed Header */}
-          <div className="fixed top-0 right-0 left-[302px] bg-gradient-to-r from-[#F8F9FF] via-[#F7F8FD] to-[#F6F8FA] z-40">
+          <div className="fixed top-0 right-0 left-[302px] bg-gray-50 z-40">
             <div className="flex items-center justify-between px-5 py-6">
               <div className="flex items-center gap-2.5">
                 {/* Navigation Arrows */}
@@ -357,6 +359,11 @@ export default function DashboardLayout({ children, currentPage }: DashboardLayo
 
               {/* Header Actions and Profile */}
               <div className="flex items-center gap-4">
+                {/* Render Progress Tracker */}
+                <div className="bg-white rounded-lg px-3 py-2 shadow-sm border border-gray-100">
+                  <RenderProgressTracker />
+                </div>
+                
                 <HeaderActions />
                 <div className="relative" ref={profileRef}>
                   <button 
@@ -428,7 +435,7 @@ export default function DashboardLayout({ children, currentPage }: DashboardLayo
           </div>
 
           {/* Scrollable Content Area */}
-          <div ref={contentRef} className="flex-1 mt-[88px] overflow-y-auto bg-gradient-to-r from-[#F8F9FF] via-[#F7F8FD] to-[#F6F8FA]">
+          <div ref={contentRef} className="flex-1 mt-[88px] overflow-y-auto bg-gray-50">
             <div className="h-full">
               {children}
             </div>

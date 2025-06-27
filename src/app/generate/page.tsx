@@ -12,6 +12,7 @@ import Image from 'next/image';
 import ShareModal from '@/components/ShareModal';
 import { ShareIcon } from '@/components/Icons';
 import TypingPrompt from '@/components/TypingPrompt';
+import { useRenderTasks } from '@/contexts/RenderTaskContext';
 
 const defaultSettings: RenderSettings = {
   style: {
@@ -54,7 +55,7 @@ function GeneratePageContent() {
   });
   const [userPrompt, setUserPrompt] = useState('');
   const [selectedTool, setSelectedTool] = useState(() => {
-    const toolFromUrl = searchParams.get('tool');
+    const toolFromUrl = searchParams ? searchParams.get('tool') : null;
     if (toolFromUrl) {
       // Convert tool ID to display name
       const toolMap: { [key: string]: string } = {
@@ -91,6 +92,9 @@ function GeneratePageContent() {
   const [landscapeStyle, setLandscapeStyle] = useState('modern');
   const [terrainType, setTerrainType] = useState('flat');
   const [vegetationDensity, setVegetationDensity] = useState('moderate');
+  const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
+  
+  const { addTask, updateTask } = useRenderTasks();
 
   // Sample images array (replace with your actual gallery images)
   const sampleImages = [
@@ -255,6 +259,10 @@ function GeneratePageContent() {
     setProgress(0);
     setProgressMessage('Initializing image generation...');
 
+    // Create render task
+    const taskId = addTask(userPrompt || 'Generated image from sketch');
+    setCurrentTaskId(taskId);
+
     try {
       // Check if user is logged in
       if (!session?.user?.id) {
@@ -289,7 +297,7 @@ function GeneratePageContent() {
         }
         console.log("Using uploaded image for generation");
         console.log(`Image data length: ${base64Data.length}`);
-        console.log(`Image data starts with: ${base64Data.substring(0, 30)}...`);
+        console.log(`Image data starts with: ${base64Data.substring(0, 50)}...`);
       } else {
         console.error("No image available for img2img generation!");
       }
@@ -317,14 +325,21 @@ function GeneratePageContent() {
       setProgressMessage('Analyzing your sketch and preparing to generate...');
       setProgress(20);
       
+      updateTask(taskId, { status: 'processing', progress: 20 });
+      
       // Set a timeout to simulate progress while waiting for the API
       const progressInterval = setInterval(() => {
         setProgress((prev) => {
-          if (prev < 90) {
-            const increment = Math.floor(Math.random() * 5) + 1; // Random increment between 1-5
-            return prev + increment > 90 ? 90 : prev + increment;
-          }
-          return prev;
+          const newProgress = prev < 90 ? 
+            prev + Math.floor(Math.random() * 5) + 1 : 
+            prev;
+          
+          updateTask(taskId, { 
+            status: 'processing', 
+            progress: Math.min(95, newProgress)
+          });
+          
+          return newProgress > 90 ? 90 : newProgress;
         });
       }, 800);
       
@@ -341,33 +356,17 @@ function GeneratePageContent() {
         }
       }, 1200);
 
+      console.log(`Frontend sending request. Image data starts with: ${base64Data ? base64Data.substring(0, 50) : 'null'}...`);
+
       // Call the image generation API
-      const response = await fetch('/api/generate', {
+      const response = await fetch('/api/generate/chatgpt', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          settings: {
-            ...settings,
-            roomType: isInteriorTool ? roomType : undefined,
-            enhancementType: isRenderEnhancer ? enhancementType : undefined,
-            resolution: isRenderEnhancer ? resolution : undefined,
-            landscapeStyle: isLandscapeAI ? landscapeStyle : undefined,
-            terrainType: isLandscapeAI ? terrainType : undefined,
-            vegetationDensity: isLandscapeAI ? vegetationDensity : undefined,
-            controlNetModule: "lineart"
-          },
           image: base64Data,
-          prompt: userPrompt || 
-            (isInteriorTool ? 
-              `A detailed ${settings.style.architecturalStyle} style ${roomType} interior design` : 
-            isRenderEnhancer ?
-              `Enhance this architectural render with ${enhancementType} improvements at ${resolution} resolution` :
-            isLandscapeAI ?
-              `A ${landscapeStyle} landscape design with ${vegetationDensity} vegetation on ${terrainType} terrain` :
-              `A ${settings.style.architecturalStyle} style ${settings.style.buildingType} building`),
-          mode: 'img2img'
+          prompt: userPrompt,
         }),
       });
       
@@ -394,8 +393,27 @@ function GeneratePageContent() {
 
       setProgressMessage('Generation complete!');
       setProgress(100);
+      
+      // Update task as completed
+      updateTask(taskId, { 
+        status: 'completed', 
+        progress: 100, 
+        imageUrl: data.image,
+        completedAt: new Date()
+      });
+      
+      setCurrentTaskId(null);
     } catch (error) {
       console.error('Generation error:', error);
+      
+      // Update task as error
+      updateTask(taskId, { 
+        status: 'error', 
+        progress: 100, 
+        error: error instanceof Error ? error.message : 'Unknown error occurred',
+        completedAt: new Date()
+      });
+      
       setError(error instanceof Error ? 
         `Generation failed: ${error.message}. Please try again or contact support if the problem persists.` : 
         'Failed to generate image. Please try again.');
@@ -403,6 +421,7 @@ function GeneratePageContent() {
       // Reset progress
       setProgress(0);
       setProgressMessage('');
+      setCurrentTaskId(null);
     } finally {
       setIsLoading(false);
     }
@@ -1101,7 +1120,7 @@ function GeneratePageContent() {
             </div>
 
             {/* Right Panel */}
-            <div className="flex-grow ml-5 flex flex-col gap-4">
+            <div className="flex-grow ml-5 flex flex-col gap-4 p-4">
               {/* Top Section with Prompt and Generate Button */}
               <div className="flex flex-col gap-4">
                 {/* Prompt Input */}

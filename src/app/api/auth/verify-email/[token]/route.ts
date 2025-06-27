@@ -52,8 +52,7 @@ export async function GET(
     await prisma.user.update({
       where: { email: verificationToken.identifier },
       data: { 
-        emailVerified: new Date(),
-        verified: true
+        emailVerified: new Date()
       },
     });
 

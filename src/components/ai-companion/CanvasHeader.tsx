@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Icon } from '../Icons';
 import { useSession, signOut } from 'next-auth/react';
 import MessageInbox from '../MessageInbox';
+import RenderProgressTracker from '../RenderProgressTracker';
 import { UserPlus } from 'lucide-react';
 import { VerifiedBadge } from '../VerifiedBadge';
 import { saveAsTemplate } from '@/lib/canvas-utils';
@@ -174,9 +175,14 @@ export default function CanvasHeader({
 
       {/* Right Container */}
       <div className="flex items-center space-x-2 bg-white rounded-lg px-4 py-2 shadow-sm">
+        {/* Render Progress Tracker */}
+        <div className="mr-2">
+          <RenderProgressTracker />
+        </div>
+        
         <button
           onClick={onInviteClick}
-          className="flex items-center space-x-2 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+          className="invite-button flex items-center space-x-2 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
         >
           <UserPlus size={16} />
           <span>Invite</span>

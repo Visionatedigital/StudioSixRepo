@@ -31,14 +31,16 @@ export default function Header() {
         </div>
 
         {/* Desktop Menu */}
-        <div className="hidden md:flex items-center gap-[40px]">
-          <Link href="/about" className="font-poppins text-[17px] font-medium leading-[20px] text-black hover:opacity-80">About Us</Link>
-          <Link href="/pricing" className="font-poppins text-[17px] font-medium leading-[20px] text-black hover:opacity-80">Pricing</Link>
-          <Link href="/help" className="font-poppins text-[17px] font-medium leading-[20px] text-black hover:opacity-80">Help</Link>
-          <div className="flex items-center gap-2">
-            <Link href="/education" className="font-poppins text-[17px] font-medium leading-[20px] text-black hover:opacity-80">Educational Licenses</Link>
-            <span className="px-2 py-0.5 bg-red-500 text-white text-xs rounded-full">New</span>
-          </div>
+        <div className="hidden md:flex items-center space-x-8">
+          <Link href="/dashboard" className="text-gray-700 hover:text-purple-600 font-medium transition-colors">
+            Dashboard
+          </Link>
+          <Link href="/library" className="text-gray-700 hover:text-purple-600 font-medium transition-colors">
+            Library
+          </Link>
+          <Link href="/ai-companion" className="text-gray-700 hover:text-purple-600 font-medium transition-colors">
+            AI Companion
+          </Link>
         </div>
 
         {/* Buttons */}

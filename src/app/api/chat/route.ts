@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+ import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import fs from 'fs';
@@ -42,10 +42,10 @@ export async function POST(request: Request) {
 
 Focus on actionable insights that can help enhance the design while maintaining its original intent.
 
-IMPORTANT: When you provide design suggestions or improvements, ALWAYS end your response with a call-to-action asking if the user would like to see a visualization of these suggestions. For example:
-"Would you like me to generate a visualization of these suggested improvements?"
+IMPORTANT: When you provide design suggestions or improvements, ALWAYS end your response with a call-to-action asking if the user would like a prompt for the AI tool. For example:
+"Would you like me to generate a prompt that you can use in the AI tool to create an improved version of this design?"
 
-This helps users understand how they can implement your suggestions.`
+This helps users get specific prompts they can copy and use in the AI generation tool popup.`
       }
     ];
 
@@ -176,20 +176,21 @@ function checkForGenerateAction(content: string): boolean {
   // Check for various suggestion patterns
   const suggestivePatterns = [
     'would you like me to generate',
-    'would you like to see',
+    'would you like a prompt',
     'shall i create',
-    'i can show you',
     'i can generate',
-    'would you like me to show',
-    'i can create',
-    'shall i show you',
-    'would you like a visualization',
-    'shall i create a new version',
-    'would you like me to create'
+    'would you like me to create',
+    'shall i generate',
+    'would you like me to provide',
+    'shall i provide',
+    'can i create a prompt',
+    'would you like a detailed prompt',
+    'shall i write a prompt'
   ];
   
   const designPatterns = [
     'design',
+    'prompt',
     'version',
     'changes',
     'improvement',
@@ -197,7 +198,8 @@ function checkForGenerateAction(content: string): boolean {
     'update',
     'style',
     'look',
-    'visualization'
+    'ai tool',
+    'generation'
   ];
 
   // Check if the message ends with a call-to-action

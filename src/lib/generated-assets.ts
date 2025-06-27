@@ -4,19 +4,120 @@ import { LibraryGroup } from './library-assets';
 
 export const generatedLibraryGroups: LibraryGroup[] = [
   {
-    "id": "fixtures",
-    "name": "Fixtures",
+    "id": "bathroom",
+    "name": "Bathroom",
     "categories": [
       {
-        "id": "lights",
-        "name": "Lights",
-        "itemCount": 1,
-        "icon": "/library/Fixtures/Lights/Lights.svg",
+        "id": "bathtub",
+        "name": "Bathtub",
+        "itemCount": 11,
+        "icon": "/library/Bathroom/Bathtub/Bathtub 2-01.svg",
         "assets": [
           {
-            "id": "lights-lights",
-            "name": "Lights",
-            "svgPath": "/library/Fixtures/Lights/Lights.svg"
+            "id": "bathtub-bathtub 2-01",
+            "name": "Bathtub 2 01",
+            "svgPath": "/library/Bathroom/Bathtub/Bathtub 2-01.svg"
+          },
+          {
+            "id": "bathtub-bathtub 2-02",
+            "name": "Bathtub 2 02",
+            "svgPath": "/library/Bathroom/Bathtub/Bathtub 2-02.svg"
+          },
+          {
+            "id": "bathtub-bathtub 2-03",
+            "name": "Bathtub 2 03",
+            "svgPath": "/library/Bathroom/Bathtub/Bathtub 2-03.svg"
+          },
+          {
+            "id": "bathtub-bathtub 2-04",
+            "name": "Bathtub 2 04",
+            "svgPath": "/library/Bathroom/Bathtub/Bathtub 2-04.svg"
+          },
+          {
+            "id": "bathtub-bathtub 2-05",
+            "name": "Bathtub 2 05",
+            "svgPath": "/library/Bathroom/Bathtub/Bathtub 2-05.svg"
+          },
+          {
+            "id": "bathtub-bathtub 2-06",
+            "name": "Bathtub 2 06",
+            "svgPath": "/library/Bathroom/Bathtub/Bathtub 2-06.svg"
+          },
+          {
+            "id": "bathtub-bathtub 2-07",
+            "name": "Bathtub 2 07",
+            "svgPath": "/library/Bathroom/Bathtub/Bathtub 2-07.svg"
+          },
+          {
+            "id": "bathtub-bathtub-01",
+            "name": "Bathtub 01",
+            "svgPath": "/library/Bathroom/Bathtub/Bathtub-01.svg"
+          },
+          {
+            "id": "bathtub-bathtub-02",
+            "name": "Bathtub 02",
+            "svgPath": "/library/Bathroom/Bathtub/Bathtub-02.svg"
+          },
+          {
+            "id": "bathtub-bathtub-03",
+            "name": "Bathtub 03",
+            "svgPath": "/library/Bathroom/Bathtub/Bathtub-03.svg"
+          },
+          {
+            "id": "bathtub-bathtub-04",
+            "name": "Bathtub 04",
+            "svgPath": "/library/Bathroom/Bathtub/Bathtub-04.svg"
+          }
+        ]
+      },
+      {
+        "id": "handwash-basin",
+        "name": "Handwash Basin",
+        "itemCount": 4,
+        "icon": "/library/Bathroom/Handwash Basin/handwash basin-01.svg",
+        "assets": [
+          {
+            "id": "handwash-basin-handwash basin-01",
+            "name": "handwash basin 01",
+            "svgPath": "/library/Bathroom/Handwash Basin/handwash basin-01.svg"
+          },
+          {
+            "id": "handwash-basin-handwash basin-02",
+            "name": "handwash basin 02",
+            "svgPath": "/library/Bathroom/Handwash Basin/handwash basin-02.svg"
+          },
+          {
+            "id": "handwash-basin-handwash basin-03",
+            "name": "handwash basin 03",
+            "svgPath": "/library/Bathroom/Handwash Basin/handwash basin-03.svg"
+          },
+          {
+            "id": "handwash-basin-handwash basin-04",
+            "name": "handwash basin 04",
+            "svgPath": "/library/Bathroom/Handwash Basin/handwash basin-04.svg"
+          }
+        ]
+      },
+      {
+        "id": "toilets",
+        "name": "Toilets",
+        "itemCount": 3,
+        "icon": "/library/Bathroom/Toilets/Toilets-01.svg",
+        "assets": [
+          {
+            "id": "toilets-toilets-01",
+            "name": "Toilets 01",
+            "svgPath": "/library/Bathroom/Toilets/Toilets-01.svg"
+          },
+          {
+            "id": "toilets-toilets-02",
+            "name": "Toilets 02",
+            "svgPath": "/library/Bathroom/Toilets/Toilets-02.svg"
+          },
+          {
+            "id": "toilets-toilets-03",
+            "name": "Toilets 03",
+            "svgPath": "/library/Bathroom/Toilets/Toilets-03.svg"
           }
         ]
       }
@@ -29,9 +130,29 @@ export const generatedLibraryGroups: LibraryGroup[] = [
       {
         "id": "bed",
         "name": "Bed",
-        "itemCount": 6,
-        "icon": "/library/Furniture/Bed/Bed-01.svg",
+        "itemCount": 10,
+        "icon": "/library/Furniture/Bed/Bed Option 2-01.svg",
         "assets": [
+          {
+            "id": "bed-bed option 2-01",
+            "name": "Bed Option 2 01",
+            "svgPath": "/library/Furniture/Bed/Bed Option 2-01.svg"
+          },
+          {
+            "id": "bed-bed option 2-02",
+            "name": "Bed Option 2 02",
+            "svgPath": "/library/Furniture/Bed/Bed Option 2-02.svg"
+          },
+          {
+            "id": "bed-bed option 2-03",
+            "name": "Bed Option 2 03",
+            "svgPath": "/library/Furniture/Bed/Bed Option 2-03.svg"
+          },
+          {
+            "id": "bed-bed option 2-04",
+            "name": "Bed Option 2 04",
+            "svgPath": "/library/Furniture/Bed/Bed Option 2-04.svg"
+          },
           {
             "id": "bed-bed-01",
             "name": "Bed 01",
@@ -65,9 +186,42 @@ export const generatedLibraryGroups: LibraryGroup[] = [
         ]
       },
       {
+        "id": "carpets",
+        "name": "Carpets",
+        "itemCount": 5,
+        "icon": "/library/Furniture/Carpets/Carpets-01.svg",
+        "assets": [
+          {
+            "id": "carpets-carpets-01",
+            "name": "Carpets 01",
+            "svgPath": "/library/Furniture/Carpets/Carpets-01.svg"
+          },
+          {
+            "id": "carpets-carpets-02",
+            "name": "Carpets 02",
+            "svgPath": "/library/Furniture/Carpets/Carpets-02.svg"
+          },
+          {
+            "id": "carpets-carpets-03",
+            "name": "Carpets 03",
+            "svgPath": "/library/Furniture/Carpets/Carpets-03.svg"
+          },
+          {
+            "id": "carpets-carpets-04",
+            "name": "Carpets 04",
+            "svgPath": "/library/Furniture/Carpets/Carpets-04.svg"
+          },
+          {
+            "id": "carpets-carpets-05",
+            "name": "Carpets 05",
+            "svgPath": "/library/Furniture/Carpets/Carpets-05.svg"
+          }
+        ]
+      },
+      {
         "id": "chair",
         "name": "Chair",
-        "itemCount": 9,
+        "itemCount": 22,
         "icon": "/library/Furniture/Chair/Chair -01.svg",
         "assets": [
           {
@@ -114,13 +268,169 @@ export const generatedLibraryGroups: LibraryGroup[] = [
             "id": "chair-office chair",
             "name": "Office Chair",
             "svgPath": "/library/Furniture/Chair/Office Chair.svg"
+          },
+          {
+            "id": "chair-chair2-01",
+            "name": "chair2 01",
+            "svgPath": "/library/Furniture/Chair/chair2-01.svg"
+          },
+          {
+            "id": "chair-chair2-02",
+            "name": "chair2 02",
+            "svgPath": "/library/Furniture/Chair/chair2-02.svg"
+          },
+          {
+            "id": "chair-chair2-03",
+            "name": "chair2 03",
+            "svgPath": "/library/Furniture/Chair/chair2-03.svg"
+          },
+          {
+            "id": "chair-chair2-04",
+            "name": "chair2 04",
+            "svgPath": "/library/Furniture/Chair/chair2-04.svg"
+          },
+          {
+            "id": "chair-chair2-05",
+            "name": "chair2 05",
+            "svgPath": "/library/Furniture/Chair/chair2-05.svg"
+          },
+          {
+            "id": "chair-chair2-06",
+            "name": "chair2 06",
+            "svgPath": "/library/Furniture/Chair/chair2-06.svg"
+          },
+          {
+            "id": "chair-chair2-07",
+            "name": "chair2 07",
+            "svgPath": "/library/Furniture/Chair/chair2-07.svg"
+          },
+          {
+            "id": "chair-chair2-08",
+            "name": "chair2 08",
+            "svgPath": "/library/Furniture/Chair/chair2-08.svg"
+          },
+          {
+            "id": "chair-chair2-09",
+            "name": "chair2 09",
+            "svgPath": "/library/Furniture/Chair/chair2-09.svg"
+          },
+          {
+            "id": "chair-chair2-10",
+            "name": "chair2 10",
+            "svgPath": "/library/Furniture/Chair/chair2-10.svg"
+          },
+          {
+            "id": "chair-chair2-11",
+            "name": "chair2 11",
+            "svgPath": "/library/Furniture/Chair/chair2-11.svg"
+          },
+          {
+            "id": "chair-chair2-12",
+            "name": "chair2 12",
+            "svgPath": "/library/Furniture/Chair/chair2-12.svg"
+          },
+          {
+            "id": "chair-chair2-13",
+            "name": "chair2 13",
+            "svgPath": "/library/Furniture/Chair/chair2-13.svg"
+          }
+        ]
+      },
+      {
+        "id": "closet",
+        "name": "Closet",
+        "itemCount": 4,
+        "icon": "/library/Furniture/Closet/Closet-01.svg",
+        "assets": [
+          {
+            "id": "closet-closet-01",
+            "name": "Closet 01",
+            "svgPath": "/library/Furniture/Closet/Closet-01.svg"
+          },
+          {
+            "id": "closet-closet-02",
+            "name": "Closet 02",
+            "svgPath": "/library/Furniture/Closet/Closet-02.svg"
+          },
+          {
+            "id": "closet-closet-03",
+            "name": "Closet 03",
+            "svgPath": "/library/Furniture/Closet/Closet-03.svg"
+          },
+          {
+            "id": "closet-closet-04",
+            "name": "Closet 04",
+            "svgPath": "/library/Furniture/Closet/Closet-04.svg"
+          }
+        ]
+      },
+      {
+        "id": "dining",
+        "name": "Dining",
+        "itemCount": 11,
+        "icon": "/library/Furniture/Dining/Dining 2-01.svg",
+        "assets": [
+          {
+            "id": "dining-dining 2-01",
+            "name": "Dining 2 01",
+            "svgPath": "/library/Furniture/Dining/Dining 2-01.svg"
+          },
+          {
+            "id": "dining-dining 2-02",
+            "name": "Dining 2 02",
+            "svgPath": "/library/Furniture/Dining/Dining 2-02.svg"
+          },
+          {
+            "id": "dining-dining 2-03",
+            "name": "Dining 2 03",
+            "svgPath": "/library/Furniture/Dining/Dining 2-03.svg"
+          },
+          {
+            "id": "dining-dining 2-04",
+            "name": "Dining 2 04",
+            "svgPath": "/library/Furniture/Dining/Dining 2-04.svg"
+          },
+          {
+            "id": "dining-dining 2-05",
+            "name": "Dining 2 05",
+            "svgPath": "/library/Furniture/Dining/Dining 2-05.svg"
+          },
+          {
+            "id": "dining-dining 2-06",
+            "name": "Dining 2 06",
+            "svgPath": "/library/Furniture/Dining/Dining 2-06.svg"
+          },
+          {
+            "id": "dining-dining-01",
+            "name": "Dining 01",
+            "svgPath": "/library/Furniture/Dining/Dining-01.svg"
+          },
+          {
+            "id": "dining-dining-02",
+            "name": "Dining 02",
+            "svgPath": "/library/Furniture/Dining/Dining-02.svg"
+          },
+          {
+            "id": "dining-dining-03",
+            "name": "Dining 03",
+            "svgPath": "/library/Furniture/Dining/Dining-03.svg"
+          },
+          {
+            "id": "dining-dining-04",
+            "name": "Dining 04",
+            "svgPath": "/library/Furniture/Dining/Dining-04.svg"
+          },
+          {
+            "id": "dining-dining-05",
+            "name": "Dining 05",
+            "svgPath": "/library/Furniture/Dining/Dining-05.svg"
           }
         ]
       },
       {
         "id": "sofa",
         "name": "Sofa",
-        "itemCount": 11,
+        "itemCount": 24,
         "icon": "/library/Furniture/Sofa/Sofa-01.svg",
         "assets": [
           {
@@ -177,6 +487,242 @@ export const generatedLibraryGroups: LibraryGroup[] = [
             "id": "sofa-sofa-11",
             "name": "Sofa 11",
             "svgPath": "/library/Furniture/Sofa/Sofa-11.svg"
+          },
+          {
+            "id": "sofa-sofas 2-01",
+            "name": "sofas 2 01",
+            "svgPath": "/library/Furniture/Sofa/sofas 2-01.svg"
+          },
+          {
+            "id": "sofa-sofas 2-02",
+            "name": "sofas 2 02",
+            "svgPath": "/library/Furniture/Sofa/sofas 2-02.svg"
+          },
+          {
+            "id": "sofa-sofas 2-03",
+            "name": "sofas 2 03",
+            "svgPath": "/library/Furniture/Sofa/sofas 2-03.svg"
+          },
+          {
+            "id": "sofa-sofas 2-04",
+            "name": "sofas 2 04",
+            "svgPath": "/library/Furniture/Sofa/sofas 2-04.svg"
+          },
+          {
+            "id": "sofa-sofas 2-05",
+            "name": "sofas 2 05",
+            "svgPath": "/library/Furniture/Sofa/sofas 2-05.svg"
+          },
+          {
+            "id": "sofa-sofas 2-06",
+            "name": "sofas 2 06",
+            "svgPath": "/library/Furniture/Sofa/sofas 2-06.svg"
+          },
+          {
+            "id": "sofa-sofas 2-07",
+            "name": "sofas 2 07",
+            "svgPath": "/library/Furniture/Sofa/sofas 2-07.svg"
+          },
+          {
+            "id": "sofa-sofas 2-08",
+            "name": "sofas 2 08",
+            "svgPath": "/library/Furniture/Sofa/sofas 2-08.svg"
+          },
+          {
+            "id": "sofa-sofas 2-09",
+            "name": "sofas 2 09",
+            "svgPath": "/library/Furniture/Sofa/sofas 2-09.svg"
+          },
+          {
+            "id": "sofa-sofas 2-10",
+            "name": "sofas 2 10",
+            "svgPath": "/library/Furniture/Sofa/sofas 2-10.svg"
+          },
+          {
+            "id": "sofa-sofas 2-11",
+            "name": "sofas 2 11",
+            "svgPath": "/library/Furniture/Sofa/sofas 2-11.svg"
+          },
+          {
+            "id": "sofa-sofas 2-12",
+            "name": "sofas 2 12",
+            "svgPath": "/library/Furniture/Sofa/sofas 2-12.svg"
+          },
+          {
+            "id": "sofa-sofas 2-13",
+            "name": "sofas 2 13",
+            "svgPath": "/library/Furniture/Sofa/sofas 2-13.svg"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "kitchen",
+    "name": "Kitchen",
+    "categories": [
+      {
+        "id": "cooktops",
+        "name": "Cooktops",
+        "itemCount": 3,
+        "icon": "/library/Kitchen/Cooktops/Cooktops-01.svg",
+        "assets": [
+          {
+            "id": "cooktops-cooktops-01",
+            "name": "Cooktops 01",
+            "svgPath": "/library/Kitchen/Cooktops/Cooktops-01.svg"
+          },
+          {
+            "id": "cooktops-cooktops-02",
+            "name": "Cooktops 02",
+            "svgPath": "/library/Kitchen/Cooktops/Cooktops-02.svg"
+          },
+          {
+            "id": "cooktops-cooktops-03",
+            "name": "Cooktops 03",
+            "svgPath": "/library/Kitchen/Cooktops/Cooktops-03.svg"
+          }
+        ]
+      },
+      {
+        "id": "kitchen-counter",
+        "name": "Kitchen Counter",
+        "itemCount": 3,
+        "icon": "/library/Kitchen/Kitchen Counter/Kitchen counters-01.svg",
+        "assets": [
+          {
+            "id": "kitchen-counter-kitchen counters-01",
+            "name": "Kitchen counters 01",
+            "svgPath": "/library/Kitchen/Kitchen Counter/Kitchen counters-01.svg"
+          },
+          {
+            "id": "kitchen-counter-kitchen counters-02",
+            "name": "Kitchen counters 02",
+            "svgPath": "/library/Kitchen/Kitchen Counter/Kitchen counters-02.svg"
+          },
+          {
+            "id": "kitchen-counter-kitchen counters-03",
+            "name": "Kitchen counters 03",
+            "svgPath": "/library/Kitchen/Kitchen Counter/Kitchen counters-03.svg"
+          }
+        ]
+      },
+      {
+        "id": "refridgerator",
+        "name": "Refridgerator",
+        "itemCount": 5,
+        "icon": "/library/Kitchen/Refridgerator/Refridgerator-01.svg",
+        "assets": [
+          {
+            "id": "refridgerator-refridgerator-01",
+            "name": "Refridgerator 01",
+            "svgPath": "/library/Kitchen/Refridgerator/Refridgerator-01.svg"
+          },
+          {
+            "id": "refridgerator-refridgerator-02",
+            "name": "Refridgerator 02",
+            "svgPath": "/library/Kitchen/Refridgerator/Refridgerator-02.svg"
+          },
+          {
+            "id": "refridgerator-refridgerator-03",
+            "name": "Refridgerator 03",
+            "svgPath": "/library/Kitchen/Refridgerator/Refridgerator-03.svg"
+          },
+          {
+            "id": "refridgerator-refridgerator-04",
+            "name": "Refridgerator 04",
+            "svgPath": "/library/Kitchen/Refridgerator/Refridgerator-04.svg"
+          },
+          {
+            "id": "refridgerator-refridgerator-05",
+            "name": "Refridgerator 05",
+            "svgPath": "/library/Kitchen/Refridgerator/Refridgerator-05.svg"
+          }
+        ]
+      },
+      {
+        "id": "sinks",
+        "name": "Sinks",
+        "itemCount": 2,
+        "icon": "/library/Kitchen/Sinks/sink-01.svg",
+        "assets": [
+          {
+            "id": "sinks-sink-01",
+            "name": "sink 01",
+            "svgPath": "/library/Kitchen/Sinks/sink-01.svg"
+          },
+          {
+            "id": "sinks-sink-02",
+            "name": "sink 02",
+            "svgPath": "/library/Kitchen/Sinks/sink-02.svg"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "lighting",
+    "name": "Lighting",
+    "categories": [
+      {
+        "id": "floor-lamps",
+        "name": "Floor Lamps",
+        "itemCount": 1,
+        "icon": "/library/Lighting/Floor Lamps/Lights.svg",
+        "assets": [
+          {
+            "id": "floor-lamps-lights",
+            "name": "Lights",
+            "svgPath": "/library/Lighting/Floor Lamps/Lights.svg"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "plants",
+    "name": "Plants",
+    "categories": [
+      {
+        "id": "flowers",
+        "name": "Flowers",
+        "itemCount": 7,
+        "icon": "/library/Plants/Flowers/flower plants-01.svg",
+        "assets": [
+          {
+            "id": "flowers-flower plants-01",
+            "name": "flower plants 01",
+            "svgPath": "/library/Plants/Flowers/flower plants-01.svg"
+          },
+          {
+            "id": "flowers-flower plants-02",
+            "name": "flower plants 02",
+            "svgPath": "/library/Plants/Flowers/flower plants-02.svg"
+          },
+          {
+            "id": "flowers-flower plants-03",
+            "name": "flower plants 03",
+            "svgPath": "/library/Plants/Flowers/flower plants-03.svg"
+          },
+          {
+            "id": "flowers-flower plants-04",
+            "name": "flower plants 04",
+            "svgPath": "/library/Plants/Flowers/flower plants-04.svg"
+          },
+          {
+            "id": "flowers-flower plants-05",
+            "name": "flower plants 05",
+            "svgPath": "/library/Plants/Flowers/flower plants-05.svg"
+          },
+          {
+            "id": "flowers-flower plants-06",
+            "name": "flower plants 06",
+            "svgPath": "/library/Plants/Flowers/flower plants-06.svg"
+          },
+          {
+            "id": "flowers-flower plants-07",
+            "name": "flower plants 07",
+            "svgPath": "/library/Plants/Flowers/flower plants-07.svg"
           }
         ]
       }
