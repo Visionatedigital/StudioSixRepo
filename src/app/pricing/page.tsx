@@ -20,7 +20,7 @@ export default function PricingPage() {
   useEffect(() => {
     // If the URL includes /dashboard/ or /app/ or similar protected routes
     const dashboardPattern = /\/(dashboard|app|account|generate|wallet|settings)/;
-    setIsInDashboard(dashboardPattern.test(pathname));
+    setIsInDashboard(pathname ? dashboardPattern.test(pathname) : false);
   }, [pathname]);
 
   return (

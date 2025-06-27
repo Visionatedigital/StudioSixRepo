@@ -44,17 +44,17 @@ export class ChatGPTAutomation {
 
     // Click login button
     await this.page.click('a[href="/auth/login"]');
-    await this.page.waitForTimeout(2000);
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
     // Fill in credentials if provided
     if (this.config.email && this.config.password) {
       await this.page.type('input[name="username"]', this.config.email);
       await this.page.click('button[type="submit"]');
-      await this.page.waitForTimeout(2000);
+      await new Promise(resolve => setTimeout(resolve, 2000));
       
       await this.page.type('input[name="password"]', this.config.password);
       await this.page.click('button[type="submit"]');
-      await this.page.waitForTimeout(5000);
+      await new Promise(resolve => setTimeout(resolve, 5000));
     } else {
       console.log('Please log in manually...');
       // Wait for manual login (in non-headless mode)
@@ -69,18 +69,21 @@ export class ChatGPTAutomation {
     await this.page.waitForSelector('textarea[data-id="root"]');
 
     // Upload image
-    const fileInput = await this.page.$('input[type="file"]');
-    if (!fileInput) {
+    let fileInputElement = await this.page.$('input[type="file"]');
+    if (!fileInputElement) {
       const uploadButton = await this.page.$('button[aria-label="Attach files"]');
       if (uploadButton) {
         await uploadButton.click();
-        await this.page.waitForTimeout(1000);
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
 
     await this.page.waitForSelector('input[type="file"]');
-    await this.page.uploadFile('input[type="file"]', imagePath);
-    await this.page.waitForTimeout(2000);
+    fileInputElement = await this.page.$('input[type="file"]');
+    if (fileInputElement) {
+      await fileInputElement.uploadFile(imagePath);
+    }
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
     // Type and submit prompt
     const textarea = await this.page.$('textarea[data-id="root"]');
@@ -91,7 +94,7 @@ export class ChatGPTAutomation {
     await this.page.keyboard.press('Enter');
 
     // Wait for response
-    await this.page.waitForTimeout(5000);
+    await new Promise(resolve => setTimeout(resolve, 5000));
     
     // Look for generated image
     const imageSelector = 'img[src*="oaidalleapiprodscus"]';

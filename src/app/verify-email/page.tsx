@@ -26,8 +26,8 @@ function VerifyEmailContent() {
     }
 
     // Check if there's a verification token in the URL
-    const token = searchParams.get('token');
-    const emailParam = searchParams.get('email');
+    const token = searchParams?.get('token');
+    const emailParam = searchParams?.get('email');
     if (token) {
       setVerificationToken(token);
     }

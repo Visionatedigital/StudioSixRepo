@@ -13,8 +13,8 @@ function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { data: session, update } = useSession();
-  const sessionRefreshed = searchParams.get('session_refreshed');
-  const paymentStatus = searchParams.get('payment_status');
+  const sessionRefreshed = searchParams?.get('session_refreshed');
+  const paymentStatus = searchParams?.get('payment_status');
 
   useEffect(() => {
     if (sessionRefreshed === 'true') {

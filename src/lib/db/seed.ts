@@ -445,7 +445,7 @@ async function seedSampleMessages() {
       
       await prisma.threadMessage.create({
         data: {
-          content: 'Yes, the M2 Max is excellent. I've been using it for medium-to-large projects with no issues. Just make sure you get the model with 64GB RAM and at least 1TB storage.',
+          content: 'Yes, the M2 Max is excellent. I\'ve been using it for medium-to-large projects with no issues. Just make sure you get the model with 64GB RAM and at least 1TB storage.',
           threadId: hardwareThread.id,
           userId: users[4]?.id || demoUsers[4].id,
           likes: 7

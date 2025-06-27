@@ -1,11 +1,13 @@
 import puppeteer, { Browser } from 'puppeteer';
 import * as cheerio from 'cheerio';
-import { CaseStudy } from '../base';
+import { CaseStudy, BaseScraper } from '../base';
 import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import path from 'path';
 
-export class ArchDailyScraper {
+export class ArchDailyScraper extends BaseScraper {
+  protected source = 'ArchDaily';
+  protected baseUrl = 'https://www.archdaily.com';
   private browser: Browser | null = null;
   private debugMode: boolean = process.env.NODE_ENV === 'development';
   private logPrefix = `[ArchDailyScraper]`;
@@ -519,5 +521,51 @@ export class ArchDailyScraper {
     if (text.toLowerCase().includes('open plan')) return 'Open Plan';
     
     return 'Standard Layout';
+  }
+
+  /**
+   * Scrapes a list of project URLs from ArchDaily
+   */
+  public async scrapeProjectList(page: number = 1): Promise<string[]> {
+    this.log(`Scraping project list from page ${page}`);
+    
+    try {
+      const browser = await this.getBrowser();
+      const pageInstance = await browser.newPage();
+      
+      await pageInstance.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
+      
+      const url = `${this.baseUrl}/search/projects?page=${page}`;
+      this.log(`Navigating to ${url}`);
+      
+      await pageInstance.goto(url, { 
+        waitUntil: 'networkidle2',
+        timeout: 30000 
+      });
+      
+      const content = await pageInstance.content();
+      await pageInstance.close();
+      
+      const $ = cheerio.load(content);
+      const projectUrls: string[] = [];
+      
+      // Extract project URLs from the search results
+      $('article a[href*="/"]').each((_, element) => {
+        const href = $(element).attr('href');
+        if (href && href.includes('/project/') && !href.includes('?')) {
+          const fullUrl = href.startsWith('http') ? href : `${this.baseUrl}${href}`;
+          if (!projectUrls.includes(fullUrl)) {
+            projectUrls.push(fullUrl);
+          }
+        }
+      });
+      
+      this.log(`Found ${projectUrls.length} project URLs on page ${page}`);
+      return projectUrls;
+      
+    } catch (error) {
+      this.logError(`Error scraping project list from page ${page}`, error);
+      return []; // Return empty array instead of throwing
+    }
   }
 } 

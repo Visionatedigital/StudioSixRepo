@@ -11,7 +11,7 @@ import { fallbackCaseStudies } from '@/lib/scraper/fallbackData';
 export default function CaseStudyDetailPage() {
   const router = useRouter();
   const params = useParams();
-  const { id } = params;
+  const id = params?.id as string;
   
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

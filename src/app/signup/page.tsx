@@ -17,7 +17,7 @@ function SignupContent() {
 
   useEffect(() => {
     // Check if there's a verification token in the URL
-    const token = searchParams.get('token');
+    const token = searchParams?.get('token');
     if (token) {
       setVerificationToken(token);
       setShowVerification(true);

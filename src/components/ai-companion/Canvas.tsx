@@ -5115,8 +5115,18 @@ export default function Canvas({ name, description, projectId }: Props) {
     };
 
     // Door placement functions
-    const findNearestWall = (mouseX: number, mouseY: number) => {
-      let nearestWall = null;
+    interface NearestWallResult {
+      wallId: string;
+      position: { x: number; y: number };
+      segmentIndex: number;
+      wallAngle: number;
+      segmentStart: { x: number; y: number };
+      segmentEnd: { x: number; y: number };
+      positionOnSegment: number;
+    }
+
+    const findNearestWall = (mouseX: number, mouseY: number): NearestWallResult | null => {
+      let nearestWall: NearestWallResult | null = null;
       let minDistance = Infinity;
       const snapDistance = 20; // Pixels
 
@@ -5805,8 +5815,18 @@ export default function Canvas({ name, description, projectId }: Props) {
     };
 
     // Fill tool wall edge snapping function
-    const findNearestWallEdgeForFill = (mouseX: number, mouseY: number) => {
-      let nearestSnapPoint = null;
+    interface WallEdgeSnapResult {
+      x: number;
+      y: number;
+      wallId: string;
+      distance: number;
+      segmentIndex?: number;
+      pointIndex?: number;
+      isCorner?: boolean;
+    }
+
+    const findNearestWallEdgeForFill = (mouseX: number, mouseY: number): WallEdgeSnapResult | null => {
+      let nearestSnapPoint: WallEdgeSnapResult | null = null;
       let minDistance = Infinity;
       const snapDistance = 20; // Pixels
 
@@ -8456,10 +8476,7 @@ export default function Canvas({ name, description, projectId }: Props) {
                     
                     // Check if shift key is pressed
                     if (stage && stage.container()) {
-                      const container = stage.container();
-                      const isShiftPressed = container._pointerPositions?.[0]?.shiftKey || 
-                                           (window.event as any)?.shiftKey ||
-                                           false;
+                      const isShiftPressed = (window.event as any)?.shiftKey || false;
                       
                       if (isShiftPressed) {
                         const rotation = node.rotation();
