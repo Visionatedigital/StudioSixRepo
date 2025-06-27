@@ -8260,7 +8260,7 @@ export default function Canvas({ name, description, projectId }: Props) {
               {simpleDrawLines.map((line, idx) => (
                 <KonvaLine
                   key={idx}
-                  ref={el => simpleDrawLineRefs.current[idx] = el}
+                  ref={el => { simpleDrawLineRefs.current[idx] = el; }}
                   points={line.points}
                   stroke={line.color}
                   strokeWidth={line.width}
