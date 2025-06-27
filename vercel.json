@@ -1,6 +1,5 @@
 {
   "framework": "nextjs",
-  "nodeVersion": "18.x",
   "installCommand": "npm ci && npm run postinstall",
   "buildCommand": "npm run build",
   "env": {
