@@ -12,7 +12,8 @@ const nextConfig = {
     contentDispositionType: 'attachment',
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
-  webpack: (config, { isServer }) => {
+  webpack: (config, { isServer, dev }) => {
+    // Handle client-side fallbacks
     if (!isServer) {
       config.resolve.fallback = {
         ...config.resolve.fallback,
@@ -23,7 +24,7 @@ const nextConfig = {
       };
     }
 
-    // Handle bcrypt properly for both client and server
+    // Handle bcrypt and other externals properly for both client and server
     config.externals = config.externals || [];
     if (isServer) {
       config.externals.push('bcrypt');
@@ -43,6 +44,7 @@ const nextConfig = {
       };
     }
 
+    // External libraries configuration
     config.externals.push({
       'utf-8-validate': 'commonjs utf-8-validate',
       'bufferutil': 'commonjs bufferutil',
@@ -52,21 +54,25 @@ const nextConfig = {
       config.externals.push('cheerio', 'undici');
     }
     
-    // Direct filesystem approach for React CJS files
-    const reactDir = path.join(process.cwd(), 'node_modules', 'react');
+    // React CJS resolution - comprehensive approach for both client and server
+    const reactBasePath = path.join(process.cwd(), 'node_modules', 'react');
+    const reactDomBasePath = path.join(process.cwd(), 'node_modules', 'react-dom');
     
     // Check if React CJS files exist
-    const reactProdPath = path.join(reactDir, 'cjs', 'react.production.min.js');
-    const reactJsxProdPath = path.join(reactDir, 'cjs', 'react-jsx-runtime.production.min.js');
-    const reactDevPath = path.join(reactDir, 'cjs', 'react.development.js');
-    const reactJsxDevPath = path.join(reactDir, 'cjs', 'react-jsx-runtime.development.js');
+    const reactProdPath = path.join(reactBasePath, 'cjs', 'react.production.min.js');
+    const reactJsxProdPath = path.join(reactBasePath, 'cjs', 'react-jsx-runtime.production.min.js');
+    const reactDevPath = path.join(reactBasePath, 'cjs', 'react.development.js');
+    const reactJsxDevPath = path.join(reactBasePath, 'cjs', 'react-jsx-runtime.development.js');
     
     console.log('React CJS files check:');
     console.log('Production:', fs.existsSync(reactProdPath));
     console.log('JSX Production:', fs.existsSync(reactJsxProdPath));
     console.log('Development:', fs.existsSync(reactDevPath));
     console.log('JSX Development:', fs.existsSync(reactJsxDevPath));
+    console.log('React base path:', reactBasePath);
+    console.log('Current working directory:', process.cwd());
     
+    // Initialize resolve alias if it doesn't exist
     config.resolve.alias = config.resolve.alias || {};
     
     // Map the problematic imports to actual filesystem paths
@@ -80,6 +86,32 @@ const nextConfig = {
     config.resolve.alias['react/cjs/react-jsx-runtime.production.min.js'] = reactJsxProdPath;
     config.resolve.alias['react/cjs/react.development.js'] = reactDevPath;
     config.resolve.alias['react/cjs/react-jsx-runtime.development.js'] = reactJsxDevPath;
+
+    // Custom webpack plugin to handle React CJS resolution at runtime
+    config.plugins.push({
+      apply: (compiler) => {
+        compiler.hooks.normalModuleFactory.tap('ReactCJSResolver', (factory) => {
+          factory.hooks.beforeResolve.tap('ReactCJSResolver', (resolveData) => {
+            if (resolveData.request && resolveData.request.includes('./cjs/react')) {
+              console.log('Intercepting React CJS request:', resolveData.request);
+              
+              // Replace relative CJS paths with absolute paths
+              if (resolveData.request === './cjs/react.production.min.js') {
+                resolveData.request = reactProdPath;
+              } else if (resolveData.request === './cjs/react-jsx-runtime.production.min.js') {
+                resolveData.request = reactJsxProdPath;
+              } else if (resolveData.request === './cjs/react.development.js') {
+                resolveData.request = reactDevPath;
+              } else if (resolveData.request === './cjs/react-jsx-runtime.development.js') {
+                resolveData.request = reactJsxDevPath;
+              }
+              
+              console.log('Resolved to:', resolveData.request);
+            }
+          });
+        });
+      }
+    });
 
     // Handle private fields syntax
     config.module.rules.push({
