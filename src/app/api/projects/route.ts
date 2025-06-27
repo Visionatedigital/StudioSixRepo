@@ -29,11 +29,31 @@ export async function POST(req: Request) {
     }
 
     console.log('[PROJECTS_POST] Creating project for user:', session.user.id);
+    
+    // Get or create a default client for the user
+    let defaultClient = await prisma.client.findFirst({
+      where: {
+        email: session.user.email || 'default@example.com'
+      }
+    });
+    
+    if (!defaultClient) {
+      defaultClient = await prisma.client.create({
+        data: {
+          name: session.user.name || 'Default Client',
+          email: session.user.email || 'default@example.com',
+          phone: 'N/A',
+          address: 'N/A'
+        }
+      });
+    }
+    
     const project = await prisma.project.create({
       data: {
         name,
         description,
         userId: session.user.id,
+        clientId: defaultClient.id,
         canvasData: {
           elements: [],
           version: 1,

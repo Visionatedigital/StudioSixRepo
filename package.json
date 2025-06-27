@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "node server.js",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "node server.js",
     "lint": "next lint",
     "generate-assets": "node scripts/generate-asset-manifest.js",
@@ -14,7 +14,8 @@
     "scrape": "tsx src/lib/scraper/run.ts",
     "scrape:archdaily": "tsx src/lib/scraper/run.ts",
     "scraper:run": "tsx src/lib/scraper/run.ts",
-    "update-materials": "node scripts/update-material-picker.js"
+    "update-materials": "node scripts/update-material-picker.js",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.8.0",
