@@ -1,5 +1,4 @@
 import { NextResponse, NextRequest } from 'next/server';
-import sharp from 'sharp';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 
@@ -333,16 +332,7 @@ async function sendToGradioAPI(prompt: string, uploadedImageBase64: string, sett
 }
 
 // Helper function to get image dimensions
-async function getImageDimensions(buffer: Buffer): Promise<{ width: number; height: number }> {
-  const metadata = await sharp(buffer).metadata();
-  if (!metadata.width || !metadata.height) {
-    throw new Error('Could not determine image dimensions');
-  }
-  return {
-    width: metadata.width,
-    height: metadata.height
-  };
-}
+
 
 // Main API endpoint handler
 export async function POST(req: NextRequest) {
