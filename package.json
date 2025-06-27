@@ -6,9 +6,9 @@
     "node": ">=18.0.0"
   },
   "scripts": {
-    "dev": "node server.js",
-    "build": "prisma generate && NODE_ENV=production next build",
-    "start": "node server.js",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
     "lint": "next lint",
     "generate-assets": "node scripts/generate-asset-manifest.js",
     "db:migrate": "tsx src/lib/db/migrate.ts",
