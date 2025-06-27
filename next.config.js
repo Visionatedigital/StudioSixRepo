@@ -2,6 +2,75 @@
 const path = require('path');
 const fs = require('fs');
 
+// Function to ensure React CJS files are accessible
+function ensureReactCJSFiles() {
+  try {
+    const reactDir = path.join(process.cwd(), 'node_modules', 'react');
+    const reactCjsDir = path.join(reactDir, 'cjs');
+    
+    // Check if CJS directory exists
+    if (!fs.existsSync(reactCjsDir)) {
+      console.log('React CJS directory not found, creating...');
+      fs.mkdirSync(reactCjsDir, { recursive: true });
+    }
+    
+    // Define the CJS files that should exist
+    const cjsFiles = [
+      'react.production.min.js',
+      'react.development.js',
+      'react-jsx-runtime.production.min.js',
+      'react-jsx-runtime.development.js'
+    ];
+    
+    // Check each file and create if missing
+    cjsFiles.forEach(filename => {
+      const filePath = path.join(reactCjsDir, filename);
+      if (!fs.existsSync(filePath)) {
+        console.log(`Creating missing React CJS file: ${filename}`);
+        
+        // Create a basic React CJS export that re-exports from the main React module
+        let content = '';
+        if (filename.includes('jsx-runtime')) {
+          content = `
+// Auto-generated React JSX Runtime CJS wrapper
+'use strict';
+if (process.env.NODE_ENV === 'production') {
+  module.exports = require('react/jsx-runtime');
+} else {
+  module.exports = require('react/jsx-runtime');
+}
+`;
+        } else {
+          content = `
+// Auto-generated React CJS wrapper
+'use strict';
+if (process.env.NODE_ENV === 'production') {
+  module.exports = require('react');
+} else {
+  module.exports = require('react');
+}
+`;
+        }
+        
+        try {
+          fs.writeFileSync(filePath, content, 'utf8');
+          console.log(`Successfully created: ${filePath}`);
+        } catch (writeError) {
+          console.warn(`Failed to create ${filePath}:`, writeError.message);
+        }
+      } else {
+        console.log(`React CJS file exists: ${filename}`);
+      }
+    });
+    
+  } catch (error) {
+    console.warn('Error ensuring React CJS files:', error.message);
+  }
+}
+
+// Ensure React CJS files exist before Next.js starts
+ensureReactCJSFiles();
+
 const nextConfig = {
   distDir: '.next',
   reactStrictMode: true,
@@ -21,6 +90,10 @@ const nextConfig = {
         net: false,
         tls: false,
         canvas: false,
+        child_process: false,
+        'puppeteer-core': false,
+        'puppeteer-extra': false,
+        'puppeteer-extra-plugin-stealth': false,
       };
     }
 
@@ -29,6 +102,13 @@ const nextConfig = {
     if (isServer) {
       config.externals.push('bcrypt');
       config.externals.push('canvas');
+      config.externals.push('puppeteer-core');
+      config.externals.push('puppeteer-extra');
+      config.externals.push('puppeteer-extra-plugin-stealth');
+      config.externals.push('htmlparser2');
+      config.externals.push('entities');
+      config.externals.push('html-to-text');
+      config.externals.push('resend');
     }
 
     config.module.rules.push({
@@ -54,26 +134,30 @@ const nextConfig = {
       config.externals.push('cheerio', 'undici');
     }
     
-    // React CJS resolution - comprehensive approach for both client and server
+    // Enhanced React CJS resolution with multiple strategies
     const reactBasePath = path.join(process.cwd(), 'node_modules', 'react');
-    const reactDomBasePath = path.join(process.cwd(), 'node_modules', 'react-dom');
+    const reactCjsPath = path.join(reactBasePath, 'cjs');
     
-    // Check if React CJS files exist
-    const reactProdPath = path.join(reactBasePath, 'cjs', 'react.production.min.js');
-    const reactJsxProdPath = path.join(reactBasePath, 'cjs', 'react-jsx-runtime.production.min.js');
-    const reactDevPath = path.join(reactBasePath, 'cjs', 'react.development.js');
-    const reactJsxDevPath = path.join(reactBasePath, 'cjs', 'react-jsx-runtime.development.js');
+    // Verify React CJS files exist
+    console.log('Webpack config - React base path:', reactBasePath);
+    console.log('Webpack config - React CJS path exists:', fs.existsSync(reactCjsPath));
     
-    console.log('React CJS files check:');
-    console.log('Production:', fs.existsSync(reactProdPath));
-    console.log('JSX Production:', fs.existsSync(reactJsxProdPath));
-    console.log('Development:', fs.existsSync(reactDevPath));
-    console.log('JSX Development:', fs.existsSync(reactJsxDevPath));
-    console.log('React base path:', reactBasePath);
-    console.log('Current working directory:', process.cwd());
+    if (fs.existsSync(reactCjsPath)) {
+      const cjsFiles = ['react.production.min.js', 'react-jsx-runtime.production.min.js', 'react.development.js', 'react-jsx-runtime.development.js'];
+      cjsFiles.forEach(file => {
+        const filePath = path.join(reactCjsPath, file);
+        console.log(`Webpack config - ${file} exists:`, fs.existsSync(filePath));
+      });
+    }
     
     // Initialize resolve alias if it doesn't exist
     config.resolve.alias = config.resolve.alias || {};
+    
+    // Direct path mappings for React CJS files
+    const reactProdPath = path.join(reactCjsPath, 'react.production.min.js');
+    const reactJsxProdPath = path.join(reactCjsPath, 'react-jsx-runtime.production.min.js');
+    const reactDevPath = path.join(reactCjsPath, 'react.development.js');
+    const reactJsxDevPath = path.join(reactCjsPath, 'react-jsx-runtime.development.js');
     
     // Map the problematic imports to actual filesystem paths
     config.resolve.alias['./cjs/react.production.min.js'] = reactProdPath;
@@ -87,36 +171,23 @@ const nextConfig = {
     config.resolve.alias['react/cjs/react.development.js'] = reactDevPath;
     config.resolve.alias['react/cjs/react-jsx-runtime.development.js'] = reactJsxDevPath;
 
-    // Custom webpack plugin to handle React CJS resolution at runtime
-    config.plugins.push({
-      apply: (compiler) => {
-        compiler.hooks.normalModuleFactory.tap('ReactCJSResolver', (factory) => {
-          factory.hooks.beforeResolve.tap('ReactCJSResolver', (resolveData) => {
-            if (resolveData.request && resolveData.request.includes('./cjs/react')) {
-              console.log('Intercepting React CJS request:', resolveData.request);
-              
-              // Replace relative CJS paths with absolute paths
-              if (resolveData.request === './cjs/react.production.min.js') {
-                resolveData.request = reactProdPath;
-              } else if (resolveData.request === './cjs/react-jsx-runtime.production.min.js') {
-                resolveData.request = reactJsxProdPath;
-              } else if (resolveData.request === './cjs/react.development.js') {
-                resolveData.request = reactDevPath;
-              } else if (resolveData.request === './cjs/react-jsx-runtime.development.js') {
-                resolveData.request = reactJsxDevPath;
-              }
-              
-              console.log('Resolved to:', resolveData.request);
-            }
-          });
-        });
-      }
-    });
+    // Enhanced resolve configuration for better module resolution
+    config.resolve.modules = config.resolve.modules || [];
+    config.resolve.modules.unshift(path.join(process.cwd(), 'node_modules'));
+    
+    // Add resolve.roots for better module resolution
+    config.resolve.roots = config.resolve.roots || [];
+    config.resolve.roots.push(process.cwd());
 
-    // Handle private fields syntax
+    // Handle private fields syntax and other problematic modules
     config.module.rules.push({
       test: /\.js$/,
-      include: /node_modules\/undici/,
+      include: [
+        /node_modules\/undici/,
+        /node_modules\/puppeteer-core/,
+        /node_modules\/clone-deep/,
+        /node_modules\/puppeteer-extra/
+      ],
       use: {
         loader: 'babel-loader',
         options: {
@@ -125,6 +196,22 @@ const nextConfig = {
             ['@babel/plugin-transform-private-property-in-object', { loose: true }],
             ['@babel/plugin-transform-class-properties', { loose: true }],
             ['@babel/plugin-transform-private-methods', { loose: true }]
+          ]
+        }
+      }
+    });
+
+    // Ignore problematic dynamic requires in clone-deep
+    config.module.rules.push({
+      test: /node_modules\/clone-deep\/utils\.js$/,
+      use: {
+        loader: 'babel-loader',
+        options: {
+          presets: ['@babel/preset-env'],
+          plugins: [
+            ['babel-plugin-transform-require-ignore', {
+              extensions: ['.js']
+            }]
           ]
         }
       }
@@ -164,8 +251,8 @@ const nextConfig = {
   },
   // Skip API routes and dynamic routes during static export
   experimental: {
-    serverComponentsExternalPackages: ['puppeteer-extra', 'puppeteer-extra-plugin-stealth', 'cheerio', 'undici'],
-  },
+    serverComponentsExternalPackages: ['bcrypt', 'canvas', 'puppeteer-core', 'puppeteer-extra', 'puppeteer-extra-plugin-stealth', 'htmlparser2', 'entities', 'html-to-text', 'resend']
+  }
 }
 
 // Special handling for static export (build command)
