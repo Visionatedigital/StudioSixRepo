@@ -1,4 +1,6 @@
 /** @type {import('next').NextConfig} */
+const path = require('path');
+
 const nextConfig = {
   distDir: '.next',
   reactStrictMode: true,
@@ -49,6 +51,16 @@ const nextConfig = {
       config.externals.push('cheerio', 'undici');
     }
     
+    // Fix React 18 CJS module resolution
+    const reactPath = path.dirname(require.resolve('react/package.json'));
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      'react/cjs/react.production.min.js': path.join(reactPath, 'cjs/react.production.min.js'),
+      'react/cjs/react-jsx-runtime.production.min.js': path.join(reactPath, 'cjs/react-jsx-runtime.production.min.js'),
+      'react/cjs/react.development.js': path.join(reactPath, 'cjs/react.development.js'),
+      'react/cjs/react-jsx-runtime.development.js': path.join(reactPath, 'cjs/react-jsx-runtime.development.js')
+    };
+
     // Handle private fields syntax
     config.module.rules.push({
       test: /\.js$/,

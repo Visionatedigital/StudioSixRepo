@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "node server.js",
-    "build": "prisma generate && next build",
+    "build": "prisma generate && NODE_ENV=production next build",
     "start": "node server.js",
     "lint": "next lint",
     "generate-assets": "node scripts/generate-asset-manifest.js",
@@ -18,12 +18,14 @@
     "scrape:archdaily": "tsx src/lib/scraper/run.ts",
     "scraper:run": "tsx src/lib/scraper/run.ts",
     "update-materials": "node scripts/update-material-picker.js",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate && npm run check-react",
+    "check-react": "node -e \"console.log('React version:', require('react/package.json').version); const fs = require('fs'); const path = require('path'); const reactPath = path.dirname(require.resolve('react/package.json')); const prodFile = path.join(reactPath, 'cjs/react.production.min.js'); const jsxFile = path.join(reactPath, 'cjs/react-jsx-runtime.production.min.js'); if (fs.existsSync(prodFile)) { console.log('✓ React production CJS exists'); } else { console.error('✗ React production CJS missing'); } if (fs.existsSync(jsxFile)) { console.log('✓ React JSX runtime CJS exists'); } else { console.error('✗ React JSX runtime CJS missing'); }\""
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.8.0",
     "@aws-sdk/client-s3": "^3.787.0",
     "@aws-sdk/s3-request-presigner": "^3.787.0",
+    "@fullcalendar/core": "6.1.17",
     "@fullcalendar/daygrid": "^6.1.17",
     "@fullcalendar/interaction": "^6.1.17",
     "@fullcalendar/react": "^6.1.17",
@@ -55,6 +57,7 @@
     "drizzle-orm": "^0.41.0",
     "framer-motion": "^12.19.1",
     "ioredis": "^5.6.0",
+    "its-fine": "1.2.5",
     "konva": "^9.3.0",
     "locomotive-scroll": "^4.1.4",
     "lodash": "^4.17.21",
