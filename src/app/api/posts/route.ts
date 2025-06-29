@@ -8,6 +8,7 @@ import { join } from 'path';
 import crypto from 'crypto';
 import { existsSync, mkdirSync } from 'fs';
 import { Prisma } from '@prisma/client';
+import { supabase } from '@/lib/supabaseClient';
 
 export const dynamic = dynamicConfig.dynamic;
 export const revalidate = dynamicConfig.revalidate;
@@ -139,77 +140,62 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Post must have content or an attachment' }, { status: 400 });
     }
 
-    // Ensure uploads directory exists
-    const uploadsDir = join(process.cwd(), 'public', 'uploads');
-    if (!existsSync(uploadsDir)) {
-      console.log(`Creating uploads directory: ${uploadsDir}`);
-      mkdirSync(uploadsDir, { recursive: true });
-    } else {
-      console.log(`Uploads directory exists: ${uploadsDir}`);
-    }
-
     // Process attachments
     let hasImage = false;
     let i = 0;
     const uploadPromises: Promise<any>[] = [];
     const tempAttachments: { index: number, attachment: { type: string, url: string, name: string, size: number } }[] = [];
-    
+    const userId = session.user.id;
+
     while (formData.has(`attachment${i}`)) {
       const file = formData.get(`attachment${i}`) as File;
-      console.log(`Processing attachment ${i}: ${file?.name}, type: ${file?.type}`);
-      
       if (file) {
-        const currentIndex = i; // Capture the current index for the closure
-        
+        const currentIndex = i;
         try {
           // Generate unique filename
           const fileExtension = file.name.split('.').pop() || 'jpg';
           const fileName = `post-${crypto.randomUUID()}.${fileExtension}`;
-          const filePath = join(uploadsDir, fileName);
-          console.log(`Generated filename: ${fileName}, full path: ${filePath}`);
-          
+          const filePath = `posts/${userId}/${fileName}`;
+
           // Convert the file to a Buffer
           const bytes = await file.arrayBuffer();
           const buffer = Buffer.from(bytes);
-          console.log(`File converted to buffer, size: ${buffer.length} bytes`);
-          
-          // Save the file
-          const uploadPromise = writeFile(filePath, buffer).then(() => {
-            console.log(`File saved to ${filePath}`);
-            
-            // Create public URL
-            const url = `/uploads/${fileName}`;
-            console.log(`Public URL: ${url}`);
-            
-            // Create attachment object
-            const attachment = {
-              type: file.type.startsWith('image/') 
-                ? 'image' 
-                : file.type.startsWith('video/') 
-                  ? 'video' 
-                  : 'document',
-              url: url,
-              name: file.name,
-              size: file.size
-            };
-            
-            // Store in temp array with index info to maintain order
-            tempAttachments.push({ index: currentIndex, attachment });
-            
-            // Set as main image if it's the first image
-            if (file.type.startsWith('image/') && currentIndex === 0) {
-              imageUrl = url;
-              hasImage = true;
-              console.log(`Set as main image URL: ${imageUrl}`);
-            }
-            
-            return { success: true, url };
-          });
-          
-          uploadPromises.push(uploadPromise);
+
+          // Upload to Supabase Storage
+          const { error: uploadError } = await supabase.storage
+            .from('all-uploads')
+            .upload(filePath, buffer, { upsert: true, contentType: file.type });
+          if (uploadError) {
+            throw new Error(uploadError.message);
+          }
+
+          // Get public URL
+          const { data: publicUrlData } = supabase.storage
+            .from('all-uploads')
+            .getPublicUrl(filePath);
+          const url = publicUrlData?.publicUrl;
+
+          // Create attachment object
+          const attachment = {
+            type: file.type.startsWith('image/') 
+              ? 'image' 
+              : file.type.startsWith('video/') 
+                ? 'video' 
+                : 'document',
+            url: url,
+            name: file.name,
+            size: file.size
+          };
+
+          tempAttachments.push({ index: currentIndex, attachment });
+
+          // Set as main image if it's the first image
+          if (file.type.startsWith('image/') && currentIndex === 0) {
+            hasImage = true;
+            imageUrl = url;
+          }
         } catch (error) {
-          console.error('Error processing file:', error);
-          // Continue with other files if one fails
+          console.error(`Error uploading attachment ${i}:`, error);
         }
       }
       i++;
