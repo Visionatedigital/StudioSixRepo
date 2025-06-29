@@ -34,7 +34,10 @@ const nextConfig = {
       'cheerio',
       'undici'
     ]
-  }
+  },
+  images: {
+    domains: ['cpzkvqdunuxsfxrcdzjq.supabase.co'],
+  },
 }
 
 module.exports = nextConfig 
