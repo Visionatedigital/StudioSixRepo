@@ -7,6 +7,10 @@ import crypto from 'crypto';
 
 export async function POST(request: Request) {
   try {
+    // Debug: Log Supabase env variables
+    console.log('SUPABASE_URL:', process.env.NEXT_PUBLIC_SUPABASE_URL);
+    console.log('SUPABASE_ANON_KEY:', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+
     // Check authentication
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
@@ -42,11 +46,14 @@ export async function POST(request: Request) {
 
     // Upload to Supabase Storage
     const filePath = `profile-pictures/${userId}/${filename}`;
-    const { error: uploadError } = await supabase.storage
+    const { error: uploadError, data: uploadData } = await supabase.storage
       .from('user-uploads')
       .upload(filePath, buffer, { upsert: true, contentType: file.type });
+    // Debug: Log upload result
+    console.log('Supabase upload result:', { uploadError, uploadData });
 
     if (uploadError) {
+      console.error('Supabase upload error:', uploadError);
       return NextResponse.json({ error: uploadError.message }, { status: 500 });
     }
 
