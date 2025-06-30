@@ -30,8 +30,7 @@ export async function POST(req: NextRequest) {
 
     // Launch browser in headless mode with stealth arguments
     browser = await puppeteer.launch({
-      headless: false,
-      executablePath: process.env.CHROME_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable',
+      headless: false, // Show browser for debugging
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
