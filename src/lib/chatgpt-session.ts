@@ -1,27 +1,5 @@
-import puppeteer from 'puppeteer-extra';
-import StealthPlugin from 'puppeteer-extra-plugin-stealth';
-import 'puppeteer-extra-plugin-stealth/evasions/chrome.app';
-import 'puppeteer-extra-plugin-stealth/evasions/chrome.csi';
-import 'puppeteer-extra-plugin-stealth/evasions/chrome.loadTimes';
-import 'puppeteer-extra-plugin-stealth/evasions/chrome.runtime';
-import 'puppeteer-extra-plugin-stealth/evasions/defaultArgs';
-import 'puppeteer-extra-plugin-stealth/evasions/iframe.contentWindow';
-import 'puppeteer-extra-plugin-stealth/evasions/media.codecs';
-import 'puppeteer-extra-plugin-stealth/evasions/navigator.hardwareConcurrency';
-import 'puppeteer-extra-plugin-stealth/evasions/navigator.languages';
-import 'puppeteer-extra-plugin-stealth/evasions/navigator.permissions';
-import 'puppeteer-extra-plugin-stealth/evasions/navigator.plugins';
-import 'puppeteer-extra-plugin-stealth/evasions/navigator.vendor';
-import 'puppeteer-extra-plugin-stealth/evasions/navigator.webdriver';
-import 'puppeteer-extra-plugin-stealth/evasions/sourceurl';
-import 'puppeteer-extra-plugin-stealth/evasions/user-agent-override';
-import 'puppeteer-extra-plugin-stealth/evasions/webgl.vendor';
-import 'puppeteer-extra-plugin-stealth/evasions/window.outerdimensions';
-import 'puppeteer-extra-plugin-user-data-dir';
+import puppeteer from 'puppeteer';
 import fs from 'fs';
-
-// Apply the stealth plugin
-puppeteer.use(StealthPlugin());
 
 interface ChatGPTSession {
   browser: any;
@@ -64,11 +42,75 @@ class ChatGPTSessionManager {
     try {
       const browser = await puppeteer.launch({
         headless: false, // Show browser for debugging
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-blink-features=AutomationControlled',
+          '--disable-web-security',
+          '--disable-features=VizDisplayCompositor',
+          '--disable-ipc-flooding-protection',
+          '--disable-background-timer-throttling',
+          '--disable-backgrounding-occluded-windows',
+          '--disable-renderer-backgrounding',
+          '--disable-field-trial-config',
+          '--disable-back-forward-cache',
+          '--disable-http-cache',
+          '--disable-remote-fonts',
+          '--disable-sync',
+          '--disable-translate',
+          '--hide-scrollbars',
+          '--mute-audio',
+          '--no-first-run',
+          '--safebrowsing-disable-auto-update',
+          '--ignore-certificate-errors',
+          '--ignore-ssl-errors',
+          '--ignore-certificate-errors-spki-list',
+          '--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        ]
       });
 
       const page = await browser.newPage();
       await page.setViewport({ width: 1280, height: 800 });
+
+      // Add stealth measures
+      await page.evaluateOnNewDocument(() => {
+        // Remove webdriver property
+        Object.defineProperty(navigator, 'webdriver', {
+          get: () => undefined,
+        });
+
+        // Override permissions
+        const originalQuery = window.navigator.permissions.query;
+        (window.navigator.permissions as any).query = (parameters: any) => (
+          parameters.name === 'notifications' ?
+            Promise.resolve({ state: Notification.permission }) :
+            originalQuery(parameters)
+        );
+
+        // Override plugins
+        Object.defineProperty(navigator, 'plugins', {
+          get: () => [1, 2, 3, 4, 5],
+        });
+
+        // Override languages
+        Object.defineProperty(navigator, 'languages', {
+          get: () => ['en-US', 'en'],
+        });
+
+        // Override chrome
+        (window as any).chrome = {
+          runtime: {},
+        };
+
+        // Override permissions
+        const originalQuery2 = window.navigator.permissions.query;
+        (window.navigator.permissions as any).query = (parameters: any) => (
+          parameters.name === 'notifications' ?
+            Promise.resolve({ state: Notification.permission }) :
+            originalQuery2(parameters)
+        );
+      });
 
       // Load cookies if available
       if (fs.existsSync('chatgpt-cookies.json')) {

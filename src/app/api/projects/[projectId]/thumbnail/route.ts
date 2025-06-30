@@ -13,13 +13,13 @@ export async function POST(req: NextRequest, { params }: { params: { projectId: 
   const filename = `${params.projectId}-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
   const filePath = `project-thumbnails/${params.projectId}/${filename}`;
   const { error: uploadError } = await supabase.storage
-    .from('user-uploads')
+    .from('all-uploads')
     .upload(filePath, buffer, { upsert: true, contentType: file.type });
   if (uploadError) {
     return NextResponse.json({ error: uploadError.message }, { status: 500 });
   }
   const { data: publicUrlData } = supabase.storage
-    .from('user-uploads')
+    .from('all-uploads')
     .getPublicUrl(filePath);
   const url = publicUrlData?.publicUrl;
   await prisma.project.update({
