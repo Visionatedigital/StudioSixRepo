@@ -19,13 +19,6 @@ const nextConfig = {
       config.externals.push('undici');
     }
 
-    // Ignore problematic modules for puppeteer-extra-plugin-user-preferences
-    config.plugins.push(
-      new webpack.IgnorePlugin({
-        resourceRegExp: /^clone-deep$|^merge-deep$/,
-      })
-    );
-
     return config;
   },
   experimental: {
@@ -35,7 +28,7 @@ const nextConfig = {
       'puppeteer-core',
       'puppeteer-extra',
       'puppeteer-extra-plugin-stealth',
-      'puppeteer-extra-plugin-user-preferences',
+      'puppeteer-extra-plugin-user-data-dir',
       'htmlparser2',
       'entities',
       'html-to-text',
