@@ -1,11 +1,11 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import puppeteer from 'puppeteer';
+import puppeteer from 'puppeteer-core';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { Frame } from 'puppeteer';
+import { Frame } from 'puppeteer-core';
 
 export async function POST(req: NextRequest) {
   let browser: any = null;
@@ -30,7 +30,8 @@ export async function POST(req: NextRequest) {
 
     // Launch browser in headless mode with stealth arguments
     browser = await puppeteer.launch({
-      headless: true,
+      headless: false,
+      executablePath: process.env.CHROME_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable',
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',

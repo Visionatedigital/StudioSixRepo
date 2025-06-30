@@ -11,7 +11,7 @@ const tools = [
     title: 'Exterior AI',
     description: 'Transform your architectural concepts into stunning exterior visualizations',
     image: '/Banner Images/AdobeStock_977859853.jpeg',
-    href: '/generate/exterior'
+    href: '/generate/interior'
   },
   {
     id: 'interior',
@@ -25,21 +25,21 @@ const tools = [
     title: 'Render Enhancer ✨',
     description: 'Elevate your renders with AI-powered enhancement tools',
     image: '/Banner Images/Render Enhancer.jpg',
-    href: '/generate/enhance'
+    href: '/generate/interior'
   },
   {
     id: 'landscape',
     title: 'Landscape AI',
     description: 'Design breathtaking landscapes with intelligent assistance',
     image: '/Banner Images/Landscape.jpeg',
-    href: '/generate/landscape'
+    href: '/generate/interior'
   },
   {
     id: 'site-analysis',
     title: 'Site Analysis AI',
     description: 'Analyze site conditions and generate comprehensive reports',
     image: '/Banner Images/Site Analysis.jpg',
-    href: '/generate/site-analysis',
+    href: '/generate/interior',
     iconPath: '/icons/site-analysis.svg'
   },
   {
@@ -47,7 +47,7 @@ const tools = [
     title: 'Case Studies',
     description: 'Explore curated architectural case studies for inspiration',
     image: '/Banner Images/Case Studies.png',
-    href: '/case-studies',
+    href: '/generate/interior',
     iconPath: '/icons/case-studies.svg'
   },
   {
@@ -55,7 +55,7 @@ const tools = [
     title: 'Concept Generator AI',
     description: 'Generate innovative architectural concepts and ideas',
     image: '/Banner Images/Concept Generator.jpg',
-    href: '/generate/concept',
+    href: '/generate/interior',
     iconPath: '/icons/concept.svg'
   },
   {
@@ -63,7 +63,7 @@ const tools = [
     title: 'Floor Plan AI',
     description: 'Analyze and optimize floor plans with AI assistance',
     image: '/Banner Images/Floor Plan.jpg',
-    href: '/generate/floor-plan',
+    href: '/generate/interior',
     iconPath: '/icons/floor-plan.svg'
   }
 ];

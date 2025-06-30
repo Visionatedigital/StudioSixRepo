@@ -1,4 +1,4 @@
-import puppeteer from 'puppeteer';
+import puppeteer from 'puppeteer-core';
 import fs from 'fs';
 
 (async () => {
@@ -32,7 +32,7 @@ import fs from 'fs';
   console.log(`Current page: ${url}`);
   console.log(`Page title: ${title}`);
 
-  const screenshotPath = `chatgpt-cookies-debug-${Date.now()}.png`;
+  const screenshotPath = `chatgpt-cookies-debug-${Date.now()}.png` as const;
   await page.screenshot({ path: screenshotPath });
   console.log(`Screenshot saved to: ${screenshotPath}`);
 

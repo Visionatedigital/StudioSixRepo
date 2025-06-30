@@ -78,6 +78,7 @@
     "postgres": "^3.4.5",
     "prisma": "^6.6.0",
     "puppeteer": "^22.15.0",
+    "puppeteer-core": "24.11.1",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "react-dropzone": "^14.3.8",

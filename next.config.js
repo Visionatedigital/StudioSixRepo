@@ -26,7 +26,6 @@ const nextConfig = {
       'bcryptjs',
       'canvas', 
       'puppeteer-core',
-      'puppeteer',
       'htmlparser2',
       'entities',
       'html-to-text',

@@ -1,4 +1,4 @@
-import puppeteer from 'puppeteer';
+import puppeteer from 'puppeteer-core';
 import fs from 'fs';
 
 interface ChatGPTSession {
@@ -42,6 +42,7 @@ class ChatGPTSessionManager {
     try {
       const browser = await puppeteer.launch({
         headless: false, // Show browser for debugging
+        executablePath: process.env.CHROME_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable',
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
