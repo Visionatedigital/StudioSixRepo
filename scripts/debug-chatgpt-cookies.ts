@@ -1,8 +1,5 @@
-import puppeteer from 'puppeteer-extra';
-import StealthPlugin from 'puppeteer-extra-plugin-stealth';
+import puppeteer from 'puppeteer';
 import fs from 'fs';
-
-puppeteer.use(StealthPlugin());
 
 (async () => {
   if (!fs.existsSync('chatgpt-cookies.json')) {

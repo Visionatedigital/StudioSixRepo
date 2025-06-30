@@ -1,9 +1,5 @@
-const puppeteer = require('puppeteer-extra');
-const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+const puppeteer = require('puppeteer');
 const fs = require('fs');
-
-// Apply the stealth plugin
-puppeteer.use(StealthPlugin());
 
 async function refreshCookies() {
   console.log('🚀 Starting ChatGPT cookie refresh...');

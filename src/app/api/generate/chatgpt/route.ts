@@ -1,15 +1,11 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import puppeteer from 'puppeteer-extra';
-import StealthPlugin from 'puppeteer-extra-plugin-stealth';
+import puppeteer from 'puppeteer';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { Frame } from 'puppeteer';
-
-// Apply the stealth plugin
-puppeteer.use(StealthPlugin());
 
 export async function POST(req: NextRequest) {
   let browser: any = null;
@@ -32,16 +28,79 @@ export async function POST(req: NextRequest) {
     const tempImagePath = path.join(tempDir, `sketch-${Date.now()}.png`);
     fs.writeFileSync(tempImagePath, imageBuffer);
 
-    // Launch browser in headless mode
+    // Launch browser in headless mode with stealth arguments
     browser = await puppeteer.launch({
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-blink-features=AutomationControlled',
+        '--disable-web-security',
+        '--disable-features=VizDisplayCompositor',
+        '--disable-ipc-flooding-protection',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
+        '--disable-field-trial-config',
+        '--disable-back-forward-cache',
+        '--disable-http-cache',
+        '--disable-remote-fonts',
+        '--disable-sync',
+        '--disable-translate',
+        '--hide-scrollbars',
+        '--mute-audio',
+        '--no-first-run',
+        '--safebrowsing-disable-auto-update',
+        '--ignore-certificate-errors',
+        '--ignore-ssl-errors',
+        '--ignore-certificate-errors-spki-list',
+        '--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      ]
     });
 
     const page = await browser.newPage();
     
     // Set viewport
     await page.setViewport({ width: 1280, height: 800 });
+
+    // Add stealth measures
+    await page.evaluateOnNewDocument(() => {
+      // Remove webdriver property
+      Object.defineProperty(navigator, 'webdriver', {
+        get: () => undefined,
+      });
+
+      // Override permissions
+      const originalQuery = window.navigator.permissions.query;
+      (window.navigator.permissions as any).query = (parameters: any) => (
+        parameters.name === 'notifications' ?
+          Promise.resolve({ state: Notification.permission }) :
+          originalQuery(parameters)
+      );
+
+      // Override plugins
+      Object.defineProperty(navigator, 'plugins', {
+        get: () => [1, 2, 3, 4, 5],
+      });
+
+      // Override languages
+      Object.defineProperty(navigator, 'languages', {
+        get: () => ['en-US', 'en'],
+      });
+
+      // Override chrome
+      (window as any).chrome = {
+        runtime: {},
+      };
+
+      // Override permissions
+      const originalQuery2 = window.navigator.permissions.query;
+      (window.navigator.permissions as any).query = (parameters: any) => (
+        parameters.name === 'notifications' ?
+          Promise.resolve({ state: Notification.permission }) :
+          originalQuery2(parameters)
+      );
+    });
 
     // Navigate to ChatGPT
     console.log('Navigating to ChatGPT...');
