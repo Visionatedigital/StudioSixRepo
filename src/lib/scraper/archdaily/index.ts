@@ -1,5 +1,4 @@
-import { Browser } from 'puppeteer-core';
-import { launchBrowser } from '../../puppeteer-utils';
+import puppeteer, { Browser } from 'puppeteer';
 import * as cheerio from 'cheerio';
 import { CaseStudy, BaseScraper } from '../base';
 import { v4 as uuidv4 } from 'uuid';
@@ -17,7 +16,17 @@ export class ArchDailyScraper extends BaseScraper {
     if (!this.browser) {
       this.log('Launching Puppeteer browser...');
       try {
-        this.browser = await launchBrowser();
+        this.browser = await puppeteer.launch({
+          headless: true,
+          args: [
+            '--no-sandbox', 
+            '--disable-setuid-sandbox', 
+            '--disable-dev-shm-usage',
+            '--single-process',
+            '--no-zygote'
+          ],
+          timeout: 60000 // Increase timeout to 60 seconds
+        });
         this.log('Puppeteer browser launched successfully');
       } catch (error) {
         this.log(`Error launching browser: ${error}`);
