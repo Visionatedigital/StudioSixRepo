@@ -23,6 +23,9 @@
     },
     "src/app/api/generate/chatgpt/route.ts": {
       "maxDuration": 300
+    },
+    "src/app/api/chatgpt-proxy/image/route.ts": {
+      "maxDuration": 300
     }
   }
 } 
