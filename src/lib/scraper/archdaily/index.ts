@@ -1,5 +1,4 @@
 import puppeteer, { Browser } from 'puppeteer';
-import chromium from '@sparticuz/chromium';
 import * as cheerio from 'cheerio';
 import { CaseStudy, BaseScraper } from '../base';
 import { v4 as uuidv4 } from 'uuid';
@@ -17,23 +16,17 @@ export class ArchDailyScraper extends BaseScraper {
     if (!this.browser) {
       this.log('Launching Puppeteer browser...');
       try {
-        if (process.env.VERCEL || process.env.AWS_REGION) {
-          // Production/Vercel environment
-          this.browser = await puppeteer.launch({
-            args: chromium.args,
-            defaultViewport: chromium.defaultViewport,
-            executablePath: await chromium.executablePath(),
-            headless: true,
-            ignoreHTTPSErrors: true,
-          });
-        } else {
-          // Local development environment
-          this.browser = await puppeteer.launch({
-            headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-            timeout: 60000 // Increase timeout to 60 seconds
-          });
-        }
+        this.browser = await puppeteer.launch({
+          headless: true,
+          args: [
+            '--no-sandbox', 
+            '--disable-setuid-sandbox', 
+            '--disable-dev-shm-usage',
+            '--single-process',
+            '--no-zygote'
+          ],
+          timeout: 60000 // Increase timeout to 60 seconds
+        });
         this.log('Puppeteer browser launched successfully');
       } catch (error) {
         this.log(`Error launching browser: ${error}`);
@@ -113,7 +106,7 @@ export class ArchDailyScraper extends BaseScraper {
       
       page.on('console', msg => {
         const type = msg.type();
-        if (type === 'error' || type === 'warn') {
+        if (type === 'error' || type === 'warning') {
           this.log(`Console ${type}: ${msg.text()}`);
         }
       });

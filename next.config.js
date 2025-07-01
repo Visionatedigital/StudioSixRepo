@@ -17,7 +17,6 @@ const nextConfig = {
       config.externals.push('canvas');
       config.externals.push('cheerio');
       config.externals.push('undici');
-      config.externals.push('@sparticuz/chromium');
     }
 
     return config;
@@ -26,8 +25,7 @@ const nextConfig = {
     serverComponentsExternalPackages: [
       'bcryptjs',
       'canvas', 
-      'puppeteer-core',
-      '@sparticuz/chromium',
+      'puppeteer',
       'htmlparser2'
     ],
   },
