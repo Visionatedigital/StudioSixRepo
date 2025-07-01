@@ -5,13 +5,13 @@ export async function launchBrowser() {
   const isProduction = process.env.NODE_ENV === 'production';
   
   if (isProduction) {
-    // Use chrome-aws-lambda for serverless environments
-    const chromium = require('chrome-aws-lambda');
+    // Use @sparticuz/chromium for serverless environments
+    const chromium = require('@sparticuz/chromium');
     
     return await puppeteerCore.launch({
       args: chromium.args,
       defaultViewport: chromium.defaultViewport,
-      executablePath: await chromium.executablePath,
+      executablePath: await chromium.executablePath(),
       headless: chromium.headless,
       ignoreHTTPSErrors: true,
     });
