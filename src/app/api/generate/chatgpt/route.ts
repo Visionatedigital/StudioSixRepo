@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import puppeteer from 'puppeteer-core';
+import chrome from 'chrome-aws-lambda';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -29,9 +30,10 @@ export async function POST(req: NextRequest) {
     fs.writeFileSync(tempImagePath, imageBuffer);
 
     // Launch browser in headless mode with stealth arguments
+    const isProd = process.env.AWS_REGION || process.env.VERCEL || process.env.NODE_ENV === 'production';
     browser = await puppeteer.launch({
-      headless: false, // Show browser for debugging
-      args: [
+      headless: true,
+      args: isProd ? chrome.args : [
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-blink-features=AutomationControlled',
@@ -55,7 +57,8 @@ export async function POST(req: NextRequest) {
         '--ignore-ssl-errors',
         '--ignore-certificate-errors-spki-list',
         '--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      ]
+      ],
+      executablePath: isProd ? await chrome.executablePath : undefined,
     });
 
     const page = await browser.newPage();

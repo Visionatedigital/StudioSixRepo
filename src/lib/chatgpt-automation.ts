@@ -1,4 +1,5 @@
 import puppeteer, { Browser, Page } from 'puppeteer';
+import chrome from 'chrome-aws-lambda';
 
 export interface ChatGPTConfig {
   email?: string;
@@ -20,9 +21,11 @@ export class ChatGPTAutomation {
   }
 
   async initialize(): Promise<void> {
+    const isProd = process.env.AWS_REGION || process.env.VERCEL || process.env.NODE_ENV === 'production';
     this.browser = await puppeteer.launch({
       headless: this.config.headless,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
+      args: isProd ? chrome.args : ['--no-sandbox', '--disable-setuid-sandbox'],
+      executablePath: isProd ? await chrome.executablePath : undefined,
     });
 
     this.page = await this.browser.newPage();

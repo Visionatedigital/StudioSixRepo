@@ -139,49 +139,82 @@ async function seedSampleMessages() {
     // Find existing users or create demo users if none exist
     let users = await prisma.user.findMany({ take: 5 });
     
-    // If there aren't enough users, we'll use default values
-    const demoUsers = [
+    // Define demo user data
+    const demoUserData = [
       {
-        id: 'user-1',
         name: 'Sarah Chen',
         email: 'sarah.chen@example.com',
         image: '/profile-icons/panda.png',
         level: 4,
-        verified: true
+        verified: true,
+        emailVerified: new Date(),
+        credits: 50,
+        subscriptionStatus: 'ACTIVE' as const,
+        hasCompletedOnboarding: true
       },
       {
-        id: 'user-2',
         name: 'Mark Johnson',
         email: 'mark.johnson@example.com',
         image: '/profile-icons/lion.png',
         level: 3,
-        verified: false
+        verified: false,
+        emailVerified: new Date(),
+        credits: 25,
+        subscriptionStatus: 'INACTIVE' as const,
+        hasCompletedOnboarding: true
       },
       {
-        id: 'user-3',
         name: 'Alex Rodriguez',
         email: 'alex.rodriguez@example.com',
         image: '/profile-icons/owl.png',
         level: 5,
-        verified: true
+        verified: true,
+        emailVerified: new Date(),
+        credits: 100,
+        subscriptionStatus: 'ACTIVE' as const,
+        hasCompletedOnboarding: true
       },
       {
-        id: 'user-4',
         name: 'Emily Parker',
         email: 'emily.parker@example.com',
         image: '/profile-icons/bear.png',
         level: 2,
-        verified: false
+        verified: false,
+        emailVerified: new Date(),
+        credits: 15,
+        subscriptionStatus: 'INACTIVE' as const,
+        hasCompletedOnboarding: true
       },
       {
-        id: 'user-5',
         name: 'David Thompson',
         email: 'david.thompson@example.com',
         image: '/profile-icons/fox.png',
         level: 3,
-        verified: false
+        verified: false,
+        emailVerified: new Date(),
+        credits: 30,
+        subscriptionStatus: 'INACTIVE' as const,
+        hasCompletedOnboarding: true
       }
     ];
+    
+    // If there aren't enough users, create demo users
+    if (users.length < 5) {
+      console.log('Creating demo users...');
+
+      for (const userData of demoUserData) {
+        const existingUser = await prisma.user.findUnique({
+          where: { email: userData.email }
+        });
+        
+        if (!existingUser) {
+          const newUser = await prisma.user.create({
+            data: userData
+          });
+          users.push(newUser);
+        }
+      }
+    }
     
     // Find or create channels for announcements
     const productUpdatesChannel = await prisma.communityChannel.findFirst({
@@ -220,7 +253,7 @@ async function seedSampleMessages() {
         data: {
           content: 'Just released a new version of the material editor. Check it out in the latest update!',
           channelId: productUpdatesChannel.id,
-          userId: users[0]?.id || demoUsers[0].id,
+          userId: users[0]?.id,
           likes: 24,
           attachments: [
             {
@@ -236,7 +269,7 @@ async function seedSampleMessages() {
         data: {
           content: 'We are excited to announce our new volumetric lighting system! It creates much more realistic atmosphere in your renders.',
           channelId: productUpdatesChannel.id,
-          userId: users[2]?.id || demoUsers[2].id,
+          userId: users[2]?.id,
           likes: 18,
         }
       });
@@ -254,7 +287,7 @@ async function seedSampleMessages() {
         data: {
           content: 'We have some exciting features planned for the coming months. Click to see our roadmap!',
           channelId: productUpdatesChannel.id,
-          userId: users[0]?.id || demoUsers[0].id,
+          userId: users[0]?.id,
           isThread: true,
           threadId: thread.id,
           likes: 32
@@ -266,7 +299,7 @@ async function seedSampleMessages() {
         data: {
           content: 'Here\'s our roadmap for the next quarter:\n\n1. Advanced material system (June)\n2. Collaborative editing (July)\n3. Mobile app version (August)\n4. AI-powered design suggestions (September)',
           threadId: thread.id,
-          userId: users[0]?.id || demoUsers[0].id,
+          userId: users[0]?.id,
           likes: 15
         }
       });
@@ -275,7 +308,7 @@ async function seedSampleMessages() {
         data: {
           content: 'Can\'t wait for the collaborative editing feature! This will be a game-changer for our team.',
           threadId: thread.id,
-          userId: users[3]?.id || demoUsers[3].id,
+          userId: users[3]?.id,
           likes: 8
         }
       });
@@ -284,7 +317,7 @@ async function seedSampleMessages() {
         data: {
           content: 'Will the mobile app have all the features of the desktop version?',
           threadId: thread.id,
-          userId: users[1]?.id || demoUsers[1].id,
+          userId: users[1]?.id,
           likes: 3
         }
       });
@@ -293,7 +326,7 @@ async function seedSampleMessages() {
         data: {
           content: 'The mobile app will initially focus on viewing and commenting functionality, with limited editing capabilities. Full editing will come in a later update.',
           threadId: thread.id,
-          userId: users[0]?.id || demoUsers[0].id,
+          userId: users[0]?.id,
           likes: 5
         }
       });
@@ -306,7 +339,7 @@ async function seedSampleMessages() {
         data: {
           content: 'Just finished this modern house design using the new materials. What do you think?',
           channelId: renderChannel.id,
-          userId: users[4]?.id || demoUsers[4].id,
+          userId: users[4]?.id,
           likes: 42,
           attachments: [
             {
@@ -335,7 +368,7 @@ async function seedSampleMessages() {
         data: {
           content: 'I\'m working on a new portfolio and would like to know what rendering style people prefer these days.',
           channelId: renderChannel.id,
-          userId: users[1]?.id || demoUsers[1].id,
+          userId: users[1]?.id,
           isPoll: true,
           pollId: poll.id,
           likes: 15
@@ -346,7 +379,7 @@ async function seedSampleMessages() {
       await prisma.pollVote.create({
         data: {
           pollId: poll.id,
-          userId: users[0]?.id || demoUsers[0].id,
+          userId: users[0]?.id,
           options: ['Photorealistic']
         }
       });
@@ -354,7 +387,7 @@ async function seedSampleMessages() {
       await prisma.pollVote.create({
         data: {
           pollId: poll.id,
-          userId: users[2]?.id || demoUsers[2].id,
+          userId: users[2]?.id,
           options: ['Stylized']
         }
       });
@@ -362,7 +395,7 @@ async function seedSampleMessages() {
       await prisma.pollVote.create({
         data: {
           pollId: poll.id,
-          userId: users[3]?.id || demoUsers[3].id,
+          userId: users[3]?.id,
           options: ['Photorealistic']
         }
       });
@@ -374,7 +407,7 @@ async function seedSampleMessages() {
         data: {
           content: 'Here\'s a prompt that works really well for creating modern interior scenes:\n\n"ultra detailed modern interior design, luxury apartment in Manhattan, minimalist style, large windows, natural light, high-end furniture, designer pieces, marble kitchen island, wooden floors, high ceilings, plants, 8k, detailed textures, architectural visualization"',
           channelId: promptLibraryChannel.id,
-          userId: users[3]?.id || demoUsers[3].id,
+          userId: users[3]?.id,
           likes: 56
         }
       });
@@ -383,7 +416,7 @@ async function seedSampleMessages() {
         data: {
           content: 'This prompt creates amazing exterior night scenes:\n\n"modern villa exterior at night, swimming pool with glowing blue water, architectural lighting, landscape design, palm trees, luxury property, ultra detailed, ambient light, architectural visualization, 8k rendering, landscaping lights, warm interior lights visible through large windows"',
           channelId: promptLibraryChannel.id,
-          userId: users[2]?.id || demoUsers[2].id,
+          userId: users[2]?.id,
           likes: 38,
           attachments: [
             {
@@ -409,7 +442,7 @@ async function seedSampleMessages() {
         data: {
           content: 'What are the recommended hardware specs for working on large architectural projects with StudioSix?',
           channelId: generalQuestionsChannel.id,
-          userId: users[1]?.id || demoUsers[1].id,
+          userId: users[1]?.id,
           isThread: true,
           threadId: hardwareThread.id,
           likes: 8
@@ -420,7 +453,7 @@ async function seedSampleMessages() {
         data: {
           content: 'For large projects, I recommend:\n- CPU: At least 8-core processor (AMD Ryzen 7 or Intel i7/i9)\n- RAM: Minimum 32GB, 64GB recommended\n- GPU: NVIDIA RTX 3070 or better with at least 8GB VRAM\n- Storage: NVMe SSD with at least 1TB\n\nThis configuration handles complex scenes smoothly.',
           threadId: hardwareThread.id,
-          userId: users[0]?.id || demoUsers[0].id,
+          userId: users[0]?.id,
           likes: 12
         }
       });
@@ -429,7 +462,7 @@ async function seedSampleMessages() {
         data: {
           content: 'I\'m running on an i9 with 128GB RAM and an RTX 4090, and it handles everything I throw at it. Worth the investment if you work on complex projects daily.',
           threadId: hardwareThread.id,
-          userId: users[2]?.id || demoUsers[2].id,
+          userId: users[2]?.id,
           likes: 6
         }
       });
@@ -438,7 +471,7 @@ async function seedSampleMessages() {
         data: {
           content: 'Thanks for the recommendations! Would a MacBook Pro M2 Max with 64GB RAM be sufficient?',
           threadId: hardwareThread.id,
-          userId: users[1]?.id || demoUsers[1].id,
+          userId: users[1]?.id,
           likes: 2
         }
       });
@@ -447,17 +480,16 @@ async function seedSampleMessages() {
         data: {
           content: 'Yes, the M2 Max is excellent. I\'ve been using it for medium-to-large projects with no issues. Just make sure you get the model with 64GB RAM and at least 1TB storage.',
           threadId: hardwareThread.id,
-          userId: users[4]?.id || demoUsers[4].id,
+          userId: users[4]?.id,
           likes: 7
         }
       });
       
-      // Regular question about software setup
       await prisma.communityMessage.create({
         data: {
           content: 'Is anyone experiencing lag when working with the new lighting system? Mine seems to stutter on complex scenes.',
           channelId: generalQuestionsChannel.id,
-          userId: users[4]?.id || demoUsers[4].id,
+          userId: users[4]?.id,
           likes: 3
         }
       });
@@ -466,7 +498,7 @@ async function seedSampleMessages() {
         data: {
           content: 'Try turning down the real-time reflection quality in Settings > Rendering > Quality. That helped with performance on my system without noticeable visual differences during editing.',
           channelId: generalQuestionsChannel.id,
-          userId: users[0]?.id || demoUsers[0].id,
+          userId: users[0]?.id,
           likes: 5
         }
       });

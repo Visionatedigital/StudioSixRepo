@@ -135,7 +135,18 @@ function SignInForm() {
 
   const handleGoogleSignIn = () => {
     setIsLoading(true);
-    signIn("google", { callbackUrl: '/api/auth/check-onboarding' });
+    setError(null); // Clear any previous errors
+    
+    console.log('Starting Google sign-in...');
+    
+    signIn("google", { 
+      callbackUrl: '/api/auth/check-onboarding',
+      redirect: true
+    }).catch((error) => {
+      console.error('Google sign-in error:', error);
+      setError('Failed to sign in with Google. Please try again.');
+      setIsLoading(false);
+    });
   };
 
   return (

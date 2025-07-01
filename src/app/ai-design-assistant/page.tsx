@@ -2,7 +2,8 @@
 
 import React, { useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
-import { Icon } from '@/components/Icons';
+import { Icon as UiIcon } from '@/components/ui/Icon';
+import { Icon as ImgIcon } from '@/components/Icons';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -79,7 +80,7 @@ export default function AIDesignAssistantPage() {
             <div className="text-center">
               <h1 className="text-4xl font-bold mb-4 bg-gradient-to-r from-[#FF3366] via-[#814ADA] to-[#4F46E5] text-transparent bg-clip-text flex items-center justify-center gap-3">
                 AI Design Assistant
-                <Icon name="sparkles" className="w-8 h-8 text-[#814ADA]" />
+                <ImgIcon name="sparkles" className="w-8 h-8 text-[#814ADA]" />
               </h1>
               <p className="text-xl text-gray-600 max-w-2xl">
                 Create stunning architectural designs with intelligent assistance. Start a new project or continue working on your existing designs.
@@ -100,7 +101,7 @@ export default function AIDesignAssistantPage() {
                 <span className="font-medium">Create New Project</span>
               </button>
               <Link href="/ai-design-assistant/projects" className="flex items-center px-6 py-3 bg-[#814ADA]/10 rounded-lg hover:bg-[#814ADA]/20 transition-colors">
-                <Icon name="library" className="w-5 h-5 mr-2 text-[#814ADA]" />
+                <ImgIcon name="library" className="w-5 h-5 mr-2 text-[#814ADA]" />
                 <span className="text-[#814ADA] font-medium">My Projects</span>
               </Link>
             </div>
@@ -156,7 +157,7 @@ export default function AIDesignAssistantPage() {
                 >
                   {isLoading ? (
                     <>
-                      <Icon name="spinner" className="w-4 h-4 animate-spin text-white" />
+                      <UiIcon name="spinner" className="w-4 h-4 animate-spin text-white" />
                       <span>Creating...</span>
                     </>
                   ) : (

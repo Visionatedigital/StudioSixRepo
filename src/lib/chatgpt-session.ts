@@ -1,4 +1,5 @@
 import puppeteer from 'puppeteer-core';
+import chrome from 'chrome-aws-lambda';
 import fs from 'fs';
 
 interface ChatGPTSession {
@@ -40,9 +41,10 @@ class ChatGPTSessionManager {
     console.log('[CHATGPT-SESSION] Creating new session...');
 
     try {
+      const isProd = process.env.AWS_REGION || process.env.VERCEL || process.env.NODE_ENV === 'production';
       const browser = await puppeteer.launch({
-        headless: false, // Show browser for debugging
-        args: [
+        headless: true,
+        args: isProd ? chrome.args : [
           '--no-sandbox',
           '--disable-setuid-sandbox',
           '--disable-dev-shm-usage',
@@ -67,7 +69,8 @@ class ChatGPTSessionManager {
           '--ignore-ssl-errors',
           '--ignore-certificate-errors-spki-list',
           '--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        ]
+        ],
+        executablePath: isProd ? await chrome.executablePath : undefined,
       });
 
       const page = await browser.newPage();

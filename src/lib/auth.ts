@@ -1,5 +1,6 @@
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
+import GoogleProvider from "next-auth/providers/google";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
@@ -17,7 +18,7 @@ type AuthUser = {
   credits: number;
   level: number;
   verified: boolean;
-  subscriptionStatus: 'FREE' | 'BASIC' | 'PRO' | 'ENTERPRISE';
+  subscriptionStatus: 'ACTIVE' | 'INACTIVE' | 'EXPIRED' | 'CANCELLED';
 };
 
 export const authOptions: NextAuthOptions = {
@@ -99,13 +100,62 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
       }
-    })
+    }),
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      authorization: {
+        params: {
+          prompt: "consent",
+          access_type: "offline",
+          response_type: "code"
+        }
+      }
+    }),
   ],
   pages: {
     signIn: "/sign-in",
     error: "/error",
   },
   callbacks: {
+    async signIn({ user, account, profile }) {
+      console.log('[AUTH] SignIn callback triggered:', {
+        provider: account?.provider,
+        userEmail: user?.email,
+        userName: user?.name
+      });
+      
+      // If this is a Google OAuth sign in
+      if (account?.provider === 'google') {
+        console.log('[AUTH] Google OAuth sign in detected');
+        
+        // Check if user exists in database
+        const existingUser = await prisma.user.findUnique({
+          where: { email: user.email! },
+        });
+
+        if (!existingUser) {
+          console.log('[AUTH] Creating new user for Google OAuth');
+          // Create new user with default values
+          await prisma.user.create({
+            data: {
+              email: user.email!,
+              name: user.name,
+              image: user.image,
+              emailVerified: new Date(), // Google users are automatically verified
+              verified: true, // Google users are automatically verified
+              credits: 10, // Default credits
+              level: 1, // Default level
+              subscriptionStatus: 'INACTIVE', // Default subscription
+              hasCompletedOnboarding: false, // They'll need to complete onboarding
+            },
+          });
+        } else {
+          console.log('[AUTH] Existing user found for Google OAuth');
+        }
+      }
+      return true;
+    },
     async jwt({ token, user, trigger, session }) {
       if (trigger === "update" && session) {
         // console.log("[AUTH] Session update triggered:", session);
