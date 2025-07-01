@@ -17,6 +17,8 @@ const nextConfig = {
       config.externals.push('canvas');
       config.externals.push('cheerio');
       config.externals.push('undici');
+      config.externals.push('puppeteer');
+      config.externals.push('puppeteer-core');
     }
 
     return config;
