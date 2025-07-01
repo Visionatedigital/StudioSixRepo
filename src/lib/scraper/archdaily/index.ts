@@ -1,5 +1,5 @@
 import puppeteer, { Browser } from 'puppeteer';
-import chrome from 'chrome-aws-lambda';
+import chromium from '@sparticuz/chromium';
 import * as cheerio from 'cheerio';
 import { CaseStudy, BaseScraper } from '../base';
 import { v4 as uuidv4 } from 'uuid';
@@ -20,13 +20,13 @@ export class ArchDailyScraper extends BaseScraper {
         const isProd = process.env.AWS_REGION || process.env.VERCEL || process.env.NODE_ENV === 'production';
         this.browser = await puppeteer.launch({
           headless: true,
-          args: isProd ? chrome.args : ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-          executablePath: isProd ? await chrome.executablePath : undefined,
+          args: isProd ? chromium.args : ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+          executablePath: isProd ? await chromium.executablePath() : undefined,
           timeout: 60000 // Increase timeout to 60 seconds
         });
         this.log('Puppeteer browser launched successfully');
       } catch (error) {
-        this.logError('Failed to launch Puppeteer browser', error);
+        this.log(`Error launching browser: ${error}`);
         throw error;
       }
     }

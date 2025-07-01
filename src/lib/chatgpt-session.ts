@@ -1,5 +1,5 @@
 import puppeteer from 'puppeteer-core';
-import chrome from 'chrome-aws-lambda';
+import chromium from '@sparticuz/chromium';
 import fs from 'fs';
 
 interface ChatGPTSession {
@@ -44,7 +44,7 @@ class ChatGPTSessionManager {
       const isProd = process.env.AWS_REGION || process.env.VERCEL || process.env.NODE_ENV === 'production';
       const browser = await puppeteer.launch({
         headless: true,
-        args: isProd ? chrome.args : [
+        args: isProd ? chromium.args : [
           '--no-sandbox',
           '--disable-setuid-sandbox',
           '--disable-dev-shm-usage',
@@ -55,22 +55,13 @@ class ChatGPTSessionManager {
           '--disable-background-timer-throttling',
           '--disable-backgrounding-occluded-windows',
           '--disable-renderer-backgrounding',
-          '--disable-field-trial-config',
-          '--disable-back-forward-cache',
-          '--disable-http-cache',
-          '--disable-remote-fonts',
-          '--disable-sync',
-          '--disable-translate',
-          '--hide-scrollbars',
-          '--mute-audio',
-          '--no-first-run',
-          '--safebrowsing-disable-auto-update',
-          '--ignore-certificate-errors',
-          '--ignore-ssl-errors',
-          '--ignore-certificate-errors-spki-list',
-          '--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+          '--disable-features=TranslateUI',
+          '--disable-default-apps',
+          '--no-first-run'
         ],
-        executablePath: isProd ? await chrome.executablePath : undefined,
+        executablePath: isProd ? await chromium.executablePath() : undefined,
+        ignoreDefaultArgs: isProd ? ['--disable-extensions'] : false,
+        timeout: 60000
       });
 
       const page = await browser.newPage();
