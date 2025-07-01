@@ -1,4 +1,5 @@
-import puppeteer, { Browser, Page } from 'puppeteer';
+import { Browser, Page } from 'puppeteer-core';
+import { launchBrowser } from './puppeteer-utils';
 
 export interface ChatGPTConfig {
   email?: string;
@@ -20,15 +21,7 @@ export class ChatGPTAutomation {
   }
 
   async initialize(): Promise<void> {
-    this.browser = await puppeteer.launch({
-      headless: this.config.headless,
-      args: [
-        '--no-sandbox', 
-        '--disable-setuid-sandbox',
-        '--single-process',
-        '--no-zygote'
-      ],
-    });
+    this.browser = await launchBrowser();
 
     this.page = await this.browser.newPage();
     await this.page.setViewport({ width: 1280, height: 720 });

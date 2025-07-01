@@ -13,12 +13,16 @@
       "NODE_ENV": "production",
       "NEXT_TELEMETRY_DISABLED": "1",
       "PRISMA_GENERATE_SKIP_AUTOINSTALL": "true",
-      "FORCE_ENV_REFRESH": "2024-12-27-17-15"
+      "FORCE_ENV_REFRESH": "2024-12-27-17-15",
+      "PUPPETEER_SKIP_DOWNLOAD": "true"
     }
   },
   "functions": {
     "app/api/**/*.js": {
       "maxDuration": 30
+    },
+    "src/app/api/generate/chatgpt/route.ts": {
+      "maxDuration": 300
     }
   }
 } 
