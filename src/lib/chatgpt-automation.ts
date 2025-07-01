@@ -21,12 +21,22 @@ export class ChatGPTAutomation {
   }
 
   async initialize(): Promise<void> {
-    const isProd = process.env.AWS_REGION || process.env.VERCEL || process.env.NODE_ENV === 'production';
-    this.browser = await puppeteer.launch({
-      headless: this.config.headless,
-      args: isProd ? chromium.args : ['--no-sandbox', '--disable-setuid-sandbox'],
-      executablePath: isProd ? await chromium.executablePath() : undefined,
-    });
+    if (process.env.VERCEL || process.env.AWS_REGION) {
+      // Production/Vercel environment
+      this.browser = await puppeteer.launch({
+        args: chromium.args,
+        defaultViewport: chromium.defaultViewport,
+        executablePath: await chromium.executablePath(),
+        headless: this.config.headless,
+        ignoreHTTPSErrors: true,
+      });
+    } else {
+      // Local development environment
+      this.browser = await puppeteer.launch({
+        headless: this.config.headless,
+        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      });
+    }
 
     this.page = await this.browser.newPage();
     await this.page.setViewport({ width: 1280, height: 720 });

@@ -41,28 +41,40 @@ class ChatGPTSessionManager {
     console.log('[CHATGPT-SESSION] Creating new session...');
 
     try {
-      const isProd = process.env.AWS_REGION || process.env.VERCEL || process.env.NODE_ENV === 'production';
-      const browser = await puppeteer.launch({
-        headless: true,
-        args: isProd ? chromium.args : [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-blink-features=AutomationControlled',
-          '--disable-web-security',
-          '--disable-features=VizDisplayCompositor',
-          '--disable-ipc-flooding-protection',
-          '--disable-background-timer-throttling',
-          '--disable-backgrounding-occluded-windows',
-          '--disable-renderer-backgrounding',
-          '--disable-features=TranslateUI',
-          '--disable-default-apps',
-          '--no-first-run'
-        ],
-        executablePath: isProd ? await chromium.executablePath() : undefined,
-        ignoreDefaultArgs: isProd ? ['--disable-extensions'] : false,
-        timeout: 60000
-      });
+      let browser;
+      
+      if (process.env.VERCEL || process.env.AWS_REGION) {
+        // Production/Vercel environment
+        browser = await puppeteer.launch({
+          args: chromium.args,
+          defaultViewport: chromium.defaultViewport,
+          executablePath: await chromium.executablePath(),
+          headless: chromium.headless,
+          ignoreHTTPSErrors: true,
+        });
+      } else {
+        // Local development environment
+        browser = await puppeteer.launch({
+          headless: true,
+          args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-blink-features=AutomationControlled',
+            '--disable-web-security',
+            '--disable-features=VizDisplayCompositor',
+            '--disable-ipc-flooding-protection',
+            '--disable-background-timer-throttling',
+            '--disable-backgrounding-occluded-windows',
+            '--disable-renderer-backgrounding',
+            '--disable-extensions',
+            '--disable-plugins',
+            '--disable-default-apps',
+            '--disable-gpu'
+          ],
+          timeout: 60000
+        });
+      }
 
       const page = await browser.newPage();
       await page.setViewport({ width: 1280, height: 800 });

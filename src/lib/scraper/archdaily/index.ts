@@ -17,13 +17,23 @@ export class ArchDailyScraper extends BaseScraper {
     if (!this.browser) {
       this.log('Launching Puppeteer browser...');
       try {
-        const isProd = process.env.AWS_REGION || process.env.VERCEL || process.env.NODE_ENV === 'production';
-        this.browser = await puppeteer.launch({
-          headless: true,
-          args: isProd ? chromium.args : ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-          executablePath: isProd ? await chromium.executablePath() : undefined,
-          timeout: 60000 // Increase timeout to 60 seconds
-        });
+        if (process.env.VERCEL || process.env.AWS_REGION) {
+          // Production/Vercel environment
+          this.browser = await puppeteer.launch({
+            args: chromium.args,
+            defaultViewport: chromium.defaultViewport,
+            executablePath: await chromium.executablePath(),
+            headless: true,
+            ignoreHTTPSErrors: true,
+          });
+        } else {
+          // Local development environment
+          this.browser = await puppeteer.launch({
+            headless: true,
+            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+            timeout: 60000 // Increase timeout to 60 seconds
+          });
+        }
         this.log('Puppeteer browser launched successfully');
       } catch (error) {
         this.log(`Error launching browser: ${error}`);

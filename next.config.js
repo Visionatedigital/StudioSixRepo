@@ -28,17 +28,29 @@ const nextConfig = {
       'canvas', 
       'puppeteer-core',
       '@sparticuz/chromium',
-      'htmlparser2',
-      'entities',
-      'html-to-text',
-      'resend',
-      'cheerio',
-      'undici'
-    ]
+      'htmlparser2'
+    ],
   },
   images: {
-    domains: ['cpzkvqdunuxsfxrcdzjq.supabase.co'],
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'images.unsplash.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'plus.unsplash.com',
+      },
+      {
+        protocol: 'https',
+        hostname: '**.googleapis.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'lh3.googleusercontent.com',
+      },
+    ],
   },
-}
+};
 
-module.exports = nextConfig 
+module.exports = nextConfig; 
