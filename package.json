@@ -62,13 +62,9 @@
     "@types/bcrypt": "^5.0.2",
     "@types/react-portal": "^4.0.7",
     "@types/uuid": "^10.0.0",
-    "@uploadthing/react": "^6.4.0",
-    "@vercel/analytics": "^1.2.2",
     "@vercel/blob": "^0.22.1",
     "@vercel/kv": "^1.0.1",
     "@vercel/postgres": "^0.8.0",
-    "@vercel/speed-insights": "^1.0.10",
-    "ai": "^3.0.12",
     "bcrypt": "^5.1.1",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
@@ -132,5 +128,13 @@
     "sharp": "^0.33.5",
     "tsx": "^4.19.3",
     "typescript": "5.8.2"
+  },
+  "overrides": {
+    "@ai-sdk/svelte": {
+      "svelte": false
+    },
+    "@ai-sdk/vue": {
+      "vue": false
+    }
   }
 }
