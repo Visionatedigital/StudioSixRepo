@@ -7,14 +7,60 @@ export async function launchBrowser(): Promise<any> {
 
   if (isProduction) {
     puppeteer = require('puppeteer-extra');
-    const StealthPlugin = require('puppeteer-extra-plugin-stealth');
-    puppeteer.use(StealthPlugin());
     puppeteer.puppeteer = require('puppeteer-core');
   } else {
     puppeteer = require('puppeteer-extra');
-    const StealthPlugin = require('puppeteer-extra-plugin-stealth');
-    puppeteer.use(StealthPlugin());
   }
+
+  // Add basic evasion techniques without requiring the full stealth plugin
+  const evasions = {
+    webdriver: () => {
+      return {
+        evaluate: () => {
+          Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+        }
+      };
+    },
+    chrome: () => {
+      return {
+        evaluate: () => {
+          (window as any).chrome = {
+            runtime: {},
+          };
+        }
+      };
+    },
+    permissions: () => {
+      return {
+        evaluate: () => {
+          const originalQuery = window.navigator.permissions.query;
+          (window.navigator.permissions as any).query = (parameters: any): Promise<any> => (
+            parameters.name === 'notifications' ?
+              Promise.resolve({ state: Notification.permission }) :
+              originalQuery(parameters)
+          );
+        }
+      };
+    },
+    plugins: () => {
+      return {
+        evaluate: () => {
+          Object.defineProperty(navigator, 'plugins', {
+            get: () => [1, 2, 3, 4, 5],
+          });
+        }
+      };
+    },
+    languages: () => {
+      return {
+        evaluate: () => {
+          Object.defineProperty(navigator, 'languages', {
+            get: () => ['en-US', 'en'],
+          });
+        }
+      };
+    }
+  };
 
   if (isProduction) {
     // Use Browserless.io in production
@@ -28,64 +74,89 @@ export async function launchBrowser(): Promise<any> {
     console.log('[PUPPETEER] Token starts with:', browserlessToken.substring(0, 8) + '...');
 
     try {
-      // Try the standard WebSocket connection first (new endpoint)
+      // Try WebSocket connection
       const browser = await puppeteer.connect({
-        browserWSEndpoint: `wss://production-sfo.browserless.io?token=${browserlessToken}`,
-        defaultViewport: { width: 1280, height: 800 },
+        browserWSEndpoint: `wss://chrome.browserless.io?token=${browserlessToken}`,
+        defaultViewport: { width: 1280, height: 800 }
       });
+
+      const page = await browser.newPage();
       
-      console.log('[PUPPETEER] Successfully connected to Browserless.io');
-      return browser;
-    } catch (error: any) {
-      console.error('[PUPPETEER] WebSocket connection failed:', error.message);
-      
-      // Try alternative connection method with HTTP endpoint (new endpoint)
+      // Apply evasions
+      for (const evasion of Object.values(evasions)) {
+        await page.evaluateOnNewDocument(evasion().evaluate);
+      }
+
+      return { browser, page };
+    } catch (error: unknown) {
+      const wsError = error as Error;
+      console.log('[PUPPETEER] WebSocket connection failed:', wsError.message);
+      console.log('[PUPPETEER] Trying HTTP endpoint as fallback...');
+
       try {
-        console.log('[PUPPETEER] Trying HTTP endpoint as fallback...');
+        // Try HTTP endpoint
         const browser = await puppeteer.connect({
-          browserWSEndpoint: `https://production-sfo.browserless.io?token=${browserlessToken}`,
-          defaultViewport: { width: 1280, height: 800 },
+          browserURL: `https://chrome.browserless.io?token=${browserlessToken}`,
+          defaultViewport: { width: 1280, height: 800 }
         });
+
+        const page = await browser.newPage();
         
-        console.log('[PUPPETEER] Successfully connected via HTTP endpoint');
-        return browser;
-      } catch (httpError: any) {
-        console.error('[PUPPETEER] HTTP endpoint also failed:', httpError.message);
-        
-        // Try with different endpoint format (new endpoint with trailing slash)
+        // Apply evasions
+        for (const evasion of Object.values(evasions)) {
+          await page.evaluateOnNewDocument(evasion().evaluate);
+        }
+
+        return { browser, page };
+      } catch (error: unknown) {
+        const httpError = error as Error;
+        console.log('[PUPPETEER] HTTP endpoint also failed:', httpError.message);
+        console.log('[PUPPETEER] Trying alternative endpoint format...');
+
         try {
-          console.log('[PUPPETEER] Trying alternative endpoint format...');
+          // Try alternative format
           const browser = await puppeteer.connect({
-            browserWSEndpoint: `wss://production-sfo.browserless.io/?token=${browserlessToken}`,
-            defaultViewport: { width: 1280, height: 800 },
+            browserWSEndpoint: `wss://chrome.browserless.io/webdriver/session?token=${browserlessToken}`,
+            defaultViewport: { width: 1280, height: 800 }
           });
+
+          const page = await browser.newPage();
           
-          console.log('[PUPPETEER] Successfully connected with alternative format');
-          return browser;
-        } catch (altError: any) {
-          console.error('[PUPPETEER] All connection methods failed');
-          console.error('[PUPPETEER] Please check:');
-          console.error('[PUPPETEER] 1. Your Browserless.io token is valid');
-          console.error('[PUPPETEER] 2. Your account is active');
-          console.error('[PUPPETEER] 3. You have available units');
-          throw new Error(`Failed to connect to Browserless.io: ${error.message}`);
+          // Apply evasions
+          for (const evasion of Object.values(evasions)) {
+            await page.evaluateOnNewDocument(evasion().evaluate);
+          }
+
+          return { browser, page };
+        } catch (error: unknown) {
+          const altError = error as Error;
+          console.log('[PUPPETEER] All connection methods failed');
+          console.log('[PUPPETEER] Please check:');
+          console.log('[PUPPETEER] 1. Your Browserless.io token is valid');
+          console.log('[PUPPETEER] 2. Your account is active');
+          console.log('[PUPPETEER] 3. You have available units');
+          throw altError;
         }
       }
     }
   } else {
-    // Local development - use local puppeteer
-    console.log('[PUPPETEER] Launching local browser for development...');
-    return await puppeteer.launch({
-      headless: false, // Set to false so you can see the browser
-      defaultViewport: { width: 1280, height: 800 },
+    // Local development - launch Chrome directly
+    const browser = await puppeteer.launch({
+      headless: 'new',
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--disable-web-security',
-        '--disable-features=VizDisplayCompositor'
+        '--disable-dev-shm-usage'
       ]
     });
+
+    const page = await browser.newPage();
+    
+    // Apply evasions
+    for (const evasion of Object.values(evasions)) {
+      await page.evaluateOnNewDocument(evasion().evaluate);
+    }
+
+    return { browser, page };
   }
 } 

@@ -7,7 +7,6 @@ const nextConfig = {
       'playwright-core',
       'puppeteer-core',
       'puppeteer-extra',
-      'puppeteer-extra-plugin-stealth',
       'canvas'
     ]
   },
@@ -17,7 +16,6 @@ const nextConfig = {
       config.externals = [...(config.externals || []), 
         'puppeteer-core',
         'puppeteer-extra',
-        'puppeteer-extra-plugin-stealth',
         'playwright-core',
         'canvas'
       ];
@@ -34,8 +32,7 @@ const nextConfig = {
         child_process: false,
         net: false,
         tls: false,
-        'puppeteer-extra': false,
-        'puppeteer-extra-plugin-stealth': false,
+        'puppeteer-extra': false
       };
     }
     
