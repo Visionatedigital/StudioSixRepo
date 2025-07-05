@@ -1,19 +1,18 @@
-const isProduction = process.env.NODE_ENV === 'production';
-let puppeteer: any;
-
-if (isProduction) {
-  puppeteer = require('puppeteer-extra');
-  const StealthPlugin = require('puppeteer-extra-plugin-stealth');
-  puppeteer.use(StealthPlugin());
-  // Set puppeteer-core as the underlying driver for puppeteer-extra
-  puppeteer.puppeteer = require('puppeteer-core');
-} else {
-  puppeteer = require('puppeteer-extra');
-  const StealthPlugin = require('puppeteer-extra-plugin-stealth');
-  puppeteer.use(StealthPlugin());
-}
-
 export async function launchBrowser(): Promise<any> {
+  const isProduction = process.env.NODE_ENV === 'production';
+  let puppeteer: any;
+
+  if (isProduction) {
+    puppeteer = require('puppeteer-extra');
+    const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+    puppeteer.use(StealthPlugin());
+    puppeteer.puppeteer = require('puppeteer-core');
+  } else {
+    puppeteer = require('puppeteer-extra');
+    const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+    puppeteer.use(StealthPlugin());
+  }
+
   if (isProduction) {
     // Use Browserless.io in production
     const browserlessToken = process.env.BROWSERLESS_TOKEN;
