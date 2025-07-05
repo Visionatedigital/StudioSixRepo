@@ -40,7 +40,36 @@ class ChatGPTSessionManager {
     console.log('[CHATGPT-SESSION] Creating new session...');
 
     try {
-      const browser = await launchBrowser();
+      console.log('[CHATGPT-SESSION] Attempting to launch browser...');
+      
+      // Add timeout and retry logic for browser launch
+      let browser;
+      let lastError;
+      
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          console.log(`[CHATGPT-SESSION] Browser launch attempt ${attempt}/3...`);
+          browser = await Promise.race([
+            launchBrowser(),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Browser launch timeout')), 60000)
+            )
+          ]);
+          console.log('[CHATGPT-SESSION] Browser launched successfully');
+          break;
+        } catch (error) {
+          lastError = error;
+          console.error(`[CHATGPT-SESSION] Browser launch attempt ${attempt} failed:`, error);
+          if (attempt < 3) {
+            console.log(`[CHATGPT-SESSION] Waiting 5 seconds before retry...`);
+            await new Promise(resolve => setTimeout(resolve, 5000));
+          }
+        }
+      }
+      
+      if (!browser) {
+        throw lastError || new Error('Failed to launch browser after 3 attempts');
+      }
 
       const page = await browser.newPage();
       await page.setViewport({ width: 1280, height: 800 });

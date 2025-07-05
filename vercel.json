@@ -6,7 +6,9 @@
     "NODE_ENV": "production",
     "NEXT_TELEMETRY_DISABLED": "1",
     "PRISMA_GENERATE_SKIP_AUTOINSTALL": "true",
-    "FORCE_ENV_REFRESH": "2024-12-27-17-15"
+    "FORCE_ENV_REFRESH": "2024-12-27-17-15",
+    "PUPPETEER_SKIP_CHROMIUM_DOWNLOAD": "true",
+    "PUPPETEER_EXECUTABLE_PATH": "/tmp/chromium"
   },
   "build": {
     "env": {
@@ -22,10 +24,32 @@
       "maxDuration": 30
     },
     "src/app/api/generate/chatgpt/route.ts": {
-      "maxDuration": 300
+      "maxDuration": 300,
+      "memory": 3008
     },
     "src/app/api/chatgpt-proxy/image/route.ts": {
-      "maxDuration": 300
+      "maxDuration": 300,
+      "memory": 3008
+    },
+    "src/app/api/chatgpt-proxy/connect/route.ts": {
+      "maxDuration": 300,
+      "memory": 3008
+    },
+    "src/app/api/chatgpt-proxy/fetch-latest-image/route.ts": {
+      "maxDuration": 300,
+      "memory": 3008
+    },
+    "src/app/api/chatgpt-proxy/message/route.ts": {
+      "maxDuration": 300,
+      "memory": 3008
+    },
+    "src/app/api/ai-chat/route.ts": {
+      "maxDuration": 300,
+      "memory": 3008
+    },
+    "src/app/api/generate/popup-tool/route.ts": {
+      "maxDuration": 300,
+      "memory": 3008
     }
   }
 } 
