@@ -1,3 +1,5 @@
+'use server';
+
 // Trigger redeploy: no-op change
 export async function launchBrowser(): Promise<any> {
   const isProduction = process.env.NODE_ENV === 'production';

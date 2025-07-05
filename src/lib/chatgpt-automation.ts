@@ -1,3 +1,5 @@
+'use server';
+
 import { launchBrowser } from './puppeteer-utils';
 
 export interface ChatGPTConfig {

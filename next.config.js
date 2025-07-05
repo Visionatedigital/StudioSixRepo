@@ -1,15 +1,26 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   experimental: {
-    serverComponentsExternalPackages: ['@prisma/client', 'prisma', 'playwright-core', 'puppeteer-core', 'canvas']
+    serverComponentsExternalPackages: [
+      '@prisma/client',
+      'prisma',
+      'playwright-core',
+      'puppeteer-core',
+      'puppeteer-extra',
+      'puppeteer-extra-plugin-stealth',
+      'canvas'
+    ]
   },
   webpack: (config, { isServer }) => {
     if (isServer) {
-      // Exclude problematic modules for serverless
-      config.externals = config.externals || [];
-      config.externals.push('playwright-core');
-      config.externals.push('puppeteer-core');
-      config.externals.push('canvas');
+      // Externalize server-only packages
+      config.externals = [...(config.externals || []), 
+        'puppeteer-core',
+        'puppeteer-extra',
+        'puppeteer-extra-plugin-stealth',
+        'playwright-core',
+        'canvas'
+      ];
     }
     
     // Add fallbacks for client-side
@@ -18,6 +29,13 @@ const nextConfig = {
         ...config.resolve.fallback,
         canvas: false,
         fs: false,
+        path: false,
+        os: false,
+        child_process: false,
+        net: false,
+        tls: false,
+        'puppeteer-extra': false,
+        'puppeteer-extra-plugin-stealth': false,
       };
     }
     
