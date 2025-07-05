@@ -7,8 +7,7 @@
     "NEXT_TELEMETRY_DISABLED": "1",
     "PRISMA_GENERATE_SKIP_AUTOINSTALL": "true",
     "FORCE_ENV_REFRESH": "2024-12-27-17-15",
-    "PUPPETEER_SKIP_CHROMIUM_DOWNLOAD": "true",
-    "PUPPETEER_EXECUTABLE_PATH": "/tmp/chromium"
+    "PUPPETEER_SKIP_CHROMIUM_DOWNLOAD": "true"
   },
   "build": {
     "env": {
