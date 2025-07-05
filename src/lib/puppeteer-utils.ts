@@ -15,9 +15,9 @@ export async function launchBrowser(): Promise<any> {
     console.log('[PUPPETEER] Token starts with:', browserlessToken.substring(0, 8) + '...');
 
     try {
-      // Try the standard WebSocket connection first
+      // Try the standard WebSocket connection first (new endpoint)
       const browser = await puppeteer.connect({
-        browserWSEndpoint: `wss://chrome.browserless.io?token=${browserlessToken}`,
+        browserWSEndpoint: `wss://production-sfo.browserless.io?token=${browserlessToken}`,
         defaultViewport: { width: 1280, height: 800 },
       });
       
@@ -26,11 +26,11 @@ export async function launchBrowser(): Promise<any> {
     } catch (error: any) {
       console.error('[PUPPETEER] WebSocket connection failed:', error.message);
       
-      // Try alternative connection method with HTTP endpoint
+      // Try alternative connection method with HTTP endpoint (new endpoint)
       try {
         console.log('[PUPPETEER] Trying HTTP endpoint as fallback...');
         const browser = await puppeteer.connect({
-          browserWSEndpoint: `https://chrome.browserless.io?token=${browserlessToken}`,
+          browserWSEndpoint: `https://production-sfo.browserless.io?token=${browserlessToken}`,
           defaultViewport: { width: 1280, height: 800 },
         });
         
@@ -39,11 +39,11 @@ export async function launchBrowser(): Promise<any> {
       } catch (httpError: any) {
         console.error('[PUPPETEER] HTTP endpoint also failed:', httpError.message);
         
-        // Try with different endpoint format
+        // Try with different endpoint format (new endpoint with trailing slash)
         try {
           console.log('[PUPPETEER] Trying alternative endpoint format...');
           const browser = await puppeteer.connect({
-            browserWSEndpoint: `wss://chrome.browserless.io/?token=${browserlessToken}`,
+            browserWSEndpoint: `wss://production-sfo.browserless.io/?token=${browserlessToken}`,
             defaultViewport: { width: 1280, height: 800 },
           });
           
