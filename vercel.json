@@ -19,7 +19,12 @@
     }
   },
   "functions": {
-    "api/**/*.js": {
+    "src/app/api/**/*.ts": {
+      "maxDuration": 300,
+      "memory": 3008,
+      "includeFiles": "node_modules/@sparticuz/chromium-min/bin/**"
+    },
+    "pages/api/*.js": {
       "maxDuration": 300,
       "memory": 3008,
       "includeFiles": "node_modules/@sparticuz/chromium-min/bin/**"
