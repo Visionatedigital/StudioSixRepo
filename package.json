@@ -62,9 +62,12 @@
     "@types/bcrypt": "^5.0.2",
     "@types/react-portal": "^4.0.7",
     "@types/uuid": "^10.0.0",
+    "@uploadthing/react": "^6.4.0",
+    "@vercel/analytics": "^1.2.2",
     "@vercel/blob": "^0.22.1",
     "@vercel/kv": "^1.0.1",
     "@vercel/postgres": "^0.8.0",
+    "@vercel/speed-insights": "^1.0.10",
     "bcrypt": "^5.1.1",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
@@ -80,7 +83,9 @@
     "next-auth": "^4.24.7",
     "next-themes": "^0.3.0",
     "openai": "^4.29.1",
+    "postcss": "^8.4.38",
     "prisma": "^5.11.0",
+    "autoprefixer": "^10.4.19",
     "puppeteer": "24.11.2",
     "puppeteer-core": "24.11.2",
     "puppeteer-extra": "3.3.6",
@@ -119,22 +124,12 @@
     "@types/react-dom": "18.2.18",
     "@types/react-portal": "^4.0.7",
     "@types/uuid": "^10.0.0",
-    "autoprefixer": "^10.4.19",
     "babel-loader": "9.2.1",
     "drizzle-kit": "^0.30.6",
     "ignore-loader": "0.1.2",
-    "postcss": "^8.4.38",
     "semver": "7.7.2",
     "sharp": "^0.33.5",
     "tsx": "^4.19.3",
     "typescript": "5.8.2"
-  },
-  "overrides": {
-    "@ai-sdk/svelte": {
-      "svelte": false
-    },
-    "@ai-sdk/vue": {
-      "vue": false
-    }
   }
 }
