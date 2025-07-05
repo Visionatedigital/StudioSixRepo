@@ -58,14 +58,10 @@
       "memory": 3008
     },
     "app/api/**/route.js": {
-      "includeFiles": [
-        "node_modules/@sparticuz/chromium-min/bin/**"
-      ]
+      "includeFiles": "node_modules/@sparticuz/chromium-min/bin/**"
     },
     "app/api/**/route.ts": {
-      "includeFiles": [
-        "node_modules/@sparticuz/chromium-min/bin/**"
-      ]
+      "includeFiles": "node_modules/@sparticuz/chromium-min/bin/**"
     }
   }
 } 
