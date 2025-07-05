@@ -6,15 +6,17 @@ export async function launchBrowser(): Promise<any> {
   const isProduction = process.env.NODE_ENV === 'production';
 
   if (isProduction) {
-    const executablePath = await chromium.executablePath();
+    let executablePath = await chromium.executablePath();
+    if (!executablePath) {
+      // Fallback to the default path where Vercel should bundle the binary
+      executablePath = '/var/task/node_modules/@sparticuz/chromium-min/bin/chromium';
+    }
     const launchOptions: any = {
       args: chromium.args,
       headless: true,
       defaultViewport: { width: 1280, height: 800 },
+      executablePath,
     };
-    if (executablePath) {
-      launchOptions.executablePath = executablePath;
-    }
     try {
       return await puppeteerCore.launch(launchOptions);
     } catch (err) {
