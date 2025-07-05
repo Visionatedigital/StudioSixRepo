@@ -166,7 +166,7 @@ class ChatGPTSessionManager {
         console.log('[CHATGPT-SESSION] Current URL:', currentUrl);
         
         // Take a screenshot for debugging
-        await page.screenshot({ path: 'debug-login-check.png' });
+        await page.screenshot({ path: '/tmp/debug-login-check.png' });
         console.log('[CHATGPT-SESSION] Screenshot saved as debug-login-check.png');
         
         // Check if we're on a login page or error page
@@ -291,7 +291,7 @@ class ChatGPTSessionManager {
           } else {
             console.log('[CHATGPT-SESSION] Could not find GPT-4o option in model selector');
             // Take screenshot for debugging
-            await page.screenshot({ path: 'debug-model-selector.png' });
+            await page.screenshot({ path: '/tmp/debug-model-selector.png' });
             console.log('[CHATGPT-SESSION] Screenshot saved as debug-model-selector.png');
           }
         } else {
@@ -541,7 +541,7 @@ class ChatGPTSessionManager {
           generatedImageUrl = allImages[allImages.length - 1] || null;
           if (!generatedImageUrl) {
             console.error('[CHATGPT-SESSION] No generated image found in assistant articles or anywhere in the DOM.');
-            await page.screenshot({ path: 'debug-after-polling.png' });
+            await page.screenshot({ path: '/tmp/debug-after-polling.png' });
             console.error('[CHATGPT-SESSION] Screenshot saved as debug-after-polling.png');
             throw new Error('No generated image found in assistant articles or anywhere in the DOM');
           }
@@ -705,7 +705,7 @@ class ChatGPTSessionManager {
           
           if (!generatedImageUrl) {
             console.error('[CHATGPT-SESSION] No generated image found after multiple image upload.');
-            await page.screenshot({ path: 'debug-multiple-images-polling.png' });
+            await page.screenshot({ path: '/tmp/debug-multiple-images-polling.png' });
             console.error('[CHATGPT-SESSION] Screenshot saved as debug-multiple-images-polling.png');
             throw new Error('No generated image found after multiple image upload');
           }
