@@ -1,8 +1,8 @@
-import puppeteer, { type Browser } from 'puppeteer';
-import puppeteerCore, { type Browser as BrowserCore } from 'puppeteer-core';
+import puppeteer from 'puppeteer';
+import puppeteerCore from 'puppeteer-core';
 import chromium from '@sparticuz/chromium-min';
 
-export async function launchBrowser(): Promise<Browser | BrowserCore> {
+export async function launchBrowser(): Promise<any> {
   const isProduction = process.env.NODE_ENV === 'production';
   
   if (isProduction) {

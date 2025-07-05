@@ -5,7 +5,6 @@ import { launchBrowser } from '@/lib/puppeteer-utils';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { Frame } from 'puppeteer-core';
 
 export async function POST(req: NextRequest) {
   let browser: any = null;

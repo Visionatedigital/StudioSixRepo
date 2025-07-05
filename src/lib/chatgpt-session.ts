@@ -115,7 +115,7 @@ class ChatGPTSessionManager {
         let foundVisible = false;
         for (let i = 0; i < 30; i++) {
           try {
-            foundVisible = await page.$eval(chatInputSelector, el => el && window.getComputedStyle(el).display !== 'none');
+            foundVisible = await page.$eval(chatInputSelector, (el: any) => el && window.getComputedStyle(el).display !== 'none');
             if (foundVisible) break;
           } catch (e) {
             // ignore if not found
@@ -179,9 +179,9 @@ class ChatGPTSessionManager {
           console.log('[CHATGPT-SESSION] Textarea visible:', isVisible);
         } else {
           // List all textarea elements and their attributes
-          const allTextareas = await page.$$eval('textarea', nodes => nodes.map(n => ({
+          const allTextareas = await page.$$eval('textarea', (nodes: any[]) => nodes.map((n: any) => ({
             outerHTML: n.outerHTML,
-            attributes: Array.from(n.attributes).map(a => ({ name: a.name, value: a.value })),
+            attributes: Array.from(n.attributes).map((a: any) => ({ name: a.name, value: a.value })),
             dataTestid: n.getAttribute('data-testid'),
             placeholder: n.getAttribute('placeholder'),
             id: n.id,

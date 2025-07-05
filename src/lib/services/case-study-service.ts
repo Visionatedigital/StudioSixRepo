@@ -1,6 +1,5 @@
 import { CacheService } from './cache';
 import { CaseStudyRecommender } from './case-study-recommender';
-import { ArchDailyScraper } from '../scraper/archdaily';
 import { db } from '../db';
 import { caseStudies } from '../db/schema';
 import { eq, and, gt, lt } from 'drizzle-orm';
@@ -13,11 +12,6 @@ const cache = new CacheService();
 const recommender = new CaseStudyRecommender();
 
 export class CaseStudyService {
-  private scraper: ArchDailyScraper;
-
-  constructor() {
-    this.scraper = new ArchDailyScraper();
-  }
 
   async findRelevantCaseStudies(context: ProjectContext): Promise<CaseStudyReference[]> {
     try {
@@ -30,23 +24,12 @@ export class CaseStudyService {
         return cachedResults;
       }
 
-      // If no cached results, get from database
+      // Get results from database only
       const dbResults = await this.getFromDatabase(context);
       
-      if (dbResults.length >= 3) {
-        // Cache and return database results
-        cache.set(cacheKey, dbResults);
-        return dbResults;
-      }
-
-      // If we need more results, scrape additional projects
-      console.log('Scraping additional projects');
-      const scrapedResults = await this.scrapeAdditionalProjects(context);
-      const combinedResults = [...dbResults, ...scrapedResults].slice(0, 3);
-      
-      // Cache the combined results
-      cache.set(cacheKey, combinedResults);
-      return combinedResults;
+      // Cache and return database results
+      cache.set(cacheKey, dbResults);
+      return dbResults;
     } catch (error) {
       console.error('Error finding relevant case studies:', error);
       throw error;
@@ -66,26 +49,7 @@ export class CaseStudyService {
     return this.scoreResults(results, context, embedding);
   }
 
-  private async scrapeAdditionalProjects(context: ProjectContext): Promise<CaseStudyReference[]> {
-    try {
-      // Get project URLs from ArchDaily
-      const projectUrls = await this.scraper.scrapeProjectList();
-      
-      // Scrape first 5 projects
-      const scrapedProjects = await Promise.all(
-        projectUrls.slice(0, 5).map(url => this.scraper.scrapeProjectPage(url))
-      );
 
-      // Score and filter projects based on relevance
-      const embedding = await this.getProjectEmbedding(context);
-      const scoredProjects = this.scoreResults(scrapedProjects, context, embedding);
-      
-      return scoredProjects.slice(0, 3);
-    } catch (error) {
-      console.error('Error scraping additional projects:', error);
-      return [];
-    }
-  }
 
   private async getProjectEmbedding(context: ProjectContext): Promise<number[]> {
     const prompt = this.buildContextPrompt(context);

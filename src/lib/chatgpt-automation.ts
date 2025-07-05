@@ -1,4 +1,3 @@
-import { Browser, Page } from 'puppeteer-core';
 import { launchBrowser } from './puppeteer-utils';
 
 export interface ChatGPTConfig {
@@ -10,8 +9,8 @@ export interface ChatGPTConfig {
 
 export class ChatGPTAutomation {
   private config: ChatGPTConfig;
-  private browser: Browser | null = null;
-  private page: Page | null = null;
+  private browser: any = null;
+  private page: any = null;
 
   constructor(config: ChatGPTConfig = {}) {
     this.config = {
