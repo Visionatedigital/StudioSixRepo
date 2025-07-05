@@ -64,7 +64,7 @@
     "app/api/**/route.ts": {
       "includeFiles": "node_modules/@sparticuz/chromium-min/bin/**"
     },
-    "src/appst/api/debug/route.ts": {
+    "src/app/api/debug/route.ts": {
       "includeFiles": "chromium-bin/chromium"
     }
   }
