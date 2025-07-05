@@ -8,11 +8,19 @@ export async function launchBrowser(): Promise<any> {
 
   if (isProduction) {
     let executablePath = '';
+    let resolvedPath = '';
     let candidatePaths: string[] = [];
-    let resolvedPath = await chromium.executablePath();
-    candidatePaths.push(resolvedPath);
+
+    // Try to get the path from chromium.executablePath(), but catch errors
+    try {
+      resolvedPath = await chromium.executablePath();
+      candidatePaths.push(resolvedPath);
+    } catch (err) {
+      console.error('[PUPPETEER][DEBUG] Error from chromium.executablePath():', err);
+    }
+
+    // Always add known fallback paths
     candidatePaths.push('/var/task/node_modules/@sparticuz/chromium-min/bin/chromium');
-    candidatePaths.push('/var/task/.next/server/bin/chromium');
     candidatePaths.push('/tmp/chromium');
 
     // Log all candidate paths and their existence
@@ -56,7 +64,7 @@ export async function launchBrowser(): Promise<any> {
     }
   } else {
     // Local development
-    return await puppeteer.launch({
+    return await puppeteerCore.launch({
       headless: true,
       defaultViewport: { width: 1280, height: 800 },
     });
