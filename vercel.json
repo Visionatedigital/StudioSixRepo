@@ -35,7 +35,8 @@
     },
     "src/app/api/chatgpt-proxy/image/route.ts": {
       "maxDuration": 300,
-      "memory": 3008
+      "memory": 3008,
+      "includeFiles": "node_modules/@sparticuz/chromium-min/bin/**"
     },
     "src/app/api/chatgpt-proxy/connect/route.ts": {
       "maxDuration": 300,
@@ -61,6 +62,9 @@
       "includeFiles": "node_modules/@sparticuz/chromium-min/bin/**"
     },
     "app/api/**/route.ts": {
+      "includeFiles": "node_modules/@sparticuz/chromium-min/bin/**"
+    },
+    "src/app/api/debug/route.ts": {
       "includeFiles": "node_modules/@sparticuz/chromium-min/bin/**"
     }
   }
