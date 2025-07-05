@@ -11,11 +11,54 @@ export async function launchBrowser(): Promise<any> {
     }
 
     console.log('[PUPPETEER] Connecting to Browserless.io...');
-    const browser = await puppeteer.connect({
-      browserWSEndpoint: `wss://chrome.browserless.io?token=${browserlessToken}`,
-    });
+    console.log('[PUPPETEER] Token length:', browserlessToken.length);
+    console.log('[PUPPETEER] Token starts with:', browserlessToken.substring(0, 8) + '...');
 
-    return browser;
+    try {
+      // Try the standard WebSocket connection first
+      const browser = await puppeteer.connect({
+        browserWSEndpoint: `wss://chrome.browserless.io?token=${browserlessToken}`,
+        defaultViewport: { width: 1280, height: 800 },
+      });
+      
+      console.log('[PUPPETEER] Successfully connected to Browserless.io');
+      return browser;
+    } catch (error: any) {
+      console.error('[PUPPETEER] WebSocket connection failed:', error.message);
+      
+      // Try alternative connection method with HTTP endpoint
+      try {
+        console.log('[PUPPETEER] Trying HTTP endpoint as fallback...');
+        const browser = await puppeteer.connect({
+          browserWSEndpoint: `https://chrome.browserless.io?token=${browserlessToken}`,
+          defaultViewport: { width: 1280, height: 800 },
+        });
+        
+        console.log('[PUPPETEER] Successfully connected via HTTP endpoint');
+        return browser;
+      } catch (httpError: any) {
+        console.error('[PUPPETEER] HTTP endpoint also failed:', httpError.message);
+        
+        // Try with different endpoint format
+        try {
+          console.log('[PUPPETEER] Trying alternative endpoint format...');
+          const browser = await puppeteer.connect({
+            browserWSEndpoint: `wss://chrome.browserless.io/?token=${browserlessToken}`,
+            defaultViewport: { width: 1280, height: 800 },
+          });
+          
+          console.log('[PUPPETEER] Successfully connected with alternative format');
+          return browser;
+        } catch (altError: any) {
+          console.error('[PUPPETEER] All connection methods failed');
+          console.error('[PUPPETEER] Please check:');
+          console.error('[PUPPETEER] 1. Your Browserless.io token is valid');
+          console.error('[PUPPETEER] 2. Your account is active');
+          console.error('[PUPPETEER] 3. You have available units');
+          throw new Error(`Failed to connect to Browserless.io: ${error.message}`);
+        }
+      }
+    }
   } else {
     // Local development - use local puppeteer
     console.log('[PUPPETEER] Launching local browser for development...');
