@@ -45,10 +45,6 @@ const nextConfig = {
   env: {
     NEXT_TELEMETRY_DISABLED: '1',
   },
-  // Disable telemetry
-  telemetry: {
-    disabled: true
-  },
   images: {
     domains: ['images.unsplash.com', 'plus.unsplash.com'],
     remotePatterns: [
