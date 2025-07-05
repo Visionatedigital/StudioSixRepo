@@ -1,53 +1,39 @@
 /** @type {import('next').NextConfig} */
-const webpack = require('webpack');
 const nextConfig = {
+  experimental: {
+    serverComponentsExternalPackages: ['@prisma/client', 'prisma', 'playwright-core']
+  },
   webpack: (config, { isServer }) => {
-    if (!isServer) {
-      config.resolve.fallback = {
-        ...config.resolve.fallback,
-        fs: false,
-        net: false,
-        tls: false,
-        canvas: false,
-      };
-    }
-
     if (isServer) {
+      // Exclude problematic Playwright modules
       config.externals = config.externals || [];
-      config.externals.push('canvas');
-      config.externals.push('cheerio');
-      config.externals.push('undici');
-      config.externals.push('puppeteer');
-      config.externals.push('puppeteer-core');
+      config.externals.push('playwright-core');
     }
-
+    
     return config;
   },
-  experimental: {
-    serverComponentsExternalPackages: [
-      'bcryptjs',
-      'canvas', 
-      'puppeteer',
-      'htmlparser2'
-    ],
+  // Ensure environment variables are available at build time
+  env: {
+    NEXT_TELEMETRY_DISABLED: '1',
+  },
+  // Disable telemetry
+  telemetry: {
+    disabled: true
   },
   images: {
+    domains: ['images.unsplash.com', 'plus.unsplash.com'],
     remotePatterns: [
       {
         protocol: 'https',
         hostname: 'images.unsplash.com',
+        port: '',
+        pathname: '/**',
       },
       {
         protocol: 'https',
         hostname: 'plus.unsplash.com',
-      },
-      {
-        protocol: 'https',
-        hostname: '**.googleapis.com',
-      },
-      {
-        protocol: 'https',
-        hostname: 'lh3.googleusercontent.com',
+        port: '',
+        pathname: '/**',
       },
     ],
   },
