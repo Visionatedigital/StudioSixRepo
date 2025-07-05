@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import ChatGPTSessionManager from '@/lib/chatgpt-session-playwright';
+import ChatGPTSessionManager from '@/lib/chatgpt-session';
 
 // Import the global variables from the connect route
 // Note: In a real production app, you'd want to use a proper session management system

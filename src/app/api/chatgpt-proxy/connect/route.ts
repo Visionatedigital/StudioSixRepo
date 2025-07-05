@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import ChatGPTSessionManager from '@/lib/chatgpt-session-playwright';
+import ChatGPTSessionManager from '@/lib/chatgpt-session';
 
 export async function POST(req: NextRequest) {
   try {

@@ -1,40 +1,35 @@
-import puppeteerCore from 'puppeteer-core';
-import chromium from '@sparticuz/chromium-min';
-import { join } from 'path';
-import { existsSync } from 'fs';
+import puppeteer from 'puppeteer';
 
 export async function launchBrowser(): Promise<any> {
   const isProduction = process.env.NODE_ENV === 'production';
 
-  // Use the manually bundled binary in production
-  const executablePath = join(process.cwd(), 'chromium-bin', 'chromium');
-
   if (isProduction) {
-    if (!existsSync(executablePath)) {
-      console.error('[PUPPETEER][ERROR] Chromium binary not found at:', executablePath);
-      throw new Error(`Chromium binary not found at: ${executablePath}`);
+    // Use Browserless.io in production
+    const browserlessToken = process.env.BROWSERLESS_TOKEN;
+    if (!browserlessToken) {
+      throw new Error('BROWSERLESS_TOKEN environment variable is required for production');
     }
-    return await puppeteerCore.launch({
+
+    console.log('[PUPPETEER] Connecting to Browserless.io...');
+    const browser = await puppeteer.connect({
+      browserWSEndpoint: `wss://chrome.browserless.io?token=${browserlessToken}`,
+    });
+
+    return browser;
+  } else {
+    // Local development - use local puppeteer
+    console.log('[PUPPETEER] Launching local browser for development...');
+    return await puppeteer.launch({
+      headless: false, // Set to false so you can see the browser
+      defaultViewport: { width: 1280, height: 800 },
       args: [
-        ...chromium.args,
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
         '--disable-gpu',
-        '--single-process',
-        '--no-zygote',
         '--disable-web-security',
         '--disable-features=VizDisplayCompositor'
-      ],
-      defaultViewport: chromium.defaultViewport,
-      executablePath,
-      headless: chromium.headless,
-    });
-  } else {
-    // Local development (use puppeteer-core for consistency)
-    return await puppeteerCore.launch({
-      headless: true,
-      defaultViewport: { width: 1280, height: 800 },
+      ]
     });
   }
 } 
