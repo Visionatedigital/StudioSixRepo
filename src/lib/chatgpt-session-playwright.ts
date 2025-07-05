@@ -258,6 +258,186 @@ class ChatGPTSessionManager {
     }
   }
 
+  public async sendImagePrompt(prompt: string, imagePath: string): Promise<string> {
+    const session = await this.getSession();
+    if (!session) {
+      throw new Error('No active ChatGPT session');
+    }
+
+    try {
+      const { page } = session;
+      console.log('[CHATGPT-SESSION] Uploading image and sending prompt...');
+      
+      // Find and click the add files button
+      const addButtonSelector = 'button[aria-label*="Add photos and files"], button[aria-label*="Attach files"], button[aria-label*="Upload"]';
+      let addButton = page.locator(addButtonSelector).first();
+      
+      if (!(await addButton.isVisible().catch(() => false))) {
+        // Try clicking the "+" button if visible
+        const plusButton = page.locator('button:has(svg[data-testid="PlusIcon"])').first();
+        if (await plusButton.isVisible().catch(() => false)) {
+          await plusButton.click();
+          await page.waitForTimeout(500);
+        }
+      }
+      
+      await addButton.click();
+      await page.waitForTimeout(500);
+      
+      // Upload the image
+      const fileInput = page.locator('input[type="file"]').first();
+      await fileInput.setInputFiles(imagePath);
+      await page.waitForTimeout(1500);
+      
+      // Type the prompt
+      const chatInputSelector = 'textarea[data-testid="prompt-textarea"], textarea[placeholder="Ask anything"], textarea';
+      await page.locator(chatInputSelector).first().clear();
+      await page.locator(chatInputSelector).first().fill(prompt);
+      await page.waitForTimeout(300);
+      
+      // Send the message
+      await page.keyboard.press('Enter');
+      await page.waitForTimeout(1000);
+      
+      // Wait for image generation (3 minutes 20 seconds)
+      console.log('[CHATGPT-SESSION] Waiting for image generation...');
+      await page.waitForTimeout(200000);
+      
+      // Poll for generated image
+      const pollTimeout = 180000; // 3 minutes
+      const pollStart = Date.now();
+      let generatedImageUrl: string | null = null;
+      
+      while (Date.now() - pollStart < pollTimeout) {
+        // Scroll to bottom
+        await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+        
+        // Look for assistant messages with images
+        const assistantImages = await page.locator('article[data-testid^="conversation-turn-"] img').all();
+        if (assistantImages.length > 0) {
+          const lastImage = assistantImages[assistantImages.length - 1];
+          generatedImageUrl = await lastImage.getAttribute('src');
+          if (generatedImageUrl) {
+            console.log('[CHATGPT-SESSION] Generated image found:', generatedImageUrl);
+            break;
+          }
+        }
+        
+        await page.waitForTimeout(2500);
+      }
+      
+      if (!generatedImageUrl) {
+        throw new Error('No generated image found');
+      }
+      
+      // Download and convert to base64
+      const response = await fetch(generatedImageUrl);
+      if (!response.ok) throw new Error('Failed to download generated image');
+      const buffer = await response.arrayBuffer();
+      const base64 = Buffer.from(buffer).toString('base64');
+      
+      const ext = (generatedImageUrl.split('.').pop() || '').toLowerCase();
+      const mime = ext === 'png' ? 'image/png' : 'image/jpeg';
+      
+      return `data:${mime};base64,${base64}`;
+      
+    } catch (error) {
+      console.error('[CHATGPT-SESSION] Error in sendImagePrompt:', error);
+      throw error;
+    }
+  }
+
+  public async sendMultipleImagePrompt(prompt: string, imagePaths: string[]): Promise<string> {
+    const session = await this.getSession();
+    if (!session) {
+      throw new Error('No active ChatGPT session');
+    }
+
+    try {
+      const { page } = session;
+      console.log(`[CHATGPT-SESSION] Uploading ${imagePaths.length} images and sending prompt...`);
+      
+      // Upload all images
+      for (let i = 0; i < imagePaths.length; i++) {
+        console.log(`[CHATGPT-SESSION] Uploading image ${i + 1}/${imagePaths.length}...`);
+        
+        // Find and click the add files button
+        const addButtonSelector = 'button[aria-label*="Add photos and files"], button[aria-label*="Attach files"], button[aria-label*="Upload"]';
+        let addButton = page.locator(addButtonSelector).first();
+        
+        if (!(await addButton.isVisible().catch(() => false))) {
+          const plusButton = page.locator('button:has(svg[data-testid="PlusIcon"])').first();
+          if (await plusButton.isVisible().catch(() => false)) {
+            await plusButton.click();
+            await page.waitForTimeout(500);
+          }
+        }
+        
+        await addButton.click();
+        await page.waitForTimeout(500);
+        
+        // Upload the image
+        const fileInput = page.locator('input[type="file"]').first();
+        await fileInput.setInputFiles(imagePaths[i]);
+        await page.waitForTimeout(1500);
+      }
+      
+      // Type the prompt
+      const chatInputSelector = 'textarea[data-testid="prompt-textarea"], textarea[placeholder="Ask anything"], textarea';
+      await page.locator(chatInputSelector).first().clear();
+      await page.locator(chatInputSelector).first().fill(prompt);
+      await page.waitForTimeout(300);
+      
+      // Send the message
+      await page.keyboard.press('Enter');
+      await page.waitForTimeout(1000);
+      
+      // Wait for image generation
+      console.log('[CHATGPT-SESSION] Waiting for image generation...');
+      await page.waitForTimeout(200000);
+      
+      // Poll for generated image
+      const pollTimeout = 180000;
+      const pollStart = Date.now();
+      let generatedImageUrl: string | null = null;
+      
+      while (Date.now() - pollStart < pollTimeout) {
+        await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+        
+        const assistantImages = await page.locator('article[data-testid^="conversation-turn-"] img').all();
+        if (assistantImages.length > 0) {
+          const lastImage = assistantImages[assistantImages.length - 1];
+          generatedImageUrl = await lastImage.getAttribute('src');
+          if (generatedImageUrl) {
+            console.log('[CHATGPT-SESSION] Generated image found:', generatedImageUrl);
+            break;
+          }
+        }
+        
+        await page.waitForTimeout(2500);
+      }
+      
+      if (!generatedImageUrl) {
+        throw new Error('No generated image found after multiple image upload');
+      }
+      
+      // Download and convert to base64
+      const response = await fetch(generatedImageUrl);
+      if (!response.ok) throw new Error('Failed to download generated image');
+      const buffer = await response.arrayBuffer();
+      const base64 = Buffer.from(buffer).toString('base64');
+      
+      const ext = (generatedImageUrl.split('.').pop() || '').toLowerCase();
+      const mime = ext === 'png' ? 'image/png' : 'image/jpeg';
+      
+      return `data:${mime};base64,${base64}`;
+      
+    } catch (error) {
+      console.error('[CHATGPT-SESSION] Error in sendMultipleImagePrompt:', error);
+      throw error;
+    }
+  }
+
   public async closeSession(): Promise<void> {
     if (this.session) {
       console.log('[CHATGPT-SESSION] Closing session...');

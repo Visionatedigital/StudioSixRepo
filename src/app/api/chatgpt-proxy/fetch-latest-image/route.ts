@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import ChatGPTSessionManager from '@/lib/chatgpt-session';
+import ChatGPTSessionManager from '@/lib/chatgpt-session-playwright';
 
 export async function POST() {
   try {
