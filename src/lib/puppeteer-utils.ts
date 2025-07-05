@@ -6,15 +6,8 @@ import { existsSync } from 'fs';
 export async function launchBrowser(): Promise<any> {
   const isProduction = process.env.NODE_ENV === 'production';
 
-  // Manually construct the path to the Chromium binary
-  const executablePath = join(
-    process.cwd(),
-    'node_modules',
-    '@sparticuz',
-    'chromium-min',
-    'bin',
-    'chromium'
-  );
+  // Use the manually bundled binary in production
+  const executablePath = join(process.cwd(), 'chromium-bin', 'chromium');
 
   if (isProduction) {
     if (!existsSync(executablePath)) {
