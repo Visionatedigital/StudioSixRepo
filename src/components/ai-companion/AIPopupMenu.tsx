@@ -23,6 +23,8 @@ export default function AIPopupMenu({ onAddToCanvas }: AIPopupMenuProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([]);
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
+  const [useOpenAI, setUseOpenAI] = useState(true); // Default to OpenAI API
+  const [enhancedPrompt, setEnhancedPrompt] = useState<string | null>(null);
 
   const { addTask, updateTask } = useRenderTasks();
 
@@ -73,19 +75,21 @@ export default function AIPopupMenu({ onAddToCanvas }: AIPopupMenuProps) {
 
   const handleGenerate = async () => {
     setError(null);
+    setEnhancedPrompt(null);
+    
     if (uploadedFiles.length === 0 || !prompt.trim()) {
       setError('Please provide at least one image and a prompt.');
       return;
     }
 
-    console.log('🎬 AIPopupMenu: Generate clicked with prompt:', prompt);
+    console.log(`🎬 AIPopupMenu: Generate clicked using ${useOpenAI ? 'OpenAI API' : 'ChatGPT Proxy'} with prompt:`, prompt);
     console.log('🎬 AIPopupMenu: About to add render task with', uploadedFiles.length, 'images');
 
     // Use first image for progress tracker thumbnail
     const uploadedImageUrl = imagePreviewUrls.length > 0 ? imagePreviewUrls[0] : URL.createObjectURL(uploadedFiles[0]);
 
     // Add task to render tracker with uploaded image
-    const taskId = addTask(prompt, 198000, uploadedImageUrl); // 3 minutes 18 seconds
+    const taskId = addTask(prompt, useOpenAI ? 60000 : 198000, uploadedImageUrl); // OpenAI: 1min, ChatGPT: 3m18s
     console.log('🎬 AIPopupMenu: Added render task with ID:', taskId);
     
     setLoading(true);
@@ -104,7 +108,11 @@ export default function AIPopupMenu({ onAddToCanvas }: AIPopupMenuProps) {
       });
       formData.append('imageCount', uploadedFiles.length.toString());
       
-      const res = await fetch('/api/chatgpt-proxy/image', {
+      // Choose endpoint based on useOpenAI setting
+      const endpoint = useOpenAI ? '/api/openai-image' : '/api/chatgpt-proxy/image';
+      console.log(`🎬 AIPopupMenu: Using endpoint: ${endpoint}`);
+      
+      const res = await fetch(endpoint, {
         method: 'POST',
         body: formData,
       });
@@ -122,6 +130,12 @@ export default function AIPopupMenu({ onAddToCanvas }: AIPopupMenuProps) {
       
       const data = await res.json();
       const imageUrl = data.image;
+      
+      // Store enhanced prompt if available (from OpenAI endpoint)
+      if (data.enhancedPrompt) {
+        setEnhancedPrompt(data.enhancedPrompt);
+        console.log('🎬 AIPopupMenu: Enhanced prompt received:', data.enhancedPrompt);
+      }
       
       updateTask(taskId, { 
         status: 'completed', 
@@ -178,6 +192,8 @@ export default function AIPopupMenu({ onAddToCanvas }: AIPopupMenuProps) {
           </select>
         </div>
       </div>
+
+
 
       {/* File Upload Area */}
       <div
@@ -259,11 +275,26 @@ export default function AIPopupMenu({ onAddToCanvas }: AIPopupMenuProps) {
               <input type="range" min={0} max={100} defaultValue={100} className="w-full" />
             </div>
             <div className="mb-2">
-              <label className="block text-xs font-medium text-gray-700 mb-1">Detail Boost</label>
-              <select className="w-full border border-gray-300 rounded px-2 py-1 text-xs">
-                <option>Standard</option>
-                <option>High Detail</option>
-              </select>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Generation Method</label>
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-xs text-gray-700">
+                    {useOpenAI ? 'OpenAI API (Fast)' : 'ChatGPT Proxy (Advanced)'}
+                  </span>
+                </div>
+                <button
+                  onClick={() => setUseOpenAI(!useOpenAI)}
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                    useOpenAI ? 'bg-purple-600' : 'bg-gray-300'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
+                      useOpenAI ? 'translate-x-5' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
             </div>
             {/* Add more advanced settings as needed */}
           </div>
@@ -271,6 +302,16 @@ export default function AIPopupMenu({ onAddToCanvas }: AIPopupMenuProps) {
       </div>
 
       {error && <div className="text-red-500 text-sm mb-2">{error}</div>}
+
+      {/* Enhanced Prompt Display (OpenAI only) */}
+      {enhancedPrompt && useOpenAI && (
+        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+          <div className="text-xs font-medium text-green-800 mb-1">✨ Enhanced Prompt by GPT-4 Vision:</div>
+          <div className="text-xs text-green-700 max-h-20 overflow-y-auto">
+            {enhancedPrompt}
+          </div>
+        </div>
+      )}
 
       {/* Generate Button */}
       <button
@@ -282,10 +323,10 @@ export default function AIPopupMenu({ onAddToCanvas }: AIPopupMenuProps) {
         {loading ? (
           <div className="flex items-center justify-center gap-2">
             <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            Generating...
+            {useOpenAI ? 'Generating with OpenAI...' : 'Generating with ChatGPT...'}
           </div>
         ) : (
-          'Generate'
+          '🚀 Generate'
         )}
       </button>
       
