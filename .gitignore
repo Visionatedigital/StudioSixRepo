@@ -50,3 +50,11 @@ prisma/dev.db-journal
 /.clerk/
 .env
 .env.local
+# Temporary files
+ecosystem.config*.js
+setup-production.sh
+*.bak
+scripts/debug-*.ts
+scripts/server-debug.sh
+scripts/test-*.ts
+docs/chatgpt-proxy-debugging.md

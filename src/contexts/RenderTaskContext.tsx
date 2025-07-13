@@ -29,7 +29,7 @@ export function RenderTaskProvider({ children }: { children: ReactNode }) {
   const [tasks, setTasks] = useState<RenderTask[]>([]);
 
   const addTask = useCallback((prompt: string, estimatedDuration: number = 210000, uploadedImageUrl?: string): string => {
-    const id = crypto.randomUUID();
+    const id = (crypto.randomUUID ? crypto.randomUUID() : (Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)));
     const newTask: RenderTask = {
       id,
       prompt,

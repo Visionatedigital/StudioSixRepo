@@ -13,7 +13,6 @@ const nextConfig = {
   },
   webpack: (config, { isServer }) => {
     if (isServer) {
-      // Externalize server-only packages
       config.externals = [...(config.externals || []), 
         'puppeteer-core',
         'puppeteer-extra',
@@ -22,8 +21,6 @@ const nextConfig = {
         'canvas'
       ];
     }
-    
-    // Add fallbacks for client-side
     if (!isServer) {
       config.resolve.fallback = {
         ...config.resolve.fallback,
@@ -38,30 +35,30 @@ const nextConfig = {
         'puppeteer-extra-plugin-stealth': false,
       };
     }
-    
     return config;
   },
-  // Ensure environment variables are available at build time
   env: {
     NEXT_TELEMETRY_DISABLED: '1',
   },
   images: {
-    domains: ['images.unsplash.com', 'plus.unsplash.com'],
     remotePatterns: [
       {
         protocol: 'https',
+        hostname: 'cpzkvqdunuxsfxrcdzjq.supabase.co',
+        pathname: '/storage/v1/object/public/all-uploads/**',
+      },
+      {
+        protocol: 'https',
         hostname: 'images.unsplash.com',
-        port: '',
         pathname: '/**',
       },
       {
         protocol: 'https',
         hostname: 'plus.unsplash.com',
-        port: '',
         pathname: '/**',
       },
     ],
   },
 };
 
-module.exports = nextConfig; 
+module.exports = nextConfig;
