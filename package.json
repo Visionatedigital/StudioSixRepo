@@ -52,6 +52,7 @@
     "autoprefixer": "10.4.21",
     "axios": "^1.6.2",
     "bcryptjs": "^3.0.2",
+    "bl": "6.1.0",
     "browser-image-compression": "^2.0.2",
     "cheerio": "^1.0.0-rc.12",
     "clone-deep": "4.0.1",
